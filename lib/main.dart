@@ -55,6 +55,10 @@ class EntryNotifier extends StateNotifier<AsyncValue<List<Entry>>> {
       state = AsyncValue.error(e, stack);
     }
   }
+
+  void clearEntries() {
+    state = const AsyncValue.data([]);
+  }
 }
 
 final entryProvider = StateNotifierProvider<EntryNotifier, AsyncValue<List<Entry>>>((ref) => EntryNotifier());
@@ -67,9 +71,25 @@ class MainApp extends ConsumerWidget {
     Future.microtask(() => ref.read(entryProvider.notifier).loadEntries());
     final asyncEntries = ref.watch(entryProvider);
     return MaterialApp(
+      debugShowCheckedModeBanner: false,
       home: Scaffold(
         appBar: AppBar(
           title: const Text('Ong Log'),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: () {
+                ref.read(entryProvider.notifier).reloadEntries(cached: false);
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.delete),
+              onPressed: () async {
+                await deleteDatabase();
+                ref.read(entryProvider.notifier).clearEntries();
+              },
+            ),
+          ],
         ),
         body: asyncEntries.when(
           data: (entries) => EntryList(entries: entries),
@@ -115,10 +135,14 @@ Future<bool> isDatabaseInitialized() async {
   logger.d('Database file: $databaseFile');
   bool databaseExists = await databaseFile.exists();
   if (databaseExists) {
-    Database database = await openDatabase(databaseFile.path);
-    List<Map<String, dynamic>> tables = await database.rawQuery("SELECT name FROM sqlite_master WHERE type='table' AND name='YoutubeCatalogue'");
-    await database.close();
-    return tables.isNotEmpty;
+    Database? db;
+    try {
+      db = await openDatabase(databaseFile.path);
+      List<Map<String, dynamic>> tables = await db.rawQuery("SELECT name FROM sqlite_master WHERE type='table' AND name='YoutubeCatalogue'");
+      return tables.isNotEmpty;
+    } finally {
+      await db?.close();
+    }
   }
   return false;
 }
@@ -165,12 +189,15 @@ Future<Database> openOngLogDatabase() async {
 Future<List<Entry>> loadEntriesFromGoogleSheets() async {
   const url = "https://docs.google.com/spreadsheets/d/14ARzE_zSMNhp0ZQV34ti2741PbA-5wAjsXRAW8EgJ-4/gviz/tq?tqx=out:csv&sheet=Youtube%20Catalogue";
   logger.d('Fetching CSV from $url');
+  final stopwatch = Stopwatch()..start();
   final response = await http.get(Uri.parse(url));
+  stopwatch.stop();
   if (response.statusCode == 200) {
     final csvString = response.body;
     final bytes = response.bodyBytes.lengthInBytes;
     final mib = bytes / (1024 * 1024);
-    logger.i('Fetched ${mib.toStringAsFixed(2)} MiB');
+    final mibPerSecond = mib * 1E6 / stopwatch.elapsed.inMicroseconds;
+    logger.i('Fetched ${mib.toStringAsFixed(2)} MiB in ${stopwatch.elapsed} (${mibPerSecond.toStringAsFixed(2)} MiB/s)');
 
     final csv = parseCsvString(csvString);
     logger.i('Parsed CSV: ${csv.length} rows');
@@ -213,11 +240,13 @@ List<List<dynamic>> parseCsvString(String csvString) {
 Future<void> saveDataToDatabase(List<Entry> entries) async {
   // open database and create table if it doesn't exist
   final databasePath = await getDatabasesPath();
-  final database = await openDatabase(
-    join(databasePath, 'ongLog.db'),
-    version: 1,
-    onCreate: (db, version) async {
-      await db.execute('''
+  Database? db;
+  try {
+    db = await openDatabase(
+      join(databasePath, 'ongLog.db'),
+      version: 1,
+      onCreate: (db, version) async {
+        await db.execute('''
             CREATE TABLE IF NOT EXISTS YoutubeCatalogue (
               uploadDate TEXT,
               seq INTEGER,
@@ -229,29 +258,30 @@ Future<void> saveDataToDatabase(List<Entry> entries) async {
               additionalNotes TEXT
             )
           ''');
-    },
-  );
-
-  // replace all entries
-  final batch = database.batch();
-  batch.delete('YoutubeCatalogue');
-  for (final entry in entries) {
-    batch.insert(
-      'YoutubeCatalogue',
-      {
-        'uploadDate': entry.uploadDate,
-        'seq': entry.seq,
-        'videoTitle': entry.videoTitle,
-        'genre': entry.genre,
-        'videoLink': entry.videoLink,
-        'shortVideoOrRequestor': entry.shortVideoOrRequestor,
-        'originalHighlight': entry.originalHighlight,
-        'additionalNotes': entry.additionalNotes,
       },
     );
+    // replace all entries
+    final batch = db.batch();
+    batch.delete('YoutubeCatalogue');
+    for (final entry in entries) {
+      batch.insert(
+        'YoutubeCatalogue',
+        {
+          'uploadDate': entry.uploadDate,
+          'seq': entry.seq,
+          'videoTitle': entry.videoTitle,
+          'genre': entry.genre,
+          'videoLink': entry.videoLink,
+          'shortVideoOrRequestor': entry.shortVideoOrRequestor,
+          'originalHighlight': entry.originalHighlight,
+          'additionalNotes': entry.additionalNotes,
+        },
+      );
+    }
+    await batch.commit(noResult: true);
+  } finally {
+    await db?.close();
   }
-  await batch.commit(noResult: true);
-  await database.close();
 }
 
 Future<void> deleteDatabase() async {
