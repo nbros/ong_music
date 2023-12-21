@@ -22,7 +22,7 @@ List<List<dynamic>> parseCsvString(String csvString) {
   return csvParser.convert(csvString);
 }
 
-class VideoData {
+class Entry {
   final String uploadDate;
   final int? seq;
   final String videoTitle;
@@ -32,7 +32,7 @@ class VideoData {
   final String originalHighlight;
   final String additionalNotes;
 
-  VideoData({
+  Entry({
     required this.uploadDate,
     required this.seq,
     required this.videoTitle,
@@ -45,7 +45,7 @@ class VideoData {
 
   @override
   String toString() {
-    return 'VideoData{ '
+    return 'Entry{ '
         'uploadDate: $uploadDate, '
         'seq: $seq, '
         'videoTitle: $videoTitle, '
@@ -55,6 +55,27 @@ class VideoData {
         'originalHighlight: $originalHighlight, '
         'additionalNotes: $additionalNotes'
         ' }';
+  }
+}
+
+class EntryList extends StatelessWidget {
+  final List<Entry> entries;
+
+  const EntryList({super.key, required this.entries});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.builder(
+      itemCount: entries.length,
+      itemBuilder: (context, index) {
+        final entry = entries[index];
+        return ListTile(
+          title: Text(entry.videoTitle),
+          subtitle: Text(entry.genre),
+          // Add more properties of Entry as needed
+        );
+      },
+    );
   }
 }
 
@@ -72,12 +93,12 @@ void query() async {
     final csv = parseCsvString(csvString);
     logger.i('Parsed CSV: ${csv.length} rows');
 
-    // Format CSV into VideoData objects
-    List<VideoData> videoDataList = [];
+    // Format CSV into Entry objects
+    List<Entry> entries = [];
     for (int i = 1; i < csv.length; i++) {
       try {
         final row = csv[i];
-        final videoData = VideoData(
+        final entry = Entry(
           uploadDate: row[0],
           seq: int.tryParse(row[1]),
           videoTitle: row[2],
@@ -88,22 +109,22 @@ void query() async {
           additionalNotes: row[7],
         );
 
-        videoDataList.add(videoData);
+        entries.add(entry);
       } catch (e) {
         logger.e('Error parsing row $i: $e');
       }
     }
 
-    logger.d('First 10 VideoData entries:\n${videoDataList.take(10).map((videoData) => videoData.toString()).join('\n')}');
+    logger.d('First 10 entries:\n${entries.take(10).map((entry) => entry.toString()).join('\n')}');
 
     // Save data to SQLite database
-    await saveDataToDatabase(videoDataList);
+    await saveDataToDatabase(entries);
   } else {
     logger.e('Failed to fetch CSV: HTTP ${response.statusCode}');
   }
 }
 
-Future<void> saveDataToDatabase(List<VideoData> videoDataList) async {
+Future<void> saveDataToDatabase(List<Entry> entries) async {
   final databasePath = await getDatabasesPath();
   final database = await openDatabase(
     join(databasePath, 'ongLog.db'),
@@ -115,18 +136,18 @@ Future<void> saveDataToDatabase(List<VideoData> videoDataList) async {
   );
 
   await database.transaction((txn) async {
-    for (final videoData in videoDataList) {
+    for (final entry in entries) {
       await txn.insert(
         'YoutubeCatalogue',
         {
-          'uploadDate': videoData.uploadDate,
-          'seq': videoData.seq,
-          'videoTitle': videoData.videoTitle,
-          'genre': videoData.genre,
-          'videoLink': videoData.videoLink,
-          'shortVideoOrRequestor': videoData.shortVideoOrRequestor,
-          'originalHighlight': videoData.originalHighlight,
-          'additionalNotes': videoData.additionalNotes,
+          'uploadDate': entry.uploadDate,
+          'seq': entry.seq,
+          'videoTitle': entry.videoTitle,
+          'genre': entry.genre,
+          'videoLink': entry.videoLink,
+          'shortVideoOrRequestor': entry.shortVideoOrRequestor,
+          'originalHighlight': entry.originalHighlight,
+          'additionalNotes': entry.additionalNotes,
         },
       );
     }
