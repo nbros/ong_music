@@ -8,6 +8,9 @@ import 'package:logger/logger.dart';
 import 'package:path/path.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'src/entry.dart';
+import 'src/entry_list.dart';
+import 'src/search.dart';
+import 'src/options.dart';
 
 final logger = Logger(printer: PrettyPrinter(methodCount: 0));
 const String databaseFileName = 'ongLog.db';
@@ -49,6 +52,8 @@ class EntryNotifier extends StateNotifier<AsyncValue<List<Entry>>> {
         logger.i('Loading entries from Google Sheet');
         entries = await loadEntriesFromGoogleSheets();
       }
+      entries = entries.where((entry) => entry.videoTitle.isNotEmpty && entry.seq != null).toList();
+      entries.sort((e1, e2) => e2.seq!.compareTo(e1.seq!));
       logger.d('First 10 entries:\n${entries.take(10).map((entry) => entry.toString()).join('\n')}');
       state = AsyncValue.data(entries);
     } catch (e, stack) {
@@ -69,63 +74,67 @@ class MainApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     Future.microtask(() => ref.read(entryProvider.notifier).loadEntries());
-    final asyncEntries = ref.watch(entryProvider);
+    AsyncValue<List<Entry>> asyncEntries = ref.watch(entryProvider);
+    bool expand = ref.watch(expandOptionProvider);
+    ThemeMode themeMode = ref.watch(themeProvider);
+    final Brightness platformBrightness = MediaQuery.of(context).platformBrightness;
+    if (themeMode == ThemeMode.system) {
+      // initialize light or dark depending on platform brightness
+      themeMode = platformBrightness == Brightness.dark ? ThemeMode.dark : ThemeMode.light;
+      Future.microtask(() => ref.read(themeProvider.notifier).themeMode = themeMode);
+    }
+
     return MaterialApp(
       debugShowCheckedModeBanner: false,
+      themeMode: themeMode,
+      theme: ThemeData.light(),
+      darkTheme: ThemeData.dark(),
       home: Scaffold(
-        appBar: AppBar(
-          title: const Text('Ong Log'),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.refresh),
-              onPressed: () {
-                ref.read(entryProvider.notifier).reloadEntries(cached: false);
-              },
-            ),
-            IconButton(
-              icon: const Icon(Icons.delete),
-              onPressed: () async {
-                await deleteDatabase();
-                ref.read(entryProvider.notifier).clearEntries();
-              },
-            ),
-          ],
-        ),
-        body: asyncEntries.when(
-          data: (entries) => EntryList(entries: entries),
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, stack) {
-            logger.e('Error loading entries: $e\n$stack');
-            return Center(child: Text('Error loading entries: $e'));
-          },
-        ),
-        floatingActionButton: FloatingActionButton(
-          onPressed: () {
-            ref.read(entryProvider.notifier).reloadEntries(cached: false);
-          },
-          child: const Icon(Icons.refresh),
-        ),
-      ),
-    );
-  }
-}
-
-class EntryList extends StatelessWidget {
-  final List<Entry> entries;
-
-  const EntryList({super.key, required this.entries});
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView.builder(
-      itemCount: entries.length,
-      itemBuilder: (context, index) {
-        final entry = entries[index];
-        return ListTile(
-          title: Text(entry.videoTitle),
-          subtitle: Text(entry.additionalNotes),
-        );
-      },
+          appBar: AppBar(
+            title: const Text('Ong Log'),
+            actions: [
+              IconButton(
+                icon: Icon(expand ? Icons.unfold_less : Icons.unfold_more),
+                onPressed: () => ref.read(expandOptionProvider.notifier).toggle(),
+              ),
+              IconButton(
+                icon: Icon(themeMode == ThemeMode.light ? Icons.dark_mode : Icons.light_mode),
+                onPressed: () => ref.read(themeProvider.notifier).switchTheme(),
+              ),
+              IconButton(
+                icon: const Icon(Icons.refresh),
+                onPressed: () {
+                  ref.read(entryProvider.notifier).reloadEntries(cached: false);
+                },
+              ),
+              IconButton(
+                icon: const Icon(Icons.delete),
+                onPressed: () async {
+                  await deleteDatabase();
+                  ref.read(entryProvider.notifier).clearEntries();
+                },
+              ),
+            ],
+          ),
+          body: asyncEntries.when(
+            data: (entries) => EntryList(entries: entries),
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (e, stack) {
+              logger.e('Error loading entries: $e\n$stack');
+              return Center(child: Text('Error loading entries: $e'));
+            },
+          ),
+          floatingActionButton: asyncEntries.hasValue
+              ? Builder(
+                  builder: (context) => FloatingActionButton(
+                    onPressed: () {
+                      showSearch(context: context, delegate: EntrySearch(asyncEntries.value!));
+                      ref.read(entryProvider.notifier).reloadEntries(cached: false);
+                    },
+                    child: const Icon(Icons.search),
+                  ),
+                )
+              : null),
     );
   }
 }
@@ -153,26 +162,30 @@ Future<String> getDatabaseFilePath() async {
 }
 
 Future<List<Entry>> loadEntriesFromDatabase() async {
+  Database? db;
   try {
-    Database database = await openOngLogDatabase();
-    final List<Map<String, dynamic>> maps = await database.query('YoutubeCatalogue', orderBy: 'seq');
-    await database.close();
-
-    return List.generate(maps.length, (i) {
-      return Entry(
-        uploadDate: maps[i]['uploadDate'],
-        seq: maps[i]['seq'],
-        videoTitle: maps[i]['videoTitle'],
-        genre: maps[i]['genre'],
-        videoLink: maps[i]['videoLink'],
-        shortVideoOrRequestor: maps[i]['shortVideoOrRequestor'],
-        originalHighlight: maps[i]['originalHighlight'],
-        additionalNotes: maps[i]['additionalNotes'],
-      );
-    });
-  } catch (e) {
-    logger.e('Error loading entries from database: $e');
-    return [];
+    try {
+      db = await openOngLogDatabase();
+      final List<Map<String, dynamic>> maps = await db.query('YoutubeCatalogue');
+      return List.generate(maps.length, (i) {
+        var title = maps[i]['videoTitle'];
+        return Entry(
+          uploadDate: maps[i]['uploadDate'],
+          seq: maps[i]['seq'],
+          videoTitle: title,
+          genre: maps[i]['genre'],
+          videoLink: maps[i]['videoLink'],
+          shortVideoOrRequestor: maps[i]['shortVideoOrRequestor'],
+          originalHighlight: maps[i]['originalHighlight'],
+          additionalNotes: maps[i]['additionalNotes'],
+        );
+      });
+    } catch (e) {
+      logger.e('Error loading entries from database: $e');
+      return [];
+    }
+  } finally {
+    await db?.close();
   }
 }
 
