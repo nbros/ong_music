@@ -74,10 +74,8 @@ class MainApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     Future.microtask(() => ref.read(entryProvider.notifier).loadEntries());
-    AsyncValue<List<Entry>> asyncEntries = ref.watch(entryProvider);
-    bool expand = ref.watch(expandOptionProvider);
-    ThemeMode themeMode = ref.watch(themeProvider);
     final Brightness platformBrightness = MediaQuery.of(context).platformBrightness;
+    ThemeMode themeMode = ref.watch(themeProvider);
     if (themeMode == ThemeMode.system) {
       // initialize light or dark depending on platform brightness
       themeMode = platformBrightness == Brightness.dark ? ThemeMode.dark : ThemeMode.light;
@@ -89,52 +87,59 @@ class MainApp extends ConsumerWidget {
       themeMode: themeMode,
       theme: ThemeData.light(),
       darkTheme: ThemeData.dark(),
-      home: Scaffold(
-          appBar: AppBar(
-            title: const Text('Ong Log'),
-            actions: [
-              IconButton(
-                icon: Icon(expand ? Icons.unfold_less : Icons.unfold_more),
-                onPressed: () => ref.read(expandOptionProvider.notifier).toggle(),
-              ),
-              IconButton(
-                icon: Icon(themeMode == ThemeMode.light ? Icons.dark_mode : Icons.light_mode),
-                onPressed: () => ref.read(themeProvider.notifier).switchTheme(),
-              ),
-              IconButton(
-                icon: const Icon(Icons.refresh),
-                onPressed: () {
-                  ref.read(entryProvider.notifier).reloadEntries(cached: false);
-                },
-              ),
-              IconButton(
-                icon: const Icon(Icons.delete),
-                onPressed: () async {
-                  await deleteDatabase();
-                  ref.read(entryProvider.notifier).clearEntries();
-                },
-              ),
-            ],
+      home: const MainPage(),
+    );
+  }
+}
+
+class MainPage extends ConsumerWidget {
+  const MainPage({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    AsyncValue<List<Entry>> asyncEntries = ref.watch(entryProvider);
+    bool expand = ref.watch(expandOptionProvider);
+    ThemeMode themeMode = ref.watch(themeProvider);
+    final entryNotifier = ref.read(entryProvider.notifier);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Ong Log'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.search),
+            onPressed: () => showSearch(context: context, delegate: EntrySearch(asyncEntries.value!)),
           ),
-          body: asyncEntries.when(
-            data: (entries) => EntryList(entries: entries),
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, stack) {
-              logger.e('Error loading entries: $e\n$stack');
-              return Center(child: Text('Error loading entries: $e'));
+          IconButton(
+            icon: Icon(expand ? Icons.unfold_less : Icons.unfold_more),
+            onPressed: () => ref.read(expandOptionProvider.notifier).toggle(),
+          ),
+          IconButton(
+            icon: Icon(themeMode == ThemeMode.light ? Icons.dark_mode : Icons.light_mode),
+            onPressed: () => ref.read(themeProvider.notifier).switchTheme(),
+          ),
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () {
+              ref.read(entryProvider.notifier).reloadEntries(cached: false);
             },
           ),
-          floatingActionButton: asyncEntries.hasValue
-              ? Builder(
-                  builder: (context) => FloatingActionButton(
-                    onPressed: () {
-                      showSearch(context: context, delegate: EntrySearch(asyncEntries.value!));
-                      ref.read(entryProvider.notifier).reloadEntries(cached: false);
-                    },
-                    child: const Icon(Icons.search),
-                  ),
-                )
-              : null),
+          IconButton(
+            icon: const Icon(Icons.delete),
+            onPressed: () async {
+              await confirmAndDeleteDatabase(context, entryNotifier);
+            },
+          ),
+        ],
+      ),
+      body: asyncEntries.when(
+        data: (entries) => EntryList(entries: entries),
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, stack) {
+          logger.e('Error loading entries: $e\n$stack');
+          return Center(child: Text('Error loading entries: $e'));
+        },
+      ),
     );
   }
 }
@@ -221,14 +226,14 @@ Future<List<Entry>> loadEntriesFromGoogleSheets() async {
       try {
         final row = csv[i];
         final entry = Entry(
-          uploadDate: row[0],
+          uploadDate: row[0].trim(),
           seq: int.tryParse(row[1]),
-          videoTitle: row[2],
-          genre: row[3],
-          videoLink: row[4],
-          shortVideoOrRequestor: row[5],
-          originalHighlight: row[6],
-          additionalNotes: row[7],
+          videoTitle: row[2].trim(),
+          genre: row[3].trim(),
+          videoLink: row[4].trim(),
+          shortVideoOrRequestor: row[5].trim(),
+          originalHighlight: row[6].trim(),
+          additionalNotes: row[7].trim(),
         );
 
         entries.add(entry);
@@ -295,6 +300,40 @@ Future<void> saveDataToDatabase(List<Entry> entries) async {
   } finally {
     await db?.close();
   }
+}
+
+Future<void> confirmAndDeleteDatabase(BuildContext context, EntryNotifier entryNotifier) async {
+  return showDialog<void>(
+    context: context,
+    builder: (BuildContext context) {
+      return AlertDialog(
+        title: const Text('Confirm Delete'),
+        content: const SingleChildScrollView(
+          child: ListBody(
+            children: <Text>[
+              Text('Are you sure you want to reset the cached data (delete the local database)?'),
+            ],
+          ),
+        ),
+        actions: <Widget>[
+          TextButton(
+            child: const Text('Cancel'),
+            onPressed: () {
+              Navigator.of(context).pop();
+            },
+          ),
+          TextButton(
+            child: const Text('Delete'),
+            onPressed: () {
+              deleteDatabase();
+              entryNotifier.clearEntries();
+              Navigator.of(context).pop();
+            },
+          ),
+        ],
+      );
+    },
+  );
 }
 
 Future<void> deleteDatabase() async {

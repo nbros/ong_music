@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 final expandOptionProvider = StateNotifierProvider<ExpandOptionNotifier, bool>((ref) => ExpandOptionNotifier());
 
 class ExpandOptionNotifier extends StateNotifier<bool> {
-  ExpandOptionNotifier() : super(true);
+  ExpandOptionNotifier() : super(false);
   void toggle() {
     state = !state;
   }
@@ -21,4 +21,6 @@ class DarkThemeOptionNotifier extends StateNotifier<ThemeMode> {
   set themeMode(ThemeMode themeMode) {
     state = themeMode;
   }
+
+  ThemeMode get themeMode => state;
 }

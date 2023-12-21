@@ -34,13 +34,13 @@ class EntrySearch extends SearchDelegate<Entry?> {
 
   @override
   Widget buildResults(BuildContext context) {
-    final results = entries.where((entry) => entry.videoTitle.toLowerCase().contains(query.toLowerCase())).toList();
+    final results = entries.where((entry) => entry.formattedTitle.toLowerCase().contains(query.toLowerCase())).toList();
     return EntryList(entries: results, query: query);
   }
 
   @override
   Widget buildSuggestions(BuildContext context) {
-    final suggestions = entries.where((entry) => entry.videoTitle.toLowerCase().contains(query.toLowerCase())).toList();
+    final suggestions = entries.where((entry) => entry.formattedTitle.toLowerCase().contains(query.toLowerCase())).toList();
     return EntryList(entries: suggestions, query: query);
   }
 }

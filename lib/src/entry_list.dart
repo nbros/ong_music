@@ -13,86 +13,76 @@ class EntryList extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     var expand = ref.watch(expandOptionProvider);
+    ref.watch(themeProvider);
     return ListView.builder(
-      //padding: const EdgeInsets.all(0),
       itemCount: entries.length,
       itemBuilder: (context, index) {
+        final darkMode = Theme.of(context).brightness == Brightness.dark;
         final entry = entries[index];
-        final genre = entry.genre.trim().isEmpty ? '' : ' • ${entry.genre}';
-        final date = entry.originalHighlight.trim().isEmpty ? '' : ' - ${entry.originalHighlight}';
-        final uploadDate = entry.uploadDate.trim().isEmpty ? '' : ' (uploaded on ${entry.uploadDate})';
-        final shortVideoOrRequestor = entry.shortVideoOrRequestor.trim();
-        final requestor = shortVideoOrRequestor.isEmpty || shortVideoOrRequestor.startsWith('http') ? '' : "[$shortVideoOrRequestor]";
-        final notes = entry.additionalNotes.trim().isEmpty ? '' : ' ${entry.additionalNotes}';
-        final title = entry.videoTitle.trim();
-        final seq = entry.seq;
-        final formattedTitle = "$seq$date - $title$genre";
+        final enabled = entry.videoLink.isNotEmpty;
+        final textStyle = enabled
+            ? Theme.of(context).textTheme.bodyLarge
+            : Theme.of(context).textTheme.bodyLarge!.copyWith(color: darkMode ? Colors.grey[700] : Colors.grey[500]);
 
         Widget titleWidget;
         if ('' == query) {
-          titleWidget = Text(formattedTitle);
+          titleWidget = Text(entry.formattedTitle, style: textStyle);
         } else {
-          final startIndex = title.toLowerCase().indexOf(query.toLowerCase());
+          var formattedTitle = entry.formattedTitle;
+          final startIndex = formattedTitle.toLowerCase().indexOf(query.toLowerCase());
           final endIndex = startIndex + query.length;
-          final beforeMatch = title.substring(0, startIndex);
-          final match = title.substring(startIndex, endIndex);
-          final afterMatch = title.substring(endIndex);
-          final Color? highlightColor = Theme.of(context).brightness == Brightness.dark ? Colors.lime[900] : Colors.lime[100];
+          final beforeMatch = formattedTitle.substring(0, startIndex);
+          final match = formattedTitle.substring(startIndex, endIndex);
+          final afterMatch = formattedTitle.substring(endIndex);
+          final Color? highlightColor = darkMode ? Colors.lime[900] : Colors.lime[100];
           titleWidget = RichText(
             text: TextSpan(
-              style: DefaultTextStyle.of(context).style,
+              style: textStyle,
               children: <TextSpan>[
-                TextSpan(text: seq?.toString()),
-                TextSpan(text: date),
-                const TextSpan(text: " - "),
                 TextSpan(text: beforeMatch),
                 TextSpan(text: match, style: TextStyle(backgroundColor: highlightColor)),
                 TextSpan(text: afterMatch),
-                TextSpan(text: genre),
               ],
             ),
           );
-
-          // final titleParts = formattedTitle.splitMapJoin(
-          //   RegExp(RegExp.escape(query), caseSensitive: false),
-          //   onMatch: (m) => m.group(0)!,
-          //   onNonMatch: (n) => n,
-          // );
-
-          // final titleParts = formattedTitle.split(RegExp('(${RegExp.escape(query)})', caseSensitive: false));
-          // final titleSpans = titleParts.map((part) {
-          //   return part.toLowerCase() == query.toLowerCase()
-          //       ? TextSpan(text: part, style: const TextStyle(backgroundColor: Colors.yellow))
-          //       : TextSpan(text: part);
-          // }).toList();
-          // final titleSpans = titleParts.map((part) {
-          //   return TextSpan(
-          //     text: part,
-          //     style: part.toLowerCase() == query.toLowerCase() ? const TextStyle(backgroundColor: Colors.yellow) : null,
-          //   );
-          // }).toList();
-          // titleWidget = RichText(text: TextSpan(style: DefaultTextStyle.of(context).style, children: titleSpans));
         }
 
         return ListTile(
+          enabled: enabled,
           onTap: () async {
             final url = Uri.parse(entry.videoLink);
             if (await canLaunchUrl(url)) {
               await launchUrl(url);
-            } else {
-              throw 'Could not launch $url';
+            } else if (context.mounted) {
+              _showErrorDialog(context, 'Could not launch URL $url');
             }
           },
-          //isThreeLine: expand,
-          // horizontalTitleGap: 0,
-          // minVerticalPadding: 1,
-          // minLeadingWidth: 0,
-          // contentPadding: const EdgeInsets.symmetric(horizontal: 1, vertical: 1),
-          // visualDensity: VisualDensity.compact,
           title: titleWidget,
-          subtitle: expand ? Text("$requestor$notes$uploadDate") : null,
+          subtitle: expand ? Text(entry.formattedSubtitle) : null,
         );
       },
     );
   }
+}
+
+void _showErrorDialog(BuildContext context, String msg) {
+  final alert = AlertDialog(
+    title: const Text("Error"),
+    content: Text(msg),
+    actions: [
+      TextButton(
+        child: const Text("OK"),
+        onPressed: () {
+          Navigator.of(context).pop();
+        },
+      )
+    ],
+  );
+
+  showDialog(
+    context: context,
+    builder: (BuildContext context) {
+      return alert;
+    },
+  );
 }
