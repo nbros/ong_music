@@ -72,11 +72,7 @@ class EntryTile extends ConsumerWidget {
       enabled: enabled,
       onTap: () async {
         final url = Uri.parse(entry.videoLink);
-        if (await canLaunchUrl(url)) {
-          await launchUrl(url);
-        } else if (context.mounted) {
-          _showErrorDialog(context, 'Could not launch URL $url');
-        }
+        await launchUrl(url);
       },
       title: titleWidget,
       subtitle: expand ? Text(entry.formattedSubtitle) : null,
@@ -105,26 +101,4 @@ class EntryTile extends ConsumerWidget {
     }
     return widget;
   }
-}
-
-void _showErrorDialog(BuildContext context, String msg) {
-  final alert = AlertDialog(
-    title: const Text("Error"),
-    content: Text(msg),
-    actions: [
-      TextButton(
-        child: const Text("OK"),
-        onPressed: () {
-          Navigator.of(context).pop();
-        },
-      )
-    ],
-  );
-
-  showDialog(
-    context: context,
-    builder: (BuildContext context) {
-      return alert;
-    },
-  );
 }

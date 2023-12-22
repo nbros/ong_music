@@ -29,7 +29,7 @@ class SettingsDrawer extends ConsumerWidget {
             ),
           ),
           SwitchListTile(
-            title: const Text('Expand'),
+            title: const Text('Detailed'),
             value: expandOption,
             onChanged: (bool value) {
               ref.read(expandOptionProvider.notifier).toggle();

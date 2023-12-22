@@ -19,12 +19,13 @@ final logger = Logger(printer: PrettyPrinter(methodCount: 0));
 const String databaseFileName = 'ongLog.db';
 
 void main() {
-  // WidgetsFlutterBinding.ensureInitialized();
-  sqfliteFfiInit();
-  if (kIsWeb) {
-    databaseFactory = databaseFactoryFfiWeb;
-  } else {
-    databaseFactory = databaseFactoryFfi;
+  if (!Platform.isAndroid && !Platform.isIOS) {
+    sqfliteFfiInit();
+    if (kIsWeb) {
+      databaseFactory = databaseFactoryFfiWeb;
+    } else {
+      databaseFactory = databaseFactoryFfi;
+    }
   }
   Logger.level = kDebugMode ? Level.all : Level.off;
   runApp(
@@ -106,8 +107,9 @@ class MainPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     AsyncValue<List<Entry>> asyncEntries = ref.watch(entryProvider);
     bool expand = ref.watch(expandOptionProvider);
-    ThemeMode themeMode = ref.watch(themeProvider);
+    final themeMode = ref.watch(themeProvider);
     final entryNotifier = ref.read(entryProvider.notifier);
+    double width = MediaQuery.of(context).size.width;
 
     return Scaffold(
       appBar: AppBar(
@@ -117,25 +119,49 @@ class MainPage extends ConsumerWidget {
             icon: const Icon(Icons.search),
             onPressed: () => showSearch(context: context, delegate: EntrySearch(asyncEntries.value!)),
           ),
-          IconButton(
-            icon: Icon(expand ? Icons.unfold_less : Icons.unfold_more),
-            onPressed: () => ref.read(expandOptionProvider.notifier).toggle(),
-          ),
-          IconButton(
-            icon: Icon(themeMode == ThemeMode.light ? Icons.dark_mode : Icons.light_mode),
-            onPressed: () => ref.read(themeProvider.notifier).switchTheme(),
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () {
-              ref.read(entryProvider.notifier).reloadEntries(cached: false);
+          if (width > 400)
+            IconButton(
+              icon: Icon(expand ? Icons.unfold_less : Icons.unfold_more),
+              onPressed: () => ref.read(expandOptionProvider.notifier).toggle(),
+            ),
+          if (width > 450)
+            IconButton(
+              icon: Icon(themeMode == ThemeMode.light ? Icons.dark_mode : Icons.light_mode),
+              onPressed: () => ref.read(themeProvider.notifier).switchTheme(),
+            ),
+          if (width > 500)
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: () {
+                ref.read(entryProvider.notifier).reloadEntries(cached: false);
+              },
+            ),
+          if (width > 550)
+            IconButton(
+              icon: const Icon(Icons.delete),
+              onPressed: () async {
+                await confirmAndClearEntries(context, entryNotifier);
+              },
+            ),
+          PopupMenuButton<String>(
+            onSelected: (String result) async {
+              if (result == 'clearCache') {
+                await confirmAndClearEntries(context, entryNotifier);
+              }
+              if (result == 'refresh') {
+                await entryNotifier.reloadEntries(cached: false);
+              }
             },
-          ),
-          IconButton(
-            icon: const Icon(Icons.delete),
-            onPressed: () async {
-              await confirmAndClearEntries(context, entryNotifier);
-            },
+            itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+              const PopupMenuItem<String>(
+                value: 'clearCache',
+                child: Text('Clear Cache'),
+              ),
+              const PopupMenuItem<String>(
+                value: 'refresh',
+                child: Text('Refresh'),
+              ),
+            ],
           ),
         ],
       ),
