@@ -1,26 +1,63 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-final expandOptionProvider = StateNotifierProvider<ExpandOptionNotifier, bool>((ref) => ExpandOptionNotifier());
+class ToggleOptionNotifier extends StateNotifier<bool> {
+  String optionName;
 
-class ExpandOptionNotifier extends StateNotifier<bool> {
-  ExpandOptionNotifier() : super(false);
+  ToggleOptionNotifier(super.initialState, this.optionName) {
+    _loadState();
+  }
+
+  Future<void> _loadState() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    state = prefs.getBool(optionName) ?? state;
+  }
+
   void toggle() {
     state = !state;
+    _saveState();
+  }
+
+  Future<void> _saveState() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    prefs.setBool(optionName, state);
   }
 }
 
-final themeProvider = StateNotifierProvider<DarkThemeOptionNotifier, ThemeMode>((ref) => DarkThemeOptionNotifier());
+typedef ExpandOptionNotifier = ToggleOptionNotifier;
+typedef DividersOptionNotifier = ToggleOptionNotifier;
+
+final expandOptionProvider = StateNotifierProvider<ExpandOptionNotifier, bool>((ref) => ExpandOptionNotifier(false, "expand"));
+final dividersOptionProvider = StateNotifierProvider<DividersOptionNotifier, bool>((ref) => DividersOptionNotifier(true, "dividers"));
 
 class DarkThemeOptionNotifier extends StateNotifier<ThemeMode> {
-  DarkThemeOptionNotifier() : super(ThemeMode.system);
+  DarkThemeOptionNotifier() : super(ThemeMode.system) {
+    _loadState();
+  }
+
+  Future<void> _loadState() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    String? themeMode = prefs.getString(runtimeType.toString());
+    state = themeMode == ThemeMode.dark.name ? ThemeMode.dark : ThemeMode.light;
+  }
+
   void switchTheme() {
     state = state == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
+    _saveState();
+  }
+
+  Future<void> _saveState() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    prefs.setString(runtimeType.toString(), state.name);
   }
 
   set themeMode(ThemeMode themeMode) {
     state = themeMode;
+    _saveState();
   }
 
   ThemeMode get themeMode => state;
 }
+
+final themeProvider = StateNotifierProvider<DarkThemeOptionNotifier, ThemeMode>((ref) => DarkThemeOptionNotifier());

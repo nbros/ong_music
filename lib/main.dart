@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:csv/csv.dart';
 import 'package:flutter/foundation.dart';
@@ -7,10 +8,12 @@ import 'package:http/http.dart' as http;
 import 'package:logger/logger.dart';
 import 'package:path/path.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 import 'src/entry.dart';
 import 'src/entry_list.dart';
 import 'src/search.dart';
 import 'src/options.dart';
+import 'src/settings.dart';
 
 final logger = Logger(printer: PrettyPrinter(methodCount: 0));
 const String databaseFileName = 'ongLog.db';
@@ -18,7 +21,11 @@ const String databaseFileName = 'ongLog.db';
 void main() {
   // WidgetsFlutterBinding.ensureInitialized();
   sqfliteFfiInit();
-  databaseFactory = databaseFactoryFfi;
+  if (kIsWeb) {
+    databaseFactory = databaseFactoryFfiWeb;
+  } else {
+    databaseFactory = databaseFactoryFfi;
+  }
   Logger.level = kDebugMode ? Level.all : Level.off;
   runApp(
     const ProviderScope(
@@ -104,7 +111,7 @@ class MainPage extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Ong Log'),
+        title: const Text('Highlights'),
         actions: [
           IconButton(
             icon: const Icon(Icons.search),
@@ -127,11 +134,12 @@ class MainPage extends ConsumerWidget {
           IconButton(
             icon: const Icon(Icons.delete),
             onPressed: () async {
-              await confirmAndDeleteDatabase(context, entryNotifier);
+              await confirmAndClearEntries(context, entryNotifier);
             },
           ),
         ],
       ),
+      drawer: const SettingsDrawer(),
       body: asyncEntries.when(
         data: (entries) => EntryList(entries: entries),
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -147,12 +155,16 @@ class MainPage extends ConsumerWidget {
 Future<bool> isDatabaseInitialized() async {
   File databaseFile = File(await getDatabaseFilePath());
   logger.d('Database file: $databaseFile');
-  bool databaseExists = await databaseFile.exists();
+  bool databaseExists = kIsWeb || await databaseFile.exists();
   if (databaseExists) {
     Database? db;
     try {
       db = await openDatabase(databaseFile.path);
       List<Map<String, dynamic>> tables = await db.rawQuery("SELECT name FROM sqlite_master WHERE type='table' AND name='YoutubeCatalogue'");
+
+      var sqliteVersion = (await db.rawQuery('select sqlite_version()')).first.values.first;
+      logger.d("SQlite version $sqliteVersion"); // should print 3.39.3
+
       return tables.isNotEmpty;
     } finally {
       await db?.close();
@@ -302,16 +314,16 @@ Future<void> saveDataToDatabase(List<Entry> entries) async {
   }
 }
 
-Future<void> confirmAndDeleteDatabase(BuildContext context, EntryNotifier entryNotifier) async {
+Future<void> confirmAndClearEntries(BuildContext context, EntryNotifier entryNotifier) async {
   return showDialog<void>(
     context: context,
     builder: (BuildContext context) {
       return AlertDialog(
-        title: const Text('Confirm Delete'),
+        title: const Text('Delete all cached entries?'),
         content: const SingleChildScrollView(
           child: ListBody(
             children: <Text>[
-              Text('Are you sure you want to reset the cached data (delete the local database)?'),
+              Text('Are you sure you want to clear the cached data?\nThis will delete all cached SQlite entries from the local database.'),
             ],
           ),
         ),
@@ -325,7 +337,7 @@ Future<void> confirmAndDeleteDatabase(BuildContext context, EntryNotifier entryN
           TextButton(
             child: const Text('Delete'),
             onPressed: () {
-              deleteDatabase();
+              clearEntries();
               entryNotifier.clearEntries();
               Navigator.of(context).pop();
             },
@@ -336,14 +348,13 @@ Future<void> confirmAndDeleteDatabase(BuildContext context, EntryNotifier entryN
   );
 }
 
-Future<void> deleteDatabase() async {
-  final databasePath = await getDatabasesPath();
-  final databaseFile = File(join(databasePath, 'ongLog.db'));
-  logger.d('Deleting database at $databaseFile');
-  if (!await databaseFile.exists()) {
-    logger.d('Database does not exist');
-    return;
+Future<void> clearEntries() async {
+  Database? db;
+  try {
+    db = await openOngLogDatabase();
+    await db.delete('YoutubeCatalogue');
+  } finally {
+    await db?.close();
   }
-  await databaseFile.delete();
-  logger.d('Database deleted');
+  logger.d('Entries cleared');
 }

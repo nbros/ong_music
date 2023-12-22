@@ -47,7 +47,7 @@ class EntryList extends ConsumerWidget {
           );
         }
 
-        return ListTile(
+        final listTile = ListTile(
           enabled: enabled,
           onTap: () async {
             final url = Uri.parse(entry.videoLink);
@@ -60,6 +60,26 @@ class EntryList extends ConsumerWidget {
           title: titleWidget,
           subtitle: expand ? Text(entry.formattedSubtitle) : null,
         );
+
+        final dividersEnabled = ref.watch(dividersOptionProvider);
+        if (dividersEnabled) {
+          return Column(
+            children: [
+              listTile,
+              const Divider(height: 0),
+            ],
+          );
+        }
+
+        if (expand) {
+          return listTile;
+        } else {
+          return Tooltip(
+            message: entry.formattedSubtitle,
+            waitDuration: const Duration(milliseconds: 500),
+            child: listTile,
+          );
+        }
       },
     );
   }

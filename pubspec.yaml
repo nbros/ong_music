@@ -11,19 +11,21 @@ dependencies:
   flutter:
     sdk: flutter
   flutter_riverpod: ^2.3.7
-  http: ^0.13.6
+  http: ^1.1.2
   logger: ^2.0.2+1
   logging: ^1.2.0
   path: ^1.8.2
+  shared_preferences: ^2.2.2
   sqflite: ^2.2.8+4
   sqflite_common_ffi: ^2.2.5
+  sqflite_common_ffi_web: ^0.4.2+2
   url_launcher: ^6.2.2
   
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^2.0.0
+  flutter_lints: ^3.0.1
 
 flutter:
   uses-material-design: true

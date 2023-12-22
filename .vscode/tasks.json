@@ -1,0 +1,14 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Generate sqflite ffi bindings",
+            "type": "shell",
+            "command": "dart run sqflite_common_ffi_web:setup --force",
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            }
+        }
+    ]
+}
