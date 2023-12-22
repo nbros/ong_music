@@ -81,10 +81,10 @@ class MainApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     Future.microtask(() => ref.read(entryProvider.notifier).loadEntries());
-    final Brightness platformBrightness = MediaQuery.of(context).platformBrightness;
     ThemeMode themeMode = ref.watch(themeProvider);
     if (themeMode == ThemeMode.system) {
       // initialize light or dark depending on platform brightness
+      final Brightness platformBrightness = MediaQuery.of(context).platformBrightness;
       themeMode = platformBrightness == Brightness.dark ? ThemeMode.dark : ThemeMode.light;
       Future.microtask(() => ref.read(themeProvider.notifier).themeMode = themeMode);
     }
