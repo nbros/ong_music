@@ -38,7 +38,7 @@ class Entry {
     if (_formattedSubtitle == null) {
       final uploadDateStr = uploadDate.trim().isEmpty ? '' : ' (uploaded on $uploadDate)';
       final notes = additionalNotes.trim().isEmpty ? '' : additionalNotes;
-      final requestor = this.requestor.isEmpty ? '' : " [${this.requestor}] ";
+      final requestor = this.requestor.isEmpty ? '' : "[${this.requestor}] ";
       _formattedSubtitle = "$requestor$notes$uploadDateStr";
     }
     return _formattedSubtitle!;
