@@ -54,8 +54,8 @@ class NavigationWidget extends ConsumerWidget {
   NavigationWidget({super.key});
 
   final List<Widget> _pages = [
-    EntriesPage(entriesProvider: highlightEntriesProvider, clickable: true),
-    EntriesPage(entriesProvider: onglogEntriesProvider, clickable: false)
+    EntriesPage(entriesProvider: highlightEntriesProvider, clickable: true, name: "Highlights"),
+    EntriesPage(entriesProvider: onglogEntriesProvider, clickable: false, name: "Ong Log")
   ];
   final List<String> _pageNames = ["Highlights", "Ong Log"];
   final List<bool> _clickable = [true, false];
@@ -82,28 +82,38 @@ class NavigationWidget extends ConsumerWidget {
         title: Text(_pageNames[currentPage]),
         actions: [
           IconButton(
+            // Search
             icon: const Icon(Icons.search),
-            onPressed: () => showSearch(context: context, delegate: EntrySearch(entries: asyncEntries.value!, clickable: _clickable[currentPage])),
+            onPressed: () => showSearch(
+                context: context,
+                delegate: EntrySearch(
+                  entries: asyncEntries.value!,
+                  clickable: _clickable[currentPage],
+                  name: _pageNames[currentPage],
+                )),
           ),
-          if (width > 400)
+          if (width > 320)
             IconButton(
-              icon: Icon(expand ? Icons.unfold_less : Icons.unfold_more),
-              onPressed: () => ref.read(expandOptionProvider.notifier).toggle(),
-            ),
-          if (width > 450)
-            IconButton(
-              icon: Icon(themeMode == ThemeMode.light ? Icons.dark_mode : Icons.light_mode),
-              onPressed: () => ref.read(themeProvider.notifier).switchTheme(),
-            ),
-          if (width > 500)
-            IconButton(
+              // Refresh
               icon: const Icon(Icons.refresh),
               onPressed: () {
                 ref.read(entriesProvider.notifier).reloadEntries(cached: false);
               },
             ),
-          if (width > 550)
+          if (width > 380)
             IconButton(
+              icon: Icon(expand ? Icons.unfold_less : Icons.unfold_more),
+              onPressed: () => ref.read(expandOptionProvider.notifier).toggle(),
+            ),
+          if (width > 420)
+            IconButton(
+              // Switch Theme
+              icon: Icon(themeMode == ThemeMode.light ? Icons.dark_mode : Icons.light_mode),
+              onPressed: () => ref.read(themeProvider.notifier).switchTheme(),
+            ),
+          if (width > 460)
+            IconButton(
+              // Clear Cache
               icon: const Icon(Icons.delete),
               onPressed: () async {
                 await confirmAndClearEntries(context, entryNotifier);
@@ -111,21 +121,32 @@ class NavigationWidget extends ConsumerWidget {
             ),
           PopupMenuButton<String>(
             onSelected: (String result) async {
-              if (result == 'clearCache') {
+              if (result == 'search') {
+                await showSearch(
+                    context: context,
+                    delegate: EntrySearch(
+                      entries: asyncEntries.value!,
+                      clickable: _clickable[currentPage],
+                      name: _pageNames[currentPage],
+                    ));
+              } else if (result == 'clearCache') {
                 await confirmAndClearEntries(context, entryNotifier);
-              }
-              if (result == 'refresh') {
+              } else if (result == 'refresh') {
                 await entryNotifier.reloadEntries(cached: false);
               }
             },
             itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
               const PopupMenuItem<String>(
-                value: 'clearCache',
-                child: Text('Clear Cache'),
+                value: 'search',
+                child: Text('Search'),
               ),
               const PopupMenuItem<String>(
                 value: 'refresh',
                 child: Text('Refresh'),
+              ),
+              const PopupMenuItem<String>(
+                value: 'clearCache',
+                child: Text('Clear Cache'),
               ),
             ],
           ),
@@ -154,8 +175,9 @@ class NavigationWidget extends ConsumerWidget {
 class EntriesPage extends ConsumerWidget {
   final StateNotifierProvider<EntryManager, AsyncValue<List<Entry>>> entriesProvider;
 
-  const EntriesPage({super.key, required this.entriesProvider, required this.clickable});
+  const EntriesPage({super.key, required this.entriesProvider, required this.clickable, required this.name});
   final bool clickable;
+  final String name;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -163,7 +185,7 @@ class EntriesPage extends ConsumerWidget {
 
     return Scaffold(
       body: asyncEntries.when(
-        data: (entries) => EntryList(entries: entries, clickable: clickable),
+        data: (entries) => EntryList(entries: entries, clickable: clickable, name: name),
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, stack) {
           logger.e('Error loading entries: $e\n$stack');

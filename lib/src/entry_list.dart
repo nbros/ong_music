@@ -8,12 +8,14 @@ class EntryList extends ConsumerWidget {
   final List<Entry> entries;
   final String query;
   final bool clickable;
-  const EntryList({super.key, required this.entries, this.query = '', required this.clickable});
+  final String name;
+  const EntryList({super.key, required this.entries, this.query = '', required this.clickable, required this.name});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     ref.watch(themeProvider);
     return ListView.builder(
+      key: PageStorageKey(name),
       itemCount: entries.length,
       itemBuilder: (context, index) {
         return EntryTile(

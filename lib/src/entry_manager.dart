@@ -126,11 +126,14 @@ class HighlightEntryManager extends EntryManager {
 
     // Format CSV into Entry objects
     List<Entry> entries = [];
+    int seq = 1;
     for (int i = 1; i < csv.length; i++) {
       try {
         final row = csv[i];
+        int? maybeSeq = int.tryParse(row[1]);
+        // if seq is not a number, use previous seq
+        seq = maybeSeq ?? seq;
         final String uploadDate = row[0].trim();
-        final int seq = int.parse(row[1]);
         final String title = row[2].trim();
         final String genre = row[3].trim();
         final String videoLink = row[4].trim();
@@ -142,19 +145,16 @@ class HighlightEntryManager extends EntryManager {
         }
         final additionalNotes = row[7].trim();
 
-        bool hasRequester = requester.isNotEmpty && !requester.startsWith('http');
         final genreStr = genre.isEmpty ? '' : ' • $genre';
         final dateStr = date.isEmpty ? '' : ' - $date';
-        final requesterStr = hasRequester ? " [$requester]" : '';
-
-        final requesterStr2 = hasRequester ? "[$requester] " : '';
+        final requesterStr = requester.isNotEmpty && !requester.startsWith('http') ? " [$requester]" : '';
         final notes = additionalNotes.isEmpty ? '' : additionalNotes;
         final uploadDateStr = uploadDate.isEmpty ? '' : ' (uploaded on $uploadDate)';
 
         final entry = Entry(
           seq: seq,
           title: "$seq$dateStr - $title$genreStr$requesterStr",
-          subtitle: "$requesterStr2$notes$uploadDateStr",
+          subtitle: "$notes$uploadDateStr",
           url: videoLink,
         );
         entries.add(entry);
