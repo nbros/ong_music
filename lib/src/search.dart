@@ -4,8 +4,9 @@ import 'entry_list.dart';
 
 class EntrySearch extends SearchDelegate<Entry?> {
   final List<Entry> entries;
+  final bool clickable;
 
-  EntrySearch(this.entries);
+  EntrySearch({required this.entries, required this.clickable});
 
   @override
   List<Widget> buildActions(BuildContext context) {
@@ -34,13 +35,25 @@ class EntrySearch extends SearchDelegate<Entry?> {
 
   @override
   Widget buildResults(BuildContext context) {
-    final results = entries.where((entry) => entry.formattedTitle.toLowerCase().contains(query.toLowerCase())).toList();
-    return EntryList(entries: results, query: query);
+    final searched = query.toLowerCase();
+    final results = entries.where((entry) => entry.title.toLowerCase().contains(searched)).toList();
+    return EntryList(entries: results, query: query, clickable: clickable);
   }
 
   @override
   Widget buildSuggestions(BuildContext context) {
-    final suggestions = entries.where((entry) => entry.formattedTitle.toLowerCase().contains(query.toLowerCase())).toList();
-    return EntryList(entries: suggestions, query: query);
+    final searched = query.toLowerCase();
+    final suggestions = entries.where((entry) => entry.title.toLowerCase().contains(searched)).toList();
+    return Column(
+      children: [
+        Expanded(
+          child: EntryList(entries: suggestions, query: query, clickable: clickable),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Text('Number of matches: ${suggestions.length}'),
+        ),
+      ],
+    );
   }
 }

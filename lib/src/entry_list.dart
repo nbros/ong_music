@@ -7,7 +7,8 @@ import 'options.dart';
 class EntryList extends ConsumerWidget {
   final List<Entry> entries;
   final String query;
-  const EntryList({super.key, required this.entries, this.query = ''});
+  final bool clickable;
+  const EntryList({super.key, required this.entries, this.query = '', required this.clickable});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -18,6 +19,7 @@ class EntryList extends ConsumerWidget {
         return EntryTile(
           entry: entries[index],
           query: query,
+          clickable: clickable,
         );
       },
     );
@@ -29,10 +31,15 @@ class EntryTile extends ConsumerWidget {
     super.key,
     required this.entry,
     required this.query,
+    required this.clickable,
   });
 
   final Entry entry;
   final String query;
+
+  // do we expect the entry to be clickable?
+  // if clickable and it has no url, then it will appear grayed out
+  final bool clickable;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -40,16 +47,16 @@ class EntryTile extends ConsumerWidget {
     final darkMode = themeMode == ThemeMode.dark;
     final expand = ref.watch(expandOptionProvider);
     final dividersEnabled = ref.watch(dividersOptionProvider);
-    final enabled = entry.videoLink.isNotEmpty;
+    bool enabled = !clickable || (entry.url?.trim().isNotEmpty ?? false);
     final textStyle = enabled
         ? Theme.of(context).textTheme.bodyLarge
         : Theme.of(context).textTheme.bodyLarge!.copyWith(color: darkMode ? Colors.grey[700] : Colors.grey[500]);
 
     Widget titleWidget;
     if ('' == query) {
-      titleWidget = Text(entry.formattedTitle, style: textStyle);
+      titleWidget = Text(entry.title, style: textStyle);
     } else {
-      var formattedTitle = entry.formattedTitle;
+      var formattedTitle = entry.title;
       final startIndex = formattedTitle.toLowerCase().indexOf(query.toLowerCase());
       final endIndex = startIndex + query.length;
       final beforeMatch = formattedTitle.substring(0, startIndex);
@@ -70,12 +77,16 @@ class EntryTile extends ConsumerWidget {
 
     Widget widget = ListTile(
       enabled: enabled,
-      onTap: () async {
-        final url = Uri.parse(entry.videoLink);
-        await launchUrl(url);
-      },
+      onTap: clickable && enabled
+          ? () async {
+              if (entry.url != null) {
+                final url = Uri.parse(entry.url!);
+                await launchUrl(url);
+              }
+            }
+          : null,
       title: titleWidget,
-      subtitle: expand ? Text(entry.formattedSubtitle) : null,
+      subtitle: expand ? Text(entry.subtitle) : null,
     );
 
     if (dividersEnabled) {
@@ -89,7 +100,7 @@ class EntryTile extends ConsumerWidget {
 
     if (!expand) {
       widget = Tooltip(
-        message: entry.formattedSubtitle,
+        message: entry.subtitle,
         textStyle: Theme.of(context).textTheme.bodyMedium!.copyWith(color: darkMode ? Colors.white : Colors.black),
         decoration: BoxDecoration(
           color: darkMode ? Colors.grey[800]!.withOpacity(0.95) : Colors.amber[100]!.withOpacity(0.95),

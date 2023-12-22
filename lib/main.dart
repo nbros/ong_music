@@ -1,15 +1,10 @@
 import 'dart:async';
-import 'dart:io';
-import 'package:csv/csv.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:http/http.dart' as http;
 import 'package:logger/logger.dart';
-import 'package:path/path.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 import 'src/entry.dart';
+import 'src/entry_manager.dart';
 import 'src/entry_list.dart';
 import 'src/search.dart';
 import 'src/options.dart';
@@ -17,18 +12,10 @@ import 'src/settings.dart';
 import 'src/transient_state.dart';
 
 final logger = Logger(printer: PrettyPrinter(methodCount: 0));
-const String databaseFileName = 'ongLog.db';
 
 void main() {
-  if (!Platform.isAndroid && !Platform.isIOS) {
-    sqfliteFfiInit();
-    if (kIsWeb) {
-      databaseFactory = databaseFactoryFfiWeb;
-    } else {
-      databaseFactory = databaseFactoryFfi;
-    }
-  }
   Logger.level = kDebugMode ? Level.all : Level.off;
+  initializeSqlite();
   runApp(
     const ProviderScope(
       child: MainApp(),
@@ -36,53 +23,15 @@ void main() {
   );
 }
 
-class EntryNotifier extends StateNotifier<AsyncValue<List<Entry>>> {
-  EntryNotifier() : super(const AsyncValue.loading());
-
-  bool _initialized = false;
-
-  Future<void> loadEntries() async {
-    if (!_initialized) {
-      _initialized = true;
-      return reloadEntries(cached: true);
-    }
-  }
-
-  Future<void> reloadEntries({@required cached}) async {
-    state = const AsyncValue.loading();
-    try {
-      // await Future.delayed(const Duration(milliseconds: 500));
-      List<Entry>? entries;
-      if (cached && await isDatabaseInitialized()) {
-        logger.i('Database exists, loading entries from database');
-        entries = await loadEntriesFromDatabase();
-      }
-      if (entries == null || entries.isEmpty) {
-        logger.i('Loading entries from Google Sheet');
-        entries = await loadEntriesFromGoogleSheets();
-      }
-      entries = entries.where((entry) => entry.videoTitle.isNotEmpty && entry.seq != null).toList();
-      entries.sort((e1, e2) => e2.seq!.compareTo(e1.seq!));
-      logger.d('First 10 entries:\n${entries.take(10).map((entry) => entry.toString()).join('\n')}');
-      state = AsyncValue.data(entries);
-    } catch (e, stack) {
-      state = AsyncValue.error(e, stack);
-    }
-  }
-
-  void clearEntries() {
-    state = const AsyncValue.data([]);
-  }
-}
-
-final entryProvider = StateNotifierProvider<EntryNotifier, AsyncValue<List<Entry>>>((ref) => EntryNotifier());
-
 class MainApp extends ConsumerWidget {
   const MainApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    Future.microtask(() => ref.read(entryProvider.notifier).loadEntries());
+    Future.microtask(() {
+      ref.read(highlightEntriesProvider.notifier).initialize();
+      ref.read(onglogEntriesProvider.notifier).initialize();
+    });
     ThemeMode themeMode = ref.watch(themeProvider);
     if (themeMode == ThemeMode.system) {
       // initialize light or dark depending on platform brightness
@@ -92,20 +41,25 @@ class MainApp extends ConsumerWidget {
     }
 
     return MaterialApp(
-      debugShowCheckedModeBanner: false,
+      //debugShowCheckedModeBanner: false,
       themeMode: themeMode,
       theme: ThemeData.light(),
       darkTheme: ThemeData.dark(),
-      home: const NavigationWidget(),
+      home: NavigationWidget(),
     );
   }
 }
 
 class NavigationWidget extends ConsumerWidget {
-  const NavigationWidget({super.key});
+  NavigationWidget({super.key});
 
-  static const List<Widget> _pages = [MainPage(), Text('Played')];
-  static const List<String> _pageNames = ["Highlights", "Ong Log"];
+  final List<Widget> _pages = [
+    EntriesPage(entriesProvider: highlightEntriesProvider, clickable: true),
+    EntriesPage(entriesProvider: onglogEntriesProvider, clickable: false)
+  ];
+  final List<String> _pageNames = ["Highlights", "Ong Log"];
+  final List<bool> _clickable = [true, false];
+  final List<StateNotifierProvider<EntryManager, AsyncValue<List<Entry>>>> _entriesProviders = [highlightEntriesProvider, onglogEntriesProvider];
 
   void _onDestinationSelected(int index, CurrentPageNotifier currentPageNotifier) {
     currentPageNotifier.value = index;
@@ -113,10 +67,11 @@ class NavigationWidget extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    AsyncValue<List<Entry>> asyncEntries = ref.watch(entryProvider);
+    final entriesProvider = _entriesProviders[ref.watch(currentPageProvider)];
+    AsyncValue<List<Entry>> asyncEntries = ref.watch(entriesProvider);
     bool expand = ref.watch(expandOptionProvider);
     final themeMode = ref.watch(themeProvider);
-    final entryNotifier = ref.read(entryProvider.notifier);
+    final entryNotifier = ref.read(entriesProvider.notifier);
     double width = MediaQuery.of(context).size.width;
 
     final currentPageNotifier = ref.read(currentPageProvider.notifier);
@@ -128,7 +83,7 @@ class NavigationWidget extends ConsumerWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.search),
-            onPressed: () => showSearch(context: context, delegate: EntrySearch(asyncEntries.value!)),
+            onPressed: () => showSearch(context: context, delegate: EntrySearch(entries: asyncEntries.value!, clickable: _clickable[currentPage])),
           ),
           if (width > 400)
             IconButton(
@@ -144,7 +99,7 @@ class NavigationWidget extends ConsumerWidget {
             IconButton(
               icon: const Icon(Icons.refresh),
               onPressed: () {
-                ref.read(entryProvider.notifier).reloadEntries(cached: false);
+                ref.read(entriesProvider.notifier).reloadEntries(cached: false);
               },
             ),
           if (width > 550)
@@ -196,16 +151,19 @@ class NavigationWidget extends ConsumerWidget {
   }
 }
 
-class MainPage extends ConsumerWidget {
-  const MainPage({super.key});
+class EntriesPage extends ConsumerWidget {
+  final StateNotifierProvider<EntryManager, AsyncValue<List<Entry>>> entriesProvider;
+
+  const EntriesPage({super.key, required this.entriesProvider, required this.clickable});
+  final bool clickable;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    AsyncValue<List<Entry>> asyncEntries = ref.watch(entryProvider);
+    AsyncValue<List<Entry>> asyncEntries = ref.watch(entriesProvider);
 
     return Scaffold(
       body: asyncEntries.when(
-        data: (entries) => EntryList(entries: entries),
+        data: (entries) => EntryList(entries: entries, clickable: clickable),
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, stack) {
           logger.e('Error loading entries: $e\n$stack');
@@ -216,169 +174,7 @@ class MainPage extends ConsumerWidget {
   }
 }
 
-Future<bool> isDatabaseInitialized() async {
-  File databaseFile = File(await getDatabaseFilePath());
-  logger.d('Database file: $databaseFile');
-  bool databaseExists = kIsWeb || await databaseFile.exists();
-  if (databaseExists) {
-    Database? db;
-    try {
-      db = await openDatabase(databaseFile.path);
-      List<Map<String, dynamic>> tables = await db.rawQuery("SELECT name FROM sqlite_master WHERE type='table' AND name='YoutubeCatalogue'");
-
-      var sqliteVersion = (await db.rawQuery('select sqlite_version()')).first.values.first;
-      logger.d("SQlite version $sqliteVersion"); // should print 3.39.3
-
-      return tables.isNotEmpty;
-    } finally {
-      await db?.close();
-    }
-  }
-  return false;
-}
-
-Future<String> getDatabaseFilePath() async {
-  final databasePath = await getDatabasesPath();
-  return join(databasePath, databaseFileName);
-}
-
-Future<List<Entry>> loadEntriesFromDatabase() async {
-  Database? db;
-  try {
-    try {
-      db = await openOngLogDatabase();
-      final List<Map<String, dynamic>> maps = await db.query('YoutubeCatalogue');
-      return List.generate(maps.length, (i) {
-        var title = maps[i]['videoTitle'];
-        return Entry(
-          uploadDate: maps[i]['uploadDate'],
-          seq: maps[i]['seq'],
-          videoTitle: title,
-          genre: maps[i]['genre'],
-          videoLink: maps[i]['videoLink'],
-          shortVideoOrRequestor: maps[i]['shortVideoOrRequestor'],
-          originalHighlight: maps[i]['originalHighlight'],
-          additionalNotes: maps[i]['additionalNotes'],
-        );
-      });
-    } catch (e) {
-      logger.e('Error loading entries from database: $e');
-      return [];
-    }
-  } finally {
-    await db?.close();
-  }
-}
-
-Future<Database> openOngLogDatabase() async {
-  final databaseFilePath = await getDatabaseFilePath();
-  final database = await openDatabase(
-    databaseFilePath,
-    version: 1,
-  );
-  return database;
-}
-
-// Query the CSV file from Google Sheets, parse it and save the data to a SQLite database
-Future<List<Entry>> loadEntriesFromGoogleSheets() async {
-  const url = "https://docs.google.com/spreadsheets/d/14ARzE_zSMNhp0ZQV34ti2741PbA-5wAjsXRAW8EgJ-4/gviz/tq?tqx=out:csv&sheet=Youtube%20Catalogue";
-  logger.d('Fetching CSV from $url');
-  final stopwatch = Stopwatch()..start();
-  final response = await http.get(Uri.parse(url));
-  stopwatch.stop();
-  if (response.statusCode == 200) {
-    final csvString = response.body;
-    final bytes = response.bodyBytes.lengthInBytes;
-    final mib = bytes / (1024 * 1024);
-    final mibPerSecond = mib * 1E6 / stopwatch.elapsed.inMicroseconds;
-    logger.i('Fetched ${mib.toStringAsFixed(2)} MiB in ${stopwatch.elapsed} (${mibPerSecond.toStringAsFixed(2)} MiB/s)');
-
-    final csv = parseCsvString(csvString);
-    logger.i('Parsed CSV: ${csv.length} rows');
-
-    // Format CSV into Entry objects
-    List<Entry> entries = [];
-    for (int i = 1; i < csv.length; i++) {
-      try {
-        final row = csv[i];
-        final entry = Entry(
-          uploadDate: row[0].trim(),
-          seq: int.tryParse(row[1]),
-          videoTitle: row[2].trim(),
-          genre: row[3].trim(),
-          videoLink: row[4].trim(),
-          shortVideoOrRequestor: row[5].trim(),
-          originalHighlight: row[6].trim(),
-          additionalNotes: row[7].trim(),
-        );
-
-        entries.add(entry);
-      } catch (e) {
-        logger.e('Error parsing row $i: $e');
-      }
-    }
-    await saveDataToDatabase(entries);
-    return entries;
-  } else {
-    logger.e('Failed to fetch CSV: HTTP ${response.statusCode}');
-    return [];
-  }
-}
-
-List<List<dynamic>> parseCsvString(String csvString) {
-  const csvParser = CsvToListConverter(eol: '\n');
-  return csvParser.convert(csvString);
-}
-
-// Save loaded entries to a local SQLite database
-Future<void> saveDataToDatabase(List<Entry> entries) async {
-  // open database and create table if it doesn't exist
-  final databasePath = await getDatabasesPath();
-  Database? db;
-  try {
-    db = await openDatabase(
-      join(databasePath, 'ongLog.db'),
-      version: 1,
-      onCreate: (db, version) async {
-        await db.execute('''
-            CREATE TABLE IF NOT EXISTS YoutubeCatalogue (
-              uploadDate TEXT,
-              seq INTEGER,
-              videoTitle TEXT,
-              genre TEXT,
-              videoLink TEXT,
-              shortVideoOrRequestor TEXT,
-              originalHighlight TEXT,
-              additionalNotes TEXT
-            )
-          ''');
-      },
-    );
-    // replace all entries
-    final batch = db.batch();
-    batch.delete('YoutubeCatalogue');
-    for (final entry in entries) {
-      batch.insert(
-        'YoutubeCatalogue',
-        {
-          'uploadDate': entry.uploadDate,
-          'seq': entry.seq,
-          'videoTitle': entry.videoTitle,
-          'genre': entry.genre,
-          'videoLink': entry.videoLink,
-          'shortVideoOrRequestor': entry.shortVideoOrRequestor,
-          'originalHighlight': entry.originalHighlight,
-          'additionalNotes': entry.additionalNotes,
-        },
-      );
-    }
-    await batch.commit(noResult: true);
-  } finally {
-    await db?.close();
-  }
-}
-
-Future<void> confirmAndClearEntries(BuildContext context, EntryNotifier entryNotifier) async {
+Future<void> confirmAndClearEntries(BuildContext context, EntryManager entryNotifier) async {
   return showDialog<void>(
     context: context,
     builder: (BuildContext context) {
@@ -401,7 +197,6 @@ Future<void> confirmAndClearEntries(BuildContext context, EntryNotifier entryNot
           TextButton(
             child: const Text('Delete'),
             onPressed: () {
-              clearEntries();
               entryNotifier.clearEntries();
               Navigator.of(context).pop();
             },
@@ -410,15 +205,4 @@ Future<void> confirmAndClearEntries(BuildContext context, EntryNotifier entryNot
       );
     },
   );
-}
-
-Future<void> clearEntries() async {
-  Database? db;
-  try {
-    db = await openOngLogDatabase();
-    await db.delete('YoutubeCatalogue');
-  } finally {
-    await db?.close();
-  }
-  logger.d('Entries cleared');
 }
