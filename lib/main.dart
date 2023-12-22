@@ -14,6 +14,7 @@ import 'src/entry_list.dart';
 import 'src/search.dart';
 import 'src/options.dart';
 import 'src/settings.dart';
+import 'src/transient_state.dart';
 
 final logger = Logger(printer: PrettyPrinter(methodCount: 0));
 const String databaseFileName = 'ongLog.db';
@@ -95,13 +96,20 @@ class MainApp extends ConsumerWidget {
       themeMode: themeMode,
       theme: ThemeData.light(),
       darkTheme: ThemeData.dark(),
-      home: const MainPage(),
+      home: const NavigationWidget(),
     );
   }
 }
 
-class MainPage extends ConsumerWidget {
-  const MainPage({super.key});
+class NavigationWidget extends ConsumerWidget {
+  const NavigationWidget({super.key});
+
+  static const List<Widget> _pages = [MainPage(), Text('Played')];
+  static const List<String> _pageNames = ["Highlights", "Ong Log"];
+
+  void _onDestinationSelected(int index, CurrentPageNotifier currentPageNotifier) {
+    currentPageNotifier.value = index;
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -111,9 +119,12 @@ class MainPage extends ConsumerWidget {
     final entryNotifier = ref.read(entryProvider.notifier);
     double width = MediaQuery.of(context).size.width;
 
+    final currentPageNotifier = ref.read(currentPageProvider.notifier);
+    final currentPage = ref.watch(currentPageProvider);
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Highlights'),
+        title: Text(_pageNames[currentPage]),
         actions: [
           IconButton(
             icon: const Icon(Icons.search),
@@ -166,6 +177,33 @@ class MainPage extends ConsumerWidget {
         ],
       ),
       drawer: const SettingsDrawer(),
+      body: _pages.elementAt(currentPage),
+      bottomNavigationBar: NavigationBar(
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.star),
+            label: 'Highlights',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.all_inclusive),
+            label: 'Ong Log',
+          ),
+        ],
+        onDestinationSelected: (index) => _onDestinationSelected(index, currentPageNotifier),
+        selectedIndex: currentPage,
+      ),
+    );
+  }
+}
+
+class MainPage extends ConsumerWidget {
+  const MainPage({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    AsyncValue<List<Entry>> asyncEntries = ref.watch(entryProvider);
+
+    return Scaffold(
       body: asyncEntries.when(
         data: (entries) => EntryList(entries: entries),
         loading: () => const Center(child: CircularProgressIndicator()),
