@@ -1,4 +1,4 @@
-package com.example.flutter_ong_log
+package com.example.ong_music
 
 import io.flutter.embedding.android.FlutterActivity
 
