@@ -32,7 +32,9 @@ Future<void> configureLogger(List<String> arguments) async {
   if (kDebugMode) {
     output = ConsoleOutput();
   } else {
-    // log goes into C:\Users\%username%\AppData\Roaming\com.example\ong_music\ong_music.log
+    // log goes into:
+    // Windows: C:\Users\%username%\AppData\Roaming\com.example\ong_music\ong_music.log
+    // Android: /data/user/0/com.example.ong_music/files
     final dir = await getApplicationSupportDirectory();
     output = FileOutput(file: File(join(dir.path, 'ong_music.log')));
   }

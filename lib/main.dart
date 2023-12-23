@@ -12,6 +12,7 @@ import 'src/settings.dart';
 import 'src/transient_state.dart';
 
 void main(List<String> arguments) async {
+  WidgetsFlutterBinding.ensureInitialized();
   await configureLogger(arguments);
   logger.i('Initializing SQLite');
   await initializeSqlite();
