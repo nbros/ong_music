@@ -60,10 +60,20 @@ class EntrySearch extends SearchDelegate<Entry?> {
             name: name,
           ),
         ),
-        Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: Text('Number of matches: ${suggestions.length}'),
-        ),
+        if (searched.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text('Number of matches:'),
+                const SizedBox(width: 10),
+                Chip(
+                  label: Text(suggestions.length.toString()),
+                ),
+              ],
+            ),
+          ),
       ],
     );
   }
