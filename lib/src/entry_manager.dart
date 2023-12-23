@@ -3,21 +3,29 @@ import 'package:csv/csv.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
-import 'package:logger/logger.dart';
 import 'package:path/path.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 import 'entry.dart';
+import 'logger.dart';
 
-final logger = Logger(printer: PrettyPrinter(methodCount: 0));
 const String dbFileName = 'ongLog3.db';
 
 final highlightEntriesProvider = StateNotifierProvider<EntryManager, AsyncValue<List<Entry>>>((ref) => HighlightEntryManager());
 final onglogEntriesProvider = StateNotifierProvider<EntryManager, AsyncValue<List<Entry>>>((ref) => OngLogEntryManager());
 
-void initializeSqlite() {
-  if (!Platform.isAndroid && !Platform.isIOS) {
+Future<void> initializeSqlite() async {
+  if (Platform.isWindows) {
+    // check that sqlite3.dll is in the same directory as the executable
+    if (!kDebugMode) {
+      final dir = dirname(Platform.resolvedExecutable);
+      if (!await File(join(dir, 'sqlite3.dll')).exists()) {
+        logger.e('sqlite3.dll not found in $dir');
+      }
+    }
     sqfliteFfiInit();
+  }
+  if (!Platform.isAndroid && !Platform.isIOS) {
     if (kIsWeb) {
       databaseFactory = databaseFactoryFfiWeb;
     } else {

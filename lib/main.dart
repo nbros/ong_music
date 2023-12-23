@@ -1,26 +1,29 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:logger/logger.dart';
 import 'src/entry.dart';
 import 'src/entry_manager.dart';
 import 'src/entry_list.dart';
+import 'src/logger.dart';
 import 'src/search.dart';
 import 'src/options.dart';
 import 'src/settings.dart';
 import 'src/transient_state.dart';
 
-final logger = Logger(printer: PrettyPrinter(methodCount: 0));
-
-void main() {
-  Logger.level = kDebugMode ? Level.all : Level.off;
-  initializeSqlite();
-  runApp(
-    const ProviderScope(
-      child: MainApp(),
-    ),
-  );
+void main(List<String> arguments) async {
+  await configureLogger(arguments);
+  logger.i('Initializing SQLite');
+  await initializeSqlite();
+  logger.i('Starting Ong Music App');
+  try {
+    runApp(
+      const ProviderScope(
+        child: MainApp(),
+      ),
+    );
+  } catch (e, stackTrace) {
+    logger.f('Unhandled exception: $e\n$stackTrace');
+  }
 }
 
 class MainApp extends ConsumerWidget {
