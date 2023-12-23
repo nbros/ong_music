@@ -1,12 +1,13 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'src/about.dart';
 import 'src/entry.dart';
 import 'src/entry_manager.dart';
 import 'src/entry_list.dart';
 import 'src/logger.dart';
-import 'src/search.dart';
 import 'src/options.dart';
+import 'src/search.dart';
 import 'src/settings.dart';
 import 'src/transient_state.dart';
 
@@ -58,11 +59,12 @@ class NavigationWidget extends ConsumerWidget {
 
   final List<Widget> _pages = [
     EntriesPage(entriesProvider: highlightEntriesProvider, clickable: true, name: "Highlights"),
-    EntriesPage(entriesProvider: onglogEntriesProvider, clickable: false, name: "Ong Log")
+    EntriesPage(entriesProvider: onglogEntriesProvider, clickable: false, name: "Ong Log"),
+    AboutPage()
   ];
-  final List<String> _pageNames = ["Highlights", "Ong Log"];
-  final List<bool> _clickable = [true, false];
-  final List<StateNotifierProvider<EntryManager, AsyncValue<List<Entry>>>> _entriesProviders = [highlightEntriesProvider, onglogEntriesProvider];
+  final List<String> _pageNames = ["Highlights", "Ong Log", "About"];
+  final List<bool> _clickable = [true, false, false];
+  final List<StateNotifierProvider<EntryManager, AsyncValue<List<Entry>>>?> _entriesProviders = [highlightEntriesProvider, onglogEntriesProvider, null];
 
   void _onDestinationSelected(int index, CurrentPageNotifier currentPageNotifier) {
     currentPageNotifier.value = index;
@@ -71,89 +73,19 @@ class NavigationWidget extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final entriesProvider = _entriesProviders[ref.watch(currentPageProvider)];
-    AsyncValue<List<Entry>> asyncEntries = ref.watch(entriesProvider);
-    bool expand = ref.watch(expandOptionProvider);
-    final themeMode = ref.watch(themeProvider);
-    final entryNotifier = ref.read(entriesProvider.notifier);
-    double width = MediaQuery.of(context).size.width;
 
     final currentPageNotifier = ref.read(currentPageProvider.notifier);
     final currentPage = ref.watch(currentPageProvider);
 
+    List<Widget>? actions;
+    if (entriesProvider != null) {
+      actions = createActions(entriesProvider, currentPage, context, ref);
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: Text(_pageNames[currentPage]),
-        actions: [
-          IconButton(
-            // Search
-            icon: const Icon(Icons.search),
-            onPressed: () => showSearch(
-                context: context,
-                delegate: EntrySearch(
-                  entries: asyncEntries.value!,
-                  clickable: _clickable[currentPage],
-                  name: _pageNames[currentPage],
-                )),
-          ),
-          if (width > 320)
-            IconButton(
-              // Refresh
-              icon: const Icon(Icons.refresh),
-              onPressed: () {
-                ref.read(entriesProvider.notifier).reloadEntries(cached: false);
-              },
-            ),
-          if (width > 380)
-            IconButton(
-              icon: Icon(expand ? Icons.unfold_less : Icons.unfold_more),
-              onPressed: () => ref.read(expandOptionProvider.notifier).toggle(),
-            ),
-          if (width > 420)
-            IconButton(
-              // Switch Theme
-              icon: Icon(themeMode == ThemeMode.light ? Icons.dark_mode : Icons.light_mode),
-              onPressed: () => ref.read(themeProvider.notifier).switchTheme(),
-            ),
-          if (width > 460)
-            IconButton(
-              // Clear Cache
-              icon: const Icon(Icons.delete),
-              onPressed: () async {
-                await confirmAndClearEntries(context, entryNotifier);
-              },
-            ),
-          PopupMenuButton<String>(
-            onSelected: (String result) async {
-              if (result == 'search') {
-                await showSearch(
-                    context: context,
-                    delegate: EntrySearch(
-                      entries: asyncEntries.value!,
-                      clickable: _clickable[currentPage],
-                      name: _pageNames[currentPage],
-                    ));
-              } else if (result == 'clearCache') {
-                await confirmAndClearEntries(context, entryNotifier);
-              } else if (result == 'refresh') {
-                await entryNotifier.reloadEntries(cached: false);
-              }
-            },
-            itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-              const PopupMenuItem<String>(
-                value: 'search',
-                child: Text('Search'),
-              ),
-              const PopupMenuItem<String>(
-                value: 'refresh',
-                child: Text('Refresh'),
-              ),
-              const PopupMenuItem<String>(
-                value: 'clearCache',
-                child: Text('Clear Cache'),
-              ),
-            ],
-          ),
-        ],
+        actions: actions,
       ),
       drawer: const SettingsDrawer(),
       body: _pages.elementAt(currentPage),
@@ -167,11 +99,95 @@ class NavigationWidget extends ConsumerWidget {
             icon: Icon(Icons.all_inclusive),
             label: 'Ong Log',
           ),
+          NavigationDestination(
+            icon: Icon(Icons.info),
+            label: 'About',
+          ),
         ],
         onDestinationSelected: (index) => _onDestinationSelected(index, currentPageNotifier),
         selectedIndex: currentPage,
       ),
     );
+  }
+
+  List<Widget> createActions(
+      StateNotifierProvider<EntryManager, AsyncValue<List<Entry>>> entriesProvider, int currentPage, BuildContext context, WidgetRef ref) {
+    AsyncValue<List<Entry>> asyncEntries = ref.watch(entriesProvider);
+    final EntryManager entryNotifier = ref.read(entriesProvider.notifier);
+    bool expand = ref.watch(expandOptionProvider);
+    final themeMode = ref.watch(themeProvider);
+    double width = MediaQuery.of(context).size.width;
+    return [
+      IconButton(
+        // Search
+        icon: const Icon(Icons.search),
+        onPressed: () => showSearch(
+            context: context,
+            delegate: EntrySearch(
+              entries: asyncEntries.value!,
+              clickable: _clickable[currentPage],
+              name: _pageNames[currentPage],
+            )),
+      ),
+      if (width > 320)
+        IconButton(
+          // Refresh
+          icon: const Icon(Icons.refresh),
+          onPressed: () {
+            ref.read(entriesProvider.notifier).reloadEntries(cached: false);
+          },
+        ),
+      if (width > 380)
+        IconButton(
+          icon: Icon(expand ? Icons.unfold_less : Icons.unfold_more),
+          onPressed: () => ref.read(expandOptionProvider.notifier).toggle(),
+        ),
+      if (width > 420)
+        IconButton(
+          // Switch Theme
+          icon: Icon(themeMode == ThemeMode.light ? Icons.dark_mode : Icons.light_mode),
+          onPressed: () => ref.read(themeProvider.notifier).switchTheme(),
+        ),
+      if (width > 460)
+        IconButton(
+          // Clear Cache
+          icon: const Icon(Icons.delete),
+          onPressed: () async {
+            await confirmAndClearEntries(context, entryNotifier);
+          },
+        ),
+      PopupMenuButton<String>(
+        onSelected: (String result) async {
+          if (result == 'search') {
+            await showSearch(
+                context: context,
+                delegate: EntrySearch(
+                  entries: asyncEntries.value!,
+                  clickable: _clickable[currentPage],
+                  name: _pageNames[currentPage],
+                ));
+          } else if (result == 'clearCache') {
+            await confirmAndClearEntries(context, entryNotifier);
+          } else if (result == 'refresh') {
+            await entryNotifier.reloadEntries(cached: false);
+          }
+        },
+        itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+          const PopupMenuItem<String>(
+            value: 'search',
+            child: Text('Search'),
+          ),
+          const PopupMenuItem<String>(
+            value: 'refresh',
+            child: Text('Refresh'),
+          ),
+          const PopupMenuItem<String>(
+            value: 'clearCache',
+            child: Text('Clear Cache'),
+          ),
+        ],
+      ),
+    ];
   }
 }
 

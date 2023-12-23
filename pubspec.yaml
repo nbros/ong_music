@@ -33,6 +33,7 @@ dependencies:
   flutter:
     sdk: flutter
   flutter_riverpod: ^2.3.7
+  flutter_svg: ^2.0.9
   http: ^1.1.2
   logger: ^2.0.2+1
   logging: ^1.2.0
@@ -63,8 +64,7 @@ flutter:
   # the material Icons class.
   uses-material-design: true
   assets:
-    - assets/ongLit.png
-    - assets/ongZoom.png
+    - assets/
 
 # "dart run flutter_launcher_icons" to regenerate icons
 flutter_launcher_icons:

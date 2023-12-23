@@ -69,7 +69,8 @@ class EntrySearch extends SearchDelegate<Entry?> {
                 const Text('Number of matches:'),
                 const SizedBox(width: 10),
                 Chip(
-                  label: Text(suggestions.length.toString()),
+                  backgroundColor: Colors.blue[900],
+                  label: Text(suggestions.length.toString(), style: const TextStyle(color: Colors.white)),
                 ),
               ],
             ),

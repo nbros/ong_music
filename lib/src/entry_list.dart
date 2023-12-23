@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -117,6 +119,8 @@ class EntryTile extends ConsumerWidget {
           ],
         ),
         waitDuration: const Duration(milliseconds: 500),
+        showDuration: Platform.isAndroid ? const Duration(seconds: 8) : null,
+        triggerMode: TooltipTriggerMode.longPress,
         child: widget,
       );
     }
