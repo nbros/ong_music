@@ -335,10 +335,10 @@ packages:
     dependency: transitive
     description:
       name: process_run
-      sha256: "94413ec6bbd05dfe7c3002c379724f75f185ff7f0a5dfb1851a42473d84c956e"
+      sha256: "3d5335d17003a7c2fd5148be2d313f5b84244ab2e625162fdd44b4aaa48bea66"
       url: "https://pub.dev"
     source: hosted
-    version: "0.13.3"
+    version: "0.13.3+1"
   pub_semver:
     dependency: transitive
     description:

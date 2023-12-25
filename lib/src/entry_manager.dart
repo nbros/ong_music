@@ -15,7 +15,7 @@ final highlightEntriesProvider = StateNotifierProvider<EntryManager, AsyncValue<
 final onglogEntriesProvider = StateNotifierProvider<EntryManager, AsyncValue<List<Entry>>>((ref) => OngLogEntryManager());
 
 Future<void> initializeSqlite() async {
-  if (Platform.isWindows) {
+  if (!kIsWeb && Platform.isWindows) {
     // check that sqlite3.dll is in the same directory as the executable
     if (!kDebugMode) {
       final dir = dirname(Platform.resolvedExecutable);
@@ -25,12 +25,10 @@ Future<void> initializeSqlite() async {
     }
     sqfliteFfiInit();
   }
-  if (!Platform.isAndroid && !Platform.isIOS) {
-    if (kIsWeb) {
-      databaseFactory = databaseFactoryFfiWeb;
-    } else {
-      databaseFactory = databaseFactoryFfi;
-    }
+  if (kIsWeb) {
+    databaseFactory = databaseFactoryFfiWeb;
+  } else if (!Platform.isAndroid && !Platform.isIOS) {
+    databaseFactory = databaseFactoryFfi;
   }
 }
 

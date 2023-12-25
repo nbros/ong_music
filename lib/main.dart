@@ -38,13 +38,6 @@ class MainApp extends ConsumerWidget {
       ref.read(onglogEntriesProvider.notifier).initialize();
     });
     ThemeMode themeMode = ref.watch(themeProvider);
-    if (themeMode == ThemeMode.system) {
-      // initialize light or dark depending on platform brightness
-      final Brightness platformBrightness = MediaQuery.of(context).platformBrightness;
-      themeMode = platformBrightness == Brightness.dark ? ThemeMode.dark : ThemeMode.light;
-      Future.microtask(() => ref.read(themeProvider.notifier).themeMode = themeMode);
-    }
-
     return MaterialApp(
       //debugShowCheckedModeBanner: false,
       themeMode: themeMode,
@@ -61,7 +54,7 @@ class NavigationWidget extends ConsumerWidget {
   final List<Widget> _pages = [
     EntriesPage(entriesProvider: highlightEntriesProvider, clickable: true, name: "Highlights"),
     EntriesPage(entriesProvider: onglogEntriesProvider, clickable: false, name: "Ong Log"),
-    AboutPage()
+    const AboutPage()
   ];
   final List<String> _pageNames = ["Highlights", "Ong Log", "About"];
   final List<bool> _clickable = [true, false, false];

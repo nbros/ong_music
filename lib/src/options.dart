@@ -32,14 +32,21 @@ final expandOptionProvider = StateNotifierProvider<ExpandOptionNotifier, bool>((
 final dividersOptionProvider = StateNotifierProvider<DividersOptionNotifier, bool>((ref) => DividersOptionNotifier(true, "dividers"));
 
 class DarkThemeOptionNotifier extends StateNotifier<ThemeMode> {
-  DarkThemeOptionNotifier() : super(ThemeMode.system) {
+  DarkThemeOptionNotifier() : super(initialThemeMode()) {
     _loadState();
+  }
+
+  static ThemeMode initialThemeMode() {
+    final brightness = WidgetsBinding.instance.platformDispatcher.platformBrightness;
+    return brightness == Brightness.dark ? ThemeMode.dark : ThemeMode.light;
   }
 
   Future<void> _loadState() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
-    String? themeMode = prefs.getString(runtimeType.toString());
-    state = themeMode == ThemeMode.dark.name ? ThemeMode.dark : ThemeMode.light;
+    String? strValue = prefs.getString(runtimeType.toString());
+    if (strValue != null) {
+      state = strValue == ThemeMode.dark.name ? ThemeMode.dark : ThemeMode.light;
+    }
   }
 
   void switchTheme() {
