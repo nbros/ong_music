@@ -1,5 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.example.ong_music">
+    package="nbros.ong_music">
    <application
         android:label="Ong Music"
         android:name="${applicationName}"
