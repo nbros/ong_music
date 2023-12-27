@@ -1,3 +1,5 @@
-# ong_music
+# Ong Music
 
-A new Flutter project.
+Made with Flutter.
+
+[![Flutter CI/CD](https://github.com/nbros/ong_music/actions/workflows/flutter_ci.yml/badge.svg)](https://github.com/nbros/ong_music/actions/workflows/flutter_ci.yml)

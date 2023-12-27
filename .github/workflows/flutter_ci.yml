@@ -2,33 +2,90 @@ name: Flutter CI/CD
 
 on:
   push:
-    branches: [ master ]
-  pull_request:
-    branches: [ master ]
+    branches:
+      - master
+    tags:
+      - '*'
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-java@v4
-      with:
-        distribution: 'temurin'
-        java-version: '11'
-    - uses: subosito/flutter-action@v2
-      with:
-        channel: 'stable'
-        #flutter-version: '3.7.7'
-    - run: flutter --version
-    - run: flutter pub get
-    - run: flutter build apk
-    - uses: actions/upload-artifact@v4
-      with:
-        name: apk
-        path: build/app/outputs/flutter-apk/app-release.apk
-    - run: flutter build appbundle
-    - uses: actions/upload-artifact@v4
-      with:
-        name: aab
-        path: build/app/outputs/bundle/release/app-release.aab
-    - run: flutter build web
+      - name: Checkout from GitHub
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # for GitVersion
+
+      # cf https://github.com/GitTools/actions/blob/v0.10.2/docs/examples/github/gitversion/setup/usage-examples.md
+      - name: Install GitVersion
+        uses: gittools/actions/gitversion/setup@v0
+        with:
+          versionSpec: "5.x"
+
+      # cf https://github.com/GitTools/actions/blob/v0.10.2/docs/examples/github/gitversion/execute/usage-examples.md#example-5
+      - name: Use GitVersion
+        id: gitversion
+        uses: gittools/actions/gitversion/execute@v0
+
+      - name: Decode keystore
+        run: echo "${{ secrets.UPLOAD_KEYSTORE_BASE64 }}" | base64 --decode > android/app/upload-keystore.jks
+
+      - name: Create key.properties
+        run: |
+          echo "storeFile=upload-keystore.jks" > android/key.properties
+          echo "storePassword=${{ secrets.UPLOAD_KEYSTORE_PASSWORD }}" >> android/key.properties
+          echo "keyPassword=${{ secrets.UPLOAD_KEY_PASSWORD }}" >> android/key.properties
+          echo "keyAlias=upload" >> android/key.properties
+
+      - name: Setup Java JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "11"
+          cache: "gradle"
+
+      - name: Check Java
+        run: java -version
+
+      - name: Set up Flutter actions
+        uses: subosito/flutter-action@v2
+        with:
+          channel: "stable"
+          cache: true
+          cache-key: 'flutter-:os:-:channel:-:version:-:arch:'
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      # - name: Run tests
+      #   run: flutter test
+
+      - name: Build APK
+        run: flutter build apk --build-name=${{ steps.gitversion.outputs.majorMinorPatch }}+${{ steps.gitversion.outputs.ShortSha }} --build-number=${{ github.run_number }}
+
+      # - name: Upload APK
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: app-release.apk
+      #     path: build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Build App Bundle
+        run: flutter build appbundle --build-name=${{ steps.gitversion.outputs.majorMinorPatch }}+${{ steps.gitversion.outputs.ShortSha }} --build-number=${{ github.run_number }}
+
+      # - name: Upload App Bundle
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: app-release.aab
+      #     path: build/app/outputs/bundle/release/app-release.aab
+
+      # if a tag is being pushed, upload to Google Play
+      - name: Upload to Google Play
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.SERVICE_ACCOUNT_JSON }}
+          packageName: nbros.ong_music
+          releaseFiles: build/app/outputs/bundle/release/app-release.aab
+          track: 'alpha' # internal, alpha, beta, production
+          status: completed # draft, or completed(default) to release directly
