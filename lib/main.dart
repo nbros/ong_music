@@ -20,7 +20,7 @@ void main(List<String> arguments) async {
   try {
     runApp(
       const ProviderScope(
-        child: MainApp(),
+        child: MainApp(initialize: true),
       ),
     );
   } catch (e, stackTrace) {
@@ -29,14 +29,18 @@ void main(List<String> arguments) async {
 }
 
 class MainApp extends ConsumerWidget {
-  const MainApp({super.key});
+  final bool initialize;
+
+  const MainApp({super.key, required this.initialize});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    Future.microtask(() {
-      ref.read(highlightEntriesProvider.notifier).initialize();
-      ref.read(onglogEntriesProvider.notifier).initialize();
-    });
+    if (initialize) {
+      Future.microtask(() {
+        ref.read(highlightEntriesProvider.notifier).initialize();
+        ref.read(onglogEntriesProvider.notifier).initialize();
+      });
+    }
     ThemeMode themeMode = ref.watch(themeProvider);
     return MaterialApp(
       //debugShowCheckedModeBanner: false,
