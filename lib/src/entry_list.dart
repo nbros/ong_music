@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:diacritic/diacritic.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -17,7 +18,12 @@ class EntryList extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     ref.watch(themeProvider);
+    final dividersEnabled = ref.watch(dividersOptionProvider);
     return ListView.builder(
+      primary: true,
+      // use a fixed itemExtent on platforms that have a scrollbar that allows jumping around, to improve performance
+      // these platforms also likely have a larger screen, so we can afford to use more horizontal space
+      itemExtent: platformHasScrollbar ? (dividersEnabled ? 48 : 40) : null,
       key: PageStorageKey(name),
       itemCount: entries.length,
       itemBuilder: (context, index) {
@@ -59,16 +65,21 @@ class EntryTile extends ConsumerWidget {
 
     Widget titleWidget;
     if ('' == query) {
-      titleWidget = Text(entry.title, style: textStyle);
+      titleWidget = Text(
+        overflow: TextOverflow.ellipsis,
+        entry.title,
+        style: textStyle,
+      );
     } else {
       var formattedTitle = entry.title;
-      final startIndex = formattedTitle.toLowerCase().indexOf(query.toLowerCase());
+      final startIndex = removeDiacritics(formattedTitle.toLowerCase()).indexOf(removeDiacritics(query.toLowerCase()));
       final endIndex = startIndex + query.length;
       final beforeMatch = formattedTitle.substring(0, startIndex);
       final match = formattedTitle.substring(startIndex, endIndex);
       final afterMatch = formattedTitle.substring(endIndex);
       final Color? highlightColor = darkMode ? Colors.lime[900] : Colors.lime[100];
       titleWidget = RichText(
+        overflow: TextOverflow.ellipsis,
         text: TextSpan(
           style: textStyle,
           children: <TextSpan>[
@@ -77,6 +88,13 @@ class EntryTile extends ConsumerWidget {
             TextSpan(text: afterMatch),
           ],
         ),
+      );
+    }
+
+    if (platformHasScrollbar) {
+      titleWidget = SizedBox(
+        height: 24.0,
+        child: titleWidget,
       );
     }
 
