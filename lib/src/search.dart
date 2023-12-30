@@ -1,3 +1,4 @@
+import 'package:diacritic/diacritic.dart';
 import 'package:flutter/material.dart';
 import 'entry.dart';
 import 'entry_list.dart';
@@ -36,8 +37,8 @@ class EntrySearch extends SearchDelegate<Entry?> {
 
   @override
   Widget buildResults(BuildContext context) {
-    final searched = query.toLowerCase();
-    final results = entries.where((entry) => entry.title.toLowerCase().contains(searched)).toList();
+    final searched = removeDiacritics(query.toLowerCase());
+    final results = entries.where((entry) => removeDiacritics(entry.title.toLowerCase()).contains(searched)).toList();
     return EntryList(
       entries: results,
       query: query,
@@ -48,10 +49,37 @@ class EntrySearch extends SearchDelegate<Entry?> {
 
   @override
   Widget buildSuggestions(BuildContext context) {
-    final searched = query.toLowerCase();
-    final suggestions = entries.where((entry) => entry.title.toLowerCase().contains(searched)).toList();
+    final searched = removeDiacritics(query.toLowerCase());
+    final suggestions = entries.where((entry) => removeDiacritics(entry.title.toLowerCase()).contains(searched)).toList();
     return Column(
       children: [
+        if (searched.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 4, bottom: 5),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text('Number of matches:'),
+                const SizedBox(width: 8),
+                Container(
+                  constraints: const BoxConstraints(minWidth: 24),
+                  decoration: BoxDecoration(
+                    color: Colors.blueAccent,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      child: Text(
+                        suggestions.length.toString(),
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         Expanded(
           child: EntryList(
             entries: suggestions,
@@ -60,21 +88,6 @@ class EntrySearch extends SearchDelegate<Entry?> {
             name: name,
           ),
         ),
-        if (searched.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Text('Number of matches:'),
-                const SizedBox(width: 10),
-                Chip(
-                  backgroundColor: Colors.blue[900],
-                  label: Text(suggestions.length.toString(), style: const TextStyle(color: Colors.white)),
-                ),
-              ],
-            ),
-          ),
       ],
     );
   }

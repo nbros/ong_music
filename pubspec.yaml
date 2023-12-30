@@ -30,6 +30,7 @@ environment:
 dependencies:
   args: ^2.3.0
   csv: ^5.1.1
+  diacritic: ^0.1.5
   flutter:
     sdk: flutter
   flutter_riverpod: ^2.3.7
