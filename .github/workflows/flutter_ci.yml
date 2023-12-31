@@ -130,18 +130,22 @@ jobs:
       - name: Compute zip name
         id: zip-name
         run: |
-          echo "::set-output name=zip_name::Ong_Music-windows-${{ steps.gitversion.outputs.majorMinorPatch }}+${{ github.run_number }}.zip"  
+          echo "::set-output name=basename::Ong_Music-windows-${{ steps.gitversion.outputs.majorMinorPatch }}+${{ github.run_number }}"  
 
       - name: Download sqlite3.dll
         run: curl -o build/windows/x64/runner/Release/sqlite3.dll https://github.com/tekartik/sqflite/raw/master/sqflite_common_ffi/lib/src/windows/sqlite3.dll
 
       - name: Zip Windows build
-        run: 7z a ${{ steps.zip-name.outputs.zip_name }} build/windows/x64/runner/Release/
+        run: |
+          mkdir "${{ steps.zip-name.outputs.basename }}"
+          mv build/windows/x64/runner/Release/* "${{ steps.zip-name.outputs.basename }}"
+          7z a "${{ steps.zip-name.outputs.basename }}.zip" "${{ steps.zip-name.outputs.basename }}"
 
       - name: Upload Windows app zip
         uses: actions/upload-artifact@v4
         with:
-          path: ${{ steps.zip-name.outputs.zip_name }}
+          name: "${{ steps.zip-name.outputs.basename }}.zip"
+          path: "${{ steps.zip-name.outputs.basename }}.zip"
 
       - name: Read tag message
         if: startsWith(github.ref, 'refs/tags/')
@@ -152,7 +156,7 @@ jobs:
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: ${{ steps.zip-name.outputs.zip_name }}
+          files: "${{ steps.zip-name.outputs.basename }}.zip"
           body_path: tag-message.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
