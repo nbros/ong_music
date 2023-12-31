@@ -134,7 +134,6 @@ jobs:
 
       - name: Create Windows build zip
         run: |
-          set -e
           mkdir "${{ steps.zip-name.outputs.basename }}"
           mv build/windows/x64/runner/Release/* "${{ steps.zip-name.outputs.basename }}"
           wget https://github.com/tekartik/sqflite/raw/master/sqflite_common_ffi/lib/src/windows/sqlite3.dll -O "${{ steps.zip-name.outputs.basename }}/sqlite3.dll"
