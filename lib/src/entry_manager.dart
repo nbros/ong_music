@@ -146,14 +146,16 @@ class HighlightEntryManager extends EntryManager {
         final String requester = row[5].trim();
         final String date = row[6].trim();
 
-        if (title.isEmpty) {
+        // skip empty rows and highlights not yet officially uploaded ("Premiere")
+        if (title.isEmpty || uploadDate.isEmpty || uploadDate == 'Premiere') {
           continue;
         }
+
         final additionalNotes = row[7].trim();
 
         final genreStr = genre.isEmpty ? '' : ' • $genre';
         final dateStr = date.isEmpty ? '' : ' - $date';
-        final requesterStr = requester.isNotEmpty && !requester.startsWith('http') ? " [$requester]" : '';
+        final requesterStr = requester.isNotEmpty && !requester.startsWith('http') && requester != '-' ? " [$requester]" : '';
         final notes = additionalNotes.isEmpty ? '' : additionalNotes;
         final uploadDateStr = uploadDate.isEmpty ? '' : ' (uploaded on $uploadDate)';
 
