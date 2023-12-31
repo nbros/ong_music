@@ -127,7 +127,7 @@ jobs:
       - name: Upload Windows app zip
         uses: actions/upload-artifact@v4
         with:
-          name: windows-${{ steps.gitversion.outputs.majorMinorPatch }}+${{ github.run_number }}.zip
+          name: Ong_Music-windows-${{ steps.gitversion.outputs.majorMinorPatch }}+${{ github.run_number }}.zip
           path: build/windows/x64/runner/Release/
 
       - name: Create GitHub Release
@@ -141,7 +141,10 @@ jobs:
           release_name: Release ${{ github.ref }}
           draft: false
           prerelease: false
-        
+
+      - name: Download sqlite3.dll
+        run: curl -o build/windows/x64/runner/Release/sqlite3.dll https://github.com/tekartik/sqflite/raw/master/sqflite_common_ffi/lib/src/windows/sqlite3.dll
+          
       - name: Zip Windows build
         if: startsWith(github.ref, 'refs/tags/')
         run: 7z a windows-build.zip build/windows/x64/runner/Release/
