@@ -65,7 +65,7 @@ class EntryTile extends ConsumerWidget {
     Widget titleWidget;
     if ('' == query) {
       titleWidget = Text(
-        overflow: TextOverflow.ellipsis,
+        overflow: platformHasScrollbar ? TextOverflow.ellipsis : TextOverflow.clip,
         entry.title,
         style: textStyle,
       );
@@ -78,7 +78,7 @@ class EntryTile extends ConsumerWidget {
       final afterMatch = formattedTitle.substring(endIndex);
       final Color? highlightColor = darkMode ? Colors.lime[900] : Colors.lime[100];
       titleWidget = RichText(
-        overflow: TextOverflow.ellipsis,
+        overflow: platformHasScrollbar ? TextOverflow.ellipsis : TextOverflow.clip,
         text: TextSpan(
           style: textStyle,
           children: <TextSpan>[
