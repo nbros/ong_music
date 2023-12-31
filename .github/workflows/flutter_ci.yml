@@ -9,7 +9,7 @@ on:
 
 jobs:
   build-android:
-    runs-on: ubuntu-latest
+        runs-on: ubuntu-latest
 
     steps:
       - name: Checkout from GitHub
@@ -124,39 +124,33 @@ jobs:
       - name: Build Windows app
         run: flutter build windows --release --build-name=${{ steps.gitversion.outputs.majorMinorPatch }} --build-number=${{ github.run_number }}
 
-      - name: Upload Windows app zip
-        uses: actions/upload-artifact@v4
-        with:
-          name: Ong_Music-windows-${{ steps.gitversion.outputs.majorMinorPatch }}+${{ github.run_number }}.zip
-          path: build/windows/x64/runner/Release/
-
-      - name: Create GitHub Release
-        id: create-release
-        uses: actions/create-release@v1
-        if: startsWith(github.ref, 'refs/tags/')
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          draft: false
-          prerelease: false
+      - name: Compute zip name
+        id: zip-name
+        run: |
+          echo "::set-output name=zip_name::Ong_Music-windows-${{ steps.gitversion.outputs.majorMinorPatch }}+${{ github.run_number }}.zip"  
 
       - name: Download sqlite3.dll
         run: curl -o build/windows/x64/runner/Release/sqlite3.dll https://github.com/tekartik/sqflite/raw/master/sqflite_common_ffi/lib/src/windows/sqlite3.dll
-          
+
       - name: Zip Windows build
+        run: 7z a ${{ steps.zip-name.outputs.zip_name }} build/windows/x64/runner/Release/
+
+      - name: Upload Windows app zip
+        uses: actions/upload-artifact@v4
+        with:
+          path: ${{ steps.zip-name.outputs.zip_name }}
+
+      - name: Read tag message
         if: startsWith(github.ref, 'refs/tags/')
-        run: 7z a windows-build.zip build/windows/x64/runner/Release/
-      
-      - name: Upload Release Asset
-        id: upload-release-asset 
-        uses: actions/upload-release-asset@v1
+        run: |
+          git tag -l --format='%(contents)' ${{ github.ref }} > tag-message.txt
+
+      - name: Create GitHub Release and Upload Asset
+        uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: ${{ steps.zip-name.outputs.zip_name }}
+          body_path: tag-message.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create-release.outputs.upload_url }}
-          asset_path: ./windows-build.zip
-          asset_name: windows-build.zip
-          asset_content_type: application/zip
+
