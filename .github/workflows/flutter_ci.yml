@@ -136,7 +136,7 @@ jobs:
         run: |
           mkdir "${{ steps.zip-name.outputs.basename }}"
           mv build/windows/x64/runner/Release/* "${{ steps.zip-name.outputs.basename }}"
-          wget https://github.com/tekartik/sqflite/raw/master/sqflite_common_ffi/lib/src/windows/sqlite3.dll -O "${{ steps.zip-name.outputs.basename }}/sqlite3.dll"
+          Invoke-WebRequest -Uri https://github.com/tekartik/sqflite/raw/master/sqflite_common_ffi/lib/src/windows/sqlite3.dll -OutFile "${{ steps.zip-name.outputs.basename }}/sqlite3.dll"
           7z a "${{ steps.zip-name.outputs.basename }}.zip" "${{ steps.zip-name.outputs.basename }}"
 
       - name: Upload Windows app zip
