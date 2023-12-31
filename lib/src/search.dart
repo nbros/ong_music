@@ -37,14 +37,7 @@ class EntrySearch extends SearchDelegate<Entry?> {
 
   @override
   Widget buildResults(BuildContext context) {
-    final searched = removeDiacritics(query.toLowerCase());
-    final results = entries.where((entry) => removeDiacritics(entry.title.toLowerCase()).contains(searched)).toList();
-    return EntryList(
-      entries: results,
-      query: query,
-      clickable: clickable,
-      name: name,
-    );
+    return buildSuggestions(context);
   }
 
   @override
