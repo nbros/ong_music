@@ -122,13 +122,13 @@ jobs:
       #   run: flutter test
 
       - name: Build Windows app
-        run: flutter build windows --release --build-name=${{ steps.gitversion.outputs.majorMinorPatch }}+${{ steps.gitversion.outputs.ShortSha }} --build-number=${{ github.run_number }}
+        run: flutter build windows --release --build-name=${{ steps.gitversion.outputs.majorMinorPatch }} --build-number=${{ github.run_number }}
 
       - name: Upload Windows app zip
         uses: actions/upload-artifact@v4
         with:
-          name: windows-${{ steps.gitversion.outputs.majorMinorPatch }}+${{ steps.gitversion.outputs.ShortSha }}.zip
-          path: build/windows/runner/Release/
+          name: windows-${{ steps.gitversion.outputs.majorMinorPatch }}+${{ github.run_number }}.zip
+          path: build/windows/x64/runner/Release/
 
       - name: Create GitHub Release
         id: create-release
