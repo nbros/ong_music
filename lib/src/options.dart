@@ -29,10 +29,8 @@ class ToggleOptionNotifier extends StateNotifier<bool> {
   }
 }
 
-typedef ExpandOptionNotifier = ToggleOptionNotifier;
 typedef DividersOptionNotifier = ToggleOptionNotifier;
 
-final expandOptionProvider = StateNotifierProvider<ExpandOptionNotifier, bool>((ref) => ExpandOptionNotifier(false, "expand"));
 final dividersOptionProvider = StateNotifierProvider<DividersOptionNotifier, bool>((ref) => DividersOptionNotifier(true, "dividers"));
 
 class DarkThemeOptionNotifier extends StateNotifier<ThemeMode> {

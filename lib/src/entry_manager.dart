@@ -133,6 +133,7 @@ class HighlightEntryManager extends EntryManager {
     // Format CSV into Entry objects
     List<Entry> entries = [];
     int seq = 1;
+    final requesterPattern = RegExp(r'requested by "?([^"\s,.;]+)"?', caseSensitive: false);
     for (int i = 1; i < csv.length; i++) {
       try {
         final row = csv[i];
@@ -155,9 +156,16 @@ class HighlightEntryManager extends EntryManager {
 
         final genreStr = genre.isEmpty ? '' : ' • $genre';
         final dateStr = date.isEmpty ? '' : ' - $date';
-        final requesterStr = requester.isNotEmpty && !requester.startsWith('http') && requester != '-' ? " [$requester]" : '';
         final notes = additionalNotes.isEmpty ? '' : additionalNotes;
         final uploadDateStr = uploadDate.isEmpty ? '' : ' (uploaded on $uploadDate)';
+        var requesterStr = requester.isNotEmpty && !requester.startsWith('http') && requester != '-' ? " [$requester]" : '';
+        // if requester is empty, try to parse it from additional notes
+        if (requesterStr.isEmpty) {
+          final match = requesterPattern.firstMatch(additionalNotes);
+          if (match != null) {
+            requesterStr = " [${match.group(1)}]";
+          }
+        }
 
         final entry = Entry(
           seq: seq,

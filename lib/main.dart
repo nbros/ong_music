@@ -108,7 +108,6 @@ class NavigationWidget extends ConsumerWidget {
       StateNotifierProvider<EntryManager, AsyncValue<List<Entry>>> entriesProvider, int currentPage, BuildContext context, WidgetRef ref) {
     AsyncValue<List<Entry>> asyncEntries = ref.watch(entriesProvider);
     final EntryManager entryNotifier = ref.read(entriesProvider.notifier);
-    bool expand = ref.watch(expandOptionProvider);
     final themeMode = ref.watch(themeProvider);
     double width = MediaQuery.of(context).size.width;
     return [
@@ -131,18 +130,13 @@ class NavigationWidget extends ConsumerWidget {
             ref.read(entriesProvider.notifier).reloadEntries(cached: false);
           },
         ),
-      if (width > 380)
-        IconButton(
-          icon: Icon(expand ? Icons.unfold_less : Icons.unfold_more),
-          onPressed: () => ref.read(expandOptionProvider.notifier).toggle(),
-        ),
-      if (width > 420)
+      if (width > 360)
         IconButton(
           // Switch Theme
           icon: Icon(themeMode == ThemeMode.light ? Icons.dark_mode : Icons.light_mode),
           onPressed: () => ref.read(themeProvider.notifier).switchTheme(),
         ),
-      if (width > 460)
+      if (width > 400)
         IconButton(
           // Clear Cache
           icon: const Icon(Icons.delete),

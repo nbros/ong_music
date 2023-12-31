@@ -56,7 +56,6 @@ class EntryTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeProvider);
     final darkMode = themeMode == ThemeMode.dark;
-    final expand = ref.watch(expandOptionProvider);
     final dividersEnabled = ref.watch(dividersOptionProvider);
     bool enabled = !clickable || (entry.url?.trim().isNotEmpty ?? false);
     final textStyle = enabled
@@ -109,7 +108,6 @@ class EntryTile extends ConsumerWidget {
             }
           : null,
       title: titleWidget,
-      subtitle: expand ? Text(entry.subtitle) : null,
     );
 
     if (dividersEnabled) {
@@ -121,28 +119,26 @@ class EntryTile extends ConsumerWidget {
       );
     }
 
-    if (!expand) {
-      widget = Tooltip(
-        message: entry.subtitle,
-        textStyle: Theme.of(context).textTheme.bodyMedium!.copyWith(color: darkMode ? Colors.white : Colors.black),
-        decoration: BoxDecoration(
-          color: darkMode ? Colors.grey[800]!.withOpacity(0.95) : Colors.amber[100]!.withOpacity(0.95),
-          borderRadius: BorderRadius.circular(4),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.5),
-              spreadRadius: 1,
-              blurRadius: 5,
-              offset: const Offset(3, 3),
-            ),
-          ],
-        ),
-        waitDuration: const Duration(milliseconds: 500),
-        showDuration: !kIsWeb && Platform.isAndroid ? const Duration(seconds: 8) : null,
-        triggerMode: TooltipTriggerMode.longPress,
-        child: widget,
-      );
-    }
+    widget = Tooltip(
+      message: entry.subtitle,
+      textStyle: Theme.of(context).textTheme.bodyMedium!.copyWith(color: darkMode ? Colors.white : Colors.black),
+      decoration: BoxDecoration(
+        color: darkMode ? Colors.grey[800]!.withOpacity(0.95) : Colors.amber[100]!.withOpacity(0.95),
+        borderRadius: BorderRadius.circular(4),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.5),
+            spreadRadius: 1,
+            blurRadius: 5,
+            offset: const Offset(3, 3),
+          ),
+        ],
+      ),
+      waitDuration: const Duration(milliseconds: 500),
+      showDuration: !kIsWeb && Platform.isAndroid ? const Duration(seconds: 8) : null,
+      triggerMode: TooltipTriggerMode.longPress,
+      child: widget,
+    );
     return widget;
   }
 }

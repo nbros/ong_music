@@ -7,7 +7,6 @@ class SettingsDrawer extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final expandOption = ref.watch(expandOptionProvider);
     final dividersOption = ref.watch(dividersOptionProvider);
     final themeOption = ref.watch(themeProvider);
     final darkMode = themeOption == ThemeMode.dark;
@@ -27,13 +26,6 @@ class SettingsDrawer extends ConsumerWidget {
             child: Center(
               child: Text('Settings', style: Theme.of(context).textTheme.displayLarge!.copyWith(color: textColor)),
             ),
-          ),
-          SwitchListTile(
-            title: const Text('Detailed'),
-            value: expandOption,
-            onChanged: (bool value) {
-              ref.read(expandOptionProvider.notifier).toggle();
-            },
           ),
           SwitchListTile(
             title: const Text('Dividers'),
