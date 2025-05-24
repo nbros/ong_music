@@ -123,11 +123,11 @@ class EntryTile extends ConsumerWidget {
       message: entry.subtitle,
       textStyle: Theme.of(context).textTheme.bodyMedium!.copyWith(color: darkMode ? Colors.white : Colors.black),
       decoration: BoxDecoration(
-        color: darkMode ? Colors.grey[800]!.withOpacity(0.95) : Colors.amber[100]!.withOpacity(0.95),
+        color: darkMode ? Colors.grey[800]!.withValues(alpha: 0.95) : Colors.amber[100]!.withValues(alpha: 0.95),
         borderRadius: BorderRadius.circular(4),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.5),
+            color: Colors.black.withValues(alpha: 0.95),
             spreadRadius: 1,
             blurRadius: 5,
             offset: const Offset(3, 3),

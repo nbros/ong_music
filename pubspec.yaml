@@ -44,7 +44,7 @@ dependencies:
   sqflite: ^2.2.8+4
   sqflite_common_ffi: ^2.2.5
   # generate WASM lib: dart run sqflite_common_ffi_web:setup
-  sqflite_common_ffi_web: ^0.4.2+2
+  sqflite_common_ffi_web: ^1.0.0
   url_launcher: ^6.2.2
   
 
@@ -56,8 +56,8 @@ dev_dependencies:
   # activated in the `analysis_options.yaml` file located at the root of your
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
-  flutter_lints: ^4.0.0
-  flutter_launcher_icons: ^0.13.1
+  flutter_lints: ^5.0.0
+  flutter_launcher_icons: ^0.14.3
 
 flutter:
 

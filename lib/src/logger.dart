@@ -23,7 +23,7 @@ Future<void> configureLogger(List<String> arguments) async {
   final printer = PrettyPrinter(
     methodCount: 0,
     excludeBox: {Level.trace: true, Level.debug: true, Level.info: true, Level.warning: true},
-    printTime: true,
+    dateTimeFormat: DateTimeFormat.dateAndTime,
     colors: kDebugMode,
   );
   // only log in debug mode if '-log' is not provided
