@@ -5,7 +5,7 @@ on:
     branches:
       - master
     tags:
-      - '*'
+      - "*"
 
 permissions:
   contents: write
@@ -56,7 +56,7 @@ jobs:
         with:
           channel: "stable"
           cache: true
-          cache-key: 'flutter-:os:-:channel:-:version:-:arch:'
+          cache-key: "flutter-:os:-:channel:-:version:-:arch:"
 
       - name: Install dependencies
         run: flutter pub get
@@ -90,7 +90,7 @@ jobs:
           serviceAccountJsonPlainText: ${{ secrets.SERVICE_ACCOUNT_JSON }}
           packageName: nbros.ong_music
           releaseFiles: build/app/outputs/bundle/release/app-release.aab
-          track: 'alpha' # internal, alpha, beta, production
+          track: "alpha" # internal, alpha, beta, production
           status: completed # draft, or completed(default) to release directly
 
   build-windows:
@@ -116,7 +116,7 @@ jobs:
         with:
           channel: "stable"
           cache: true
-          cache-key: 'flutter-:os:-:channel:-:version:-:arch:'
+          cache-key: "flutter-:os:-:channel:-:version:-:arch:"
 
       - name: Install dependencies
         run: flutter pub get
@@ -130,13 +130,12 @@ jobs:
       - name: Compute zip name
         id: zip-name
         run: |
-          echo "::set-output name=basename::Ong_Music-windows-${{ steps.gitversion.outputs.majorMinorPatch }}+${{ github.run_number }}"  
+          echo "::set-output name=basename::Ong_Music-windows-${{ steps.gitversion.outputs.majorMinorPatch }}+${{ github.run_number }}"
 
       - name: Create Windows build zip
         run: |
           mkdir "${{ steps.zip-name.outputs.basename }}"
           mv build/windows/x64/runner/Release/* "${{ steps.zip-name.outputs.basename }}"
-          Invoke-WebRequest -Uri https://github.com/tekartik/sqflite/raw/master/sqflite_common_ffi/lib/src/windows/sqlite3.dll -OutFile "${{ steps.zip-name.outputs.basename }}/sqlite3.dll"
           7z a "${{ steps.zip-name.outputs.basename }}.zip" "${{ steps.zip-name.outputs.basename }}"
 
       - name: Upload Windows app zip
@@ -158,4 +157,3 @@ jobs:
           body_path: tag-message.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
