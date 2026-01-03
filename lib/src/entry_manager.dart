@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:csv/csv.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -50,7 +51,7 @@ abstract class EntryManager extends StateNotifier<AsyncValue<List<Entry>>> {
     }
   }
 
-  Future<void> reloadEntries({@required cached}) async {
+  Future<void> reloadEntries({required bool cached}) async {
     state = const AsyncValue.loading();
     List<Entry>? entries;
     try {
