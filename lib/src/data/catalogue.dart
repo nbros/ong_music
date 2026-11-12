@@ -13,7 +13,7 @@ typedef GenreCount = ({Genre genre, int count});
 
 /// The highlights matching a query, newest first.
 final class HighlightResults {
-  HighlightResults._(this.tokens, this.ids);
+  HighlightResults._(this.tokens, this.ids, this.counts);
 
   /// The folded query tokens, for [matchRanges].
   final List<String> tokens;
@@ -21,8 +21,31 @@ final class HighlightResults {
   /// Ids (indices in `Catalogue.highlights`) of the matches, newest first.
   final Int32List ids;
 
+  /// How many highlights each filter would keep if it were chosen, the others
+  /// staying as they are.
+  final HighlightCounts counts;
+
   int get length => ids.length;
   bool get isEmpty => ids.isEmpty;
+}
+
+/// How many highlights a search would find with one more or one other filter
+/// chosen, the query and the other filters unchanged: the counts of the
+/// Highlights chips (see `Catalogue.searchHighlights`).
+final class HighlightCounts {
+  HighlightCounts._(this._genres, this.requester, this.keys);
+
+  final Int32List _genres;
+
+  /// Number of highlights the search would find filtering on its requester.
+  final int requester;
+
+  /// Number of highlights the search would find filtering on its keys.
+  final int keys;
+
+  /// Number of highlights the search would find with [genre] instead of its
+  /// own genre, if any: genres exclude each other.
+  int genre(Genre genre) => _genres[genre.index];
 }
 
 /// The plays matching a query, newest first.
@@ -208,17 +231,44 @@ final class Catalogue {
   /// Highlights matching [query] (every token in the title, requester or genre
   /// label) and, when given, of [genre], requested by requester [requesterId]
   /// and with a `Highlight.key` in [keys]; newest first.
-  HighlightResults searchHighlights({String query = '', Genre? genre, int? requesterId, Set<String>? keys}) {
+  ///
+  /// With [onlyRequester] or [onlyKeys] false, [requesterId] or [keys] do not
+  /// filter: they are only counted. The same pass gives the
+  /// `HighlightResults.counts`.
+  HighlightResults searchHighlights({
+    String query = '',
+    Genre? genre,
+    int? requesterId,
+    bool onlyRequester = true,
+    Set<String>? keys,
+    bool onlyKeys = true,
+  }) {
     final tokens = tokenize(query);
     final ids = <int>[];
+    final genres = Int32List(Genre.values.length);
+    var requesterCount = 0, keyCount = 0;
     for (var i = highlights.length - 1; i >= 0; i--) {
-      if (genre != null && highlights[i].genre != genre) continue;
-      if (requesterId != null && highlights[i].requesterId != requesterId) continue;
-      if (keys != null && !keys.contains(_highlightKeys[i])) continue;
+      final h = highlights[i];
+      final ofGenre = genre == null || h.genre == genre;
+      final ofRequester = requesterId != null && h.requesterId == requesterId;
+      final withKey = keys != null && keys.contains(_highlightKeys[i]);
+      final byRequester = !onlyRequester || requesterId == null || ofRequester;
+      final byKeys = !onlyKeys || keys == null || withKey;
+      // what the highlight counts for, if it matches the query
+      final forGenre = byRequester && byKeys;
+      final forRequester = ofRequester && ofGenre && byKeys;
+      final forKeys = withKey && ofGenre && byRequester;
+      if (!forGenre && !forRequester && !forKeys) continue;
       final fields = _highlightFields[i];
-      if (tokens.every(fields.contains)) ids.add(i);
+      if (!tokens.every(fields.contains)) continue;
+      if (forGenre) {
+        genres[h.genre.index]++;
+        if (ofGenre) ids.add(i);
+      }
+      if (forRequester) requesterCount++;
+      if (forKeys) keyCount++;
     }
-    return HighlightResults._(tokens, Int32List.fromList(ids));
+    return HighlightResults._(tokens, Int32List.fromList(ids), HighlightCounts._(genres, requesterCount, keyCount));
   }
 
   /// Plays matching [query] (every token in the title, requester, genre or

@@ -49,11 +49,19 @@ String installHintTitle(InstallHint hint) => switch (hint.kind) {
   _ => 'Install Ong Music on your ${hint.device}',
 };
 
+/// In the advice texts, stand for the symbols of two buttons of Safari (see
+/// [symbolSpans]): its menu button, and its Share button.
+const menuSymbol = '{menu}', shareSymbol = '{share}';
+
 /// The advice in one or two lines, for the banner.
 String installHintShortText(InstallHint hint) => switch (hint.kind) {
   InstallHintKind.openInSafari => 'This app’s browser can’t add it to your Home Screen: open the page in Safari.',
   InstallHintKind.playStore => playStoreAdvice,
-  _ => 'In Safari, tap the menu button next to the address, then Share, View More and “Add to Home Screen”.',
+  _ =>
+    hint.shareInMenu
+        ? 'In Safari, tap the menu button $menuSymbol next to the address, then Share, View More and '
+              '“Add to Home Screen”.'
+        : 'In Safari, tap the Share button $shareSymbol, then “Add to Home Screen”.',
 };
 
 /// The full advice, for the About tab.
@@ -64,11 +72,35 @@ String installHintText(InstallHint hint) => switch (hint.kind) {
         'then follow the steps shown there.',
   InstallHintKind.playStore => playStoreAdvice,
   _ =>
-    'In Safari, tap the menu button next to the address (on older iOS versions, the Share button), '
-        'then Share, View More and “Add to Home Screen”. In another browser, look for “Add to Home Screen” '
+    '${installHintShortText(hint)} In another browser, look for “Add to Home Screen” '
         'in its Share menu. Ong Music then opens full screen from its icon, like an app. '
         'Not in the menu? Open this page in Safari first.',
 };
+
+final _symbol = RegExp(r'\{(menu|share)\}');
+
+/// [text] with a drawing in place of [menuSymbol] and of [shareSymbol], [size]
+/// high: three lines, the last one shorter, and the box with an arrow.
+///
+/// Drawn after the look of Safari's buttons, with icons this app has, not
+/// with Apple's own artwork. They come after the name of the button, never
+/// instead of it: Safari may redraw its buttons, the words stay right.
+List<InlineSpan> symbolSpans(String text, {required Color color, required double size}) {
+  final spans = <InlineSpan>[];
+  var start = 0;
+  for (final match in _symbol.allMatches(text)) {
+    spans.add(TextSpan(text: text.substring(start, match.start)));
+    spans.add(
+      WidgetSpan(
+        alignment: PlaceholderAlignment.middle,
+        child: Icon(match[1] == 'menu' ? Icons.notes : Icons.ios_share, size: size, color: color),
+      ),
+    );
+    start = match.end;
+  }
+  spans.add(TextSpan(text: text.substring(start)));
+  return spans;
+}
 
 /// The address of the web app, for "Copy link".
 String appLink() {
@@ -186,8 +218,14 @@ class _HintBody extends ConsumerWidget {
           style: TextStyle(fontSize: 15, height: 20 / 15, fontWeight: FontWeight.w500, color: color),
         ),
         const SizedBox(height: 4),
-        Text(
-          short ? installHintShortText(hint) : installHintText(hint),
+        Text.rich(
+          TextSpan(
+            children: symbolSpans(
+              short ? installHintShortText(hint) : installHintText(hint),
+              color: color,
+              size: MediaQuery.textScalerOf(context).scale(16),
+            ),
+          ),
           style: TextStyle(fontSize: 13, height: 18 / 13, color: color.withValues(alpha: 0.85)),
         ),
         if (hint.kind == InstallHintKind.openInSafari)

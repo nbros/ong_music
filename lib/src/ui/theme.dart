@@ -17,8 +17,6 @@ class OngColors extends ThemeExtension<OngColors> {
     required this.brand,
     required this.onBrand,
     required this.thumbnail,
-    required this.you,
-    required this.onYou,
     required this.live,
   });
 
@@ -28,22 +26,15 @@ class OngColors extends ThemeExtension<OngColors> {
   /// Background of a search hit.
   final Color mark;
 
-  /// The brand orange: "Watch" buttons, "You" badge, avatar ring.
+  /// The brand orange: "Watch" buttons, the user's own name, avatar ring.
   final Color brand;
 
-  /// Text and icons on [brand].
+  /// Text and icons on [brand]: above 6:1 in both themes, enough for small
+  /// text.
   final Color onBrand;
 
   /// Placeholder behind a thumbnail.
   final Color thumbnail;
-
-  /// Background of the "You" badge: small bold text, so a stronger pair than
-  /// [brand] / [onBrand] (white on deep orange in light, near black on the
-  /// brand orange in dark; both above 6.5:1).
-  final Color you;
-
-  /// Text of the "You" badge.
-  final Color onYou;
 
   /// The "live" dot of the About tab: red, above 5:1 on the surfaces of its
   /// theme.
@@ -55,8 +46,6 @@ class OngColors extends ThemeExtension<OngColors> {
     brand: Color(0xFFFF7A1A),
     onBrand: Color(0xFF2B1200),
     thumbnail: Color(0xFF2E2721),
-    you: Color(0xFFFF7A1A),
-    onYou: Color(0xFF140600),
     live: Color(0xFFFF4D4D),
   );
 
@@ -66,8 +55,6 @@ class OngColors extends ThemeExtension<OngColors> {
     brand: Color(0xFFF4721F),
     onBrand: Color(0xFF2B1200),
     thumbnail: Color(0xFFF0E1D6),
-    you: Color(0xFFA63C00),
-    onYou: Color(0xFFFFFFFF),
     live: Color(0xFFD11A1A),
   );
 
@@ -75,25 +62,15 @@ class OngColors extends ThemeExtension<OngColors> {
   static OngColors of(BuildContext context) => Theme.of(context).extension<OngColors>()!;
 
   @override
-  OngColors copyWith({
-    Color? on3,
-    Color? mark,
-    Color? brand,
-    Color? onBrand,
-    Color? thumbnail,
-    Color? you,
-    Color? onYou,
-    Color? live,
-  }) => OngColors(
-    on3: on3 ?? this.on3,
-    mark: mark ?? this.mark,
-    brand: brand ?? this.brand,
-    onBrand: onBrand ?? this.onBrand,
-    thumbnail: thumbnail ?? this.thumbnail,
-    you: you ?? this.you,
-    onYou: onYou ?? this.onYou,
-    live: live ?? this.live,
-  );
+  OngColors copyWith({Color? on3, Color? mark, Color? brand, Color? onBrand, Color? thumbnail, Color? live}) =>
+      OngColors(
+        on3: on3 ?? this.on3,
+        mark: mark ?? this.mark,
+        brand: brand ?? this.brand,
+        onBrand: onBrand ?? this.onBrand,
+        thumbnail: thumbnail ?? this.thumbnail,
+        live: live ?? this.live,
+      );
 
   @override
   OngColors lerp(OngColors? other, double t) {
@@ -104,8 +81,6 @@ class OngColors extends ThemeExtension<OngColors> {
       brand: Color.lerp(brand, other.brand, t)!,
       onBrand: Color.lerp(onBrand, other.onBrand, t)!,
       thumbnail: Color.lerp(thumbnail, other.thumbnail, t)!,
-      you: Color.lerp(you, other.you, t)!,
-      onYou: Color.lerp(onYou, other.onYou, t)!,
       live: Color.lerp(live, other.live, t)!,
     );
   }

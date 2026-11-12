@@ -234,14 +234,14 @@ void main() {
       expect(tester.getRect(starChip()).right, lessThan(tester.getRect(chip('You')).left));
       // the star and the count, no word, but a name for screen readers
       expect(find.descendant(of: starChip(), matching: find.byIcon(Icons.star)), findsOneWidget);
-      expect(find.descendant(of: starChip(), matching: find.text('1')), findsOneWidget);
+      expect(chipTextOf(tester, 'Favourites'), '1');
       expect(find.text('Favourites'), findsNothing);
       expect(tester.getSemantics(starChip()), isSemantics(label: 'Favourites\n1', isButton: true));
 
       await _openSheet(tester, 'Song of Storms');
       await _tapStar(tester);
       await _closeSheet(tester);
-      expect(find.descendant(of: starChip(), matching: find.text('2')), findsOneWidget);
+      expect(chipTextOf(tester, 'Favourites'), '2');
       handle.dispose();
     });
 

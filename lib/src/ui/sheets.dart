@@ -146,12 +146,14 @@ class _Title extends StatelessWidget {
 /// A line of facts: icon, text with an optional small line, chevron when it
 /// leads somewhere.
 class _Fact extends StatelessWidget {
-  const _Fact({required this.icon, required this.text, this.detail, this.trailing, this.onTap});
+  const _Fact({required this.icon, required this.text, this.after = const [], this.detail, this.onTap});
 
   final IconData icon;
   final String text;
+
+  /// Spans after [text]: a requester name (see [requesterSpans]).
+  final List<InlineSpan> after;
   final String? detail;
-  final Widget? trailing;
   final VoidCallback? onTap;
 
   @override
@@ -172,11 +174,11 @@ class _Fact extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text.rich(
+                  RequesterText(
                     TextSpan(
                       children: [
                         TextSpan(text: text),
-                        if (trailing != null) inlineWidget(trailing!),
+                        ...after,
                       ],
                     ),
                     style: TextStyle(fontSize: 14, height: 20 / 14, color: scheme.onSurface),
@@ -427,8 +429,13 @@ class HighlightSheet extends ConsumerWidget {
                 if (requester != null)
                   _Fact(
                     icon: Icons.person,
-                    text: 'Requested by ${requester.name}',
-                    trailing: catalogue.isRequester(requester.id, me) ? const Tag.you() : null,
+                    text: 'Requested by ',
+                    after: requesterSpans(
+                      context,
+                      requester.name,
+                      const [],
+                      own: catalogue.isRequester(requester.id, me),
+                    ),
                     detail: '${plural(requester.requestCount, 'request')} in the Ong Log',
                     onTap: () => _showRequester(context, ref, requester),
                   ),

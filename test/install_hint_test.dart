@@ -5,6 +5,13 @@ import 'package:ong_music/src/web/install_hint.dart';
 const iPhoneSafari =
     'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) '
     'Version/18.5 Mobile/15E148 Safari/604.1';
+// Safari 26 and later: the system version in the user agent stays at 18_6, "Version/" is Safari's
+const iPhoneSafari26 =
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) '
+    'Version/26.0 Mobile/15E148 Safari/604.1';
+const macSafari26 =
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) '
+    'Version/26.1 Safari/605.1.15';
 const iPhoneChrome =
     'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) '
     'CriOS/138.0.7204.119 Mobile/15E148 Safari/604.1';
@@ -86,15 +93,29 @@ void main() {
   });
 
   test('iPhone browsers: add to the home screen', () {
-    for (final ua in [iPhoneSafari, iPhoneChrome, iPhoneFirefox]) {
-      expect(hintFor(ua), const InstallHint(InstallHintKind.addToHomeScreen), reason: ua);
+    for (final ua in [iPhoneSafari, iPhoneSafari26, iPhoneChrome, iPhoneFirefox]) {
+      expect(hintFor(ua).kind, InstallHintKind.addToHomeScreen, reason: ua);
+      expect(hintFor(ua).device, 'iPhone', reason: ua);
     }
   });
 
   test('iPad, including the desktop-site user agent', () {
-    const iPad = InstallHint(InstallHintKind.addToHomeScreen, device: 'iPad');
-    expect(hintFor(iPadSafari), iPad);
-    expect(hintFor(macSafari, touchPoints: 5), iPad);
+    for (final (ua, touchPoints) in [(iPadSafari, 5), (macSafari, 5), (macSafari26, 5)]) {
+      expect(hintFor(ua, touchPoints: touchPoints).kind, InstallHintKind.addToHomeScreen, reason: ua);
+      expect(hintFor(ua, touchPoints: touchPoints).device, 'iPad', reason: ua);
+    }
+  });
+
+  test('Safari 26 and later keep Share behind the menu button; before, the Share button is in the bar', () {
+    expect(hintFor(iPhoneSafari26), const InstallHint(InstallHintKind.addToHomeScreen));
+    expect(hintFor(macSafari26), const InstallHint(InstallHintKind.addToHomeScreen, device: 'iPad'));
+    expect(hintFor(iPhoneSafari), const InstallHint(InstallHintKind.addToHomeScreen, shareInMenu: false));
+    expect(hintFor(iPadSafari), const InstallHint(InstallHintKind.addToHomeScreen, device: 'iPad', shareInMenu: false));
+    expect(hintFor(macSafari), const InstallHint(InstallHintKind.addToHomeScreen, device: 'iPad', shareInMenu: false));
+    // another browser does not say which Safari the system has: the current one
+    for (final ua in [iPhoneChrome, iPhoneFirefox]) {
+      expect(hintFor(ua).shareInMenu, isTrue, reason: ua);
+    }
   });
 
   test('a Mac (no touch) gets nothing', () {

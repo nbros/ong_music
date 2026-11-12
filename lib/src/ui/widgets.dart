@@ -1,8 +1,10 @@
 /// Small building blocks shared by the lists and the sheets.
 library;
 
+import 'dart:math' as math;
 import 'dart:ui' show SemanticsInputType;
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -12,6 +14,7 @@ import 'package:material_ui/material_ui.dart';
 import '../data/model.dart';
 import '../data/text.dart';
 import 'format.dart';
+import 'fullscreen_button.dart';
 import 'theme.dart';
 
 // ------------------------------------------------------------------ metrics
@@ -144,26 +147,20 @@ class GenreDot extends StatelessWidget {
   );
 }
 
-/// A small uppercase label: `TIER 3`, `RAFFLE`, or the "You" badge.
+/// A small uppercase label: `TIER 3`, `RAFFLE`.
 class Tag extends StatelessWidget {
-  const Tag(this.label, {super.key, this.you = false});
-
-  /// The "You" badge on the user's own requests.
-  const Tag.you({super.key}) : label = 'You', you = true;
+  const Tag(this.label, {super.key});
 
   final String label;
-  final bool you;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final ong = OngColors.of(context);
     return Container(
       margin: const EdgeInsets.only(left: 6),
       padding: const EdgeInsets.symmetric(horizontal: 4),
       decoration: BoxDecoration(
-        color: you ? ong.you : null,
-        border: you ? null : Border.all(color: scheme.outlineVariant),
+        border: Border.all(color: scheme.outlineVariant),
         borderRadius: BorderRadius.circular(4),
       ),
       child: Text(
@@ -173,9 +170,9 @@ class Tag extends StatelessWidget {
         style: TextStyle(
           fontSize: 10,
           height: 1.4,
-          fontWeight: you ? FontWeight.w700 : FontWeight.w500,
-          letterSpacing: you ? 0.4 : 0.3,
-          color: you ? ong.onYou : scheme.onSurfaceVariant,
+          fontWeight: FontWeight.w500,
+          letterSpacing: 0.3,
+          color: scheme.onSurfaceVariant,
         ),
       ),
     );
@@ -192,6 +189,161 @@ InlineSpan personIcon(Color color) => inlineWidget(
     child: Icon(Icons.person, size: 13, color: color.withValues(alpha: 0.8)),
   ),
 );
+
+// ------------------------------------------------------------------ requesters
+
+/// The padding of the user's own name inside its highlight: no-break spaces,
+/// which never let the name wrap away from them. Not narrow ones (U+202F),
+/// which the Roboto of the web app makes almost zero wide.
+const _ownNamePad = '\u00A0';
+
+/// A span with a rounded box of [box] behind it, drawn by [RequesterText]: the
+/// user's own name, or a search hit in it.
+class _BoxedSpan extends TextSpan {
+  const _BoxedSpan({required this.box, super.text, super.style, super.children, super.semanticsLabel});
+
+  final Color box;
+}
+
+/// The spans of requester [name] in a line of text, with the hits of [tokens]
+/// marked (see [markedSpans]).
+///
+/// The user's own name ([own]) is highlighted instead, in [OngColors.onBrand]
+/// on [OngColors.brand], when a [RequesterText] shows the spans: a search hit
+/// in it keeps the [OngColors.mark] of the others, as a box inside the
+/// highlight. Screen readers hear "name, you".
+List<InlineSpan> requesterSpans(BuildContext context, String name, List<String> tokens, {required bool own}) {
+  final ong = OngColors.of(context);
+  if (!own) return markedSpans(name, tokens, ong.mark);
+  final ranges = matchRanges(name, tokens);
+  final parts = <InlineSpan>[];
+  var at = 0;
+  for (final r in ranges) {
+    if (r.start > at) parts.add(TextSpan(text: name.substring(at, r.start), semanticsLabel: ''));
+    parts.add(
+      _BoxedSpan(
+        box: ong.mark,
+        text: name.substring(r.start, r.end),
+        // onBrand is too dark on the mark of the dark theme
+        style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
+        semanticsLabel: '',
+      ),
+    );
+    at = r.end;
+  }
+  if (at < name.length) parts.add(TextSpan(text: name.substring(at), semanticsLabel: ''));
+  return [
+    _BoxedSpan(
+      box: ong.brand,
+      style: TextStyle(color: ong.onBrand),
+      children: [
+        TextSpan(text: _ownNamePad, semanticsLabel: '$name, you'),
+        ...parts,
+        const TextSpan(text: _ownNamePad, semanticsLabel: ''),
+      ],
+    ),
+  ];
+}
+
+/// A text holding a requester name (see [requesterSpans]), which draws the
+/// highlight of the user's own name: a rounded box behind it, cut with the
+/// text by the ellipsis. A span background would be square and as high as the
+/// line.
+class RequesterText extends StatelessWidget {
+  /// Creates the text, on one line ending with an ellipsis, or on as many
+  /// lines as needed without [maxLines].
+  const RequesterText(this.span, {super.key, required this.style, this.maxLines});
+
+  final InlineSpan span;
+  final TextStyle style;
+  final int? maxLines;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Text.rich(
+      span,
+      style: style,
+      maxLines: maxLines,
+      overflow: maxLines == null ? null : TextOverflow.ellipsis,
+    );
+    final boxes = <_Box>[];
+    _boxesOf(span, 0, boxes);
+    return boxes.isEmpty ? text : _TextBoxes(boxes: boxes, child: text);
+  }
+
+  /// Adds the boxes of the [_BoxedSpan]s of [span], which starts at offset
+  /// [at] of the text, to [boxes], a span before the spans inside it; returns
+  /// the offset after [span].
+  static int _boxesOf(InlineSpan span, int at, List<_Box> boxes) {
+    if (span is! TextSpan) return at + 1; // a placeholder: one character
+    final start = at;
+    final index = boxes.length;
+    at += span.text?.length ?? 0;
+    for (final child in span.children ?? const <InlineSpan>[]) {
+      at = _boxesOf(child, at, boxes);
+    }
+    if (span is _BoxedSpan) boxes.insert(index, (start: start, end: at, color: span.box));
+    return at;
+  }
+}
+
+/// A range of a text and the colour of the box behind it.
+typedef _Box = ({int start, int end, Color color});
+
+/// Paints rounded boxes behind ranges of the text of its child, one per line,
+/// in order.
+class _TextBoxes extends SingleChildRenderObjectWidget {
+  const _TextBoxes({required this.boxes, required super.child});
+
+  final List<_Box> boxes;
+
+  @override
+  _RenderTextBoxes createRenderObject(BuildContext context) => _RenderTextBoxes(boxes);
+
+  @override
+  void updateRenderObject(BuildContext context, _RenderTextBoxes renderObject) => renderObject.boxes = boxes;
+}
+
+class _RenderTextBoxes extends RenderProxyBox {
+  _RenderTextBoxes(this._boxes);
+
+  List<_Box> _boxes;
+  set boxes(List<_Box> value) {
+    if (listEquals(value, _boxes)) return;
+    _boxes = value;
+    markNeedsPaint();
+  }
+
+  static RenderParagraph? _paragraphIn(RenderObject object) {
+    if (object is RenderParagraph) return object;
+    RenderParagraph? found;
+    object.visitChildren((child) => found ??= _paragraphIn(child));
+    return found;
+  }
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    final child = this.child;
+    final paragraph = child == null ? null : _paragraphIn(child);
+    if (paragraph != null) {
+      final transform = paragraph.getTransformTo(this);
+      for (final box in _boxes) {
+        final paint = Paint()..color = box.color;
+        // one text box per line, the runs of a line merged: on a line cut by
+        // the ellipsis, the last one takes the ellipsis in
+        final selection = TextSelection(baseOffset: box.start, extentOffset: box.end);
+        for (final textBox in paragraph.getBoxesForSelection(selection)) {
+          final rect = MatrixUtils.transformRect(transform, textBox.toRect());
+          context.canvas.drawRRect(
+            RRect.fromRectAndRadius(rect.shift(offset), Radius.circular(rect.height / 4)),
+            paint,
+          );
+        }
+      }
+    }
+    super.paint(context, offset);
+  }
+}
 
 /// The icon of a play type (piano, loop, improvisation), or null.
 IconData? playTypeIcon(PlayType type) => switch (type) {
@@ -359,7 +511,12 @@ class Thumbnail extends ConsumerWidget {
 /// Not a [SearchBar]: that one leaves the keyboard's automatic correction on,
 /// which replaces the titles, names and user names typed here with dictionary
 /// words. Escape clears the field, or leaves it when it is empty.
-class ListSearchField extends StatefulWidget {
+///
+/// In a browser that can show the page full screen, the [FullscreenButton] is
+/// at its right, in the column of the ⋮ buttons of the highlight rows: the
+/// field ends 48 px from the edge, where that column begins on a phone, and the
+/// button is at the edge, like the ⋮ buttons (48 px on a phone, 40 on desktop).
+class ListSearchField extends ConsumerStatefulWidget {
   const ListSearchField({
     super.key,
     required this.controller,
@@ -374,10 +531,10 @@ class ListSearchField extends StatefulWidget {
   final FocusNode? focusNode;
 
   @override
-  State<ListSearchField> createState() => _ListSearchFieldState();
+  ConsumerState<ListSearchField> createState() => _ListSearchFieldState();
 }
 
-class _ListSearchFieldState extends State<ListSearchField> {
+class _ListSearchFieldState extends ConsumerState<ListSearchField> {
   FocusNode? _ownFocusNode;
   FocusNode get _focusNode => widget.focusNode ?? (_ownFocusNode ??= FocusNode());
 
@@ -396,8 +553,9 @@ class _ListSearchFieldState extends State<ListSearchField> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final controller = widget.controller;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 6, 16, 2),
+    final fullscreen = ref.watch(pageFullscreenProvider);
+    final field = Padding(
+      padding: EdgeInsets.fromLTRB(16, 6, fullscreen == null ? 16 : 0, 2),
       child: CallbackShortcuts(
         bindings: {
           const SingleActivator(LogicalKeyboardKey.escape): () =>
@@ -474,6 +632,23 @@ class _ListSearchFieldState extends State<ListSearchField> {
         ),
       ),
     );
+    if (fullscreen == null) return field;
+    return Row(
+      children: [
+        Expanded(child: field),
+        // the vertical padding of the field: centred on the pill
+        Padding(
+          padding: const EdgeInsets.only(top: 6, bottom: 2),
+          child: SizedBox(
+            width: 48,
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: FullscreenButton(fullscreen: fullscreen),
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -541,6 +716,9 @@ class ChipRow extends StatelessWidget {
 ///
 /// Without [showLabel] it shows its [icon] (required then) and its count
 /// alone, and [label] is only said to screen readers.
+///
+/// The chip keeps the width of [maxCount] (the largest count it can show) when
+/// [count] is smaller: a count that follows the other filters moves nothing.
 class ListChip extends StatelessWidget {
   const ListChip({
     super.key,
@@ -549,6 +727,7 @@ class ListChip extends StatelessWidget {
     required this.onTap,
     this.icon,
     this.count,
+    this.maxCount,
     this.showLabel = true,
   }) : assert(showLabel || icon != null, 'a chip without label shows an icon');
 
@@ -557,6 +736,7 @@ class ListChip extends StatelessWidget {
   final VoidCallback onTap;
   final IconData? icon;
   final int? count;
+  final int? maxCount;
   final bool showLabel;
 
   @override
@@ -564,16 +744,36 @@ class ListChip extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final color = selected ? scheme.onSecondaryContainer : scheme.onSurfaceVariant;
     final count = this.count;
-    final countStyle = TextStyle(fontSize: 11, fontWeight: FontWeight.w400, color: color.withValues(alpha: 0.75));
-    final Widget? text = !showLabel
-        ? (count == null ? null : Text(formatCount(count), style: countStyle))
-        : count == null
-        ? Text(label)
-        : Text.rich(
+    // tabular figures: a count never takes more room than a larger one
+    final countStyle = TextStyle(
+      fontSize: 11,
+      fontWeight: FontWeight.w400,
+      color: color.withValues(alpha: 0.75),
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+    Widget withCount(int count) => showLabel
+        ? Text.rich(
             TextSpan(
               text: label,
               children: [TextSpan(text: '  ${formatCount(count)}', style: countStyle)],
             ),
+          )
+        : Text(formatCount(count), style: countStyle);
+    final Widget? text = count == null
+        ? (showLabel ? Text(label) : null)
+        // under the text shown, the same text with the largest count, unseen and unsaid, gives the width
+        : Stack(
+            alignment: AlignmentDirectional.centerStart,
+            children: [
+              Visibility(
+                visible: false,
+                maintainSize: true,
+                maintainAnimation: true,
+                maintainState: true,
+                child: withCount(math.max(count, maxCount ?? count)),
+              ),
+              withCount(count),
+            ],
           );
     final withIcon = Row(
       mainAxisSize: MainAxisSize.min,

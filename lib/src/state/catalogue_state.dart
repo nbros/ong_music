@@ -428,7 +428,7 @@ final class PlayFilter {
 final currentCatalogueProvider = Provider<Catalogue?>((ref) => ref.watch(catalogueProvider.select((s) => s.catalogue)));
 
 /// The requester the Twitch name designates in the current catalogue, the one
-/// whose requests carry the "You" badge (`Catalogue.isRequester`); null
+/// whose name is shown in orange on their requests (`Catalogue.isRequester`); null
 /// without name, catalogue or request under that name.
 final myRequesterProvider = Provider<Requester?>((ref) {
   final name = ref.watch(twitchNameProvider);
@@ -460,18 +460,22 @@ final myPlayCountProvider = Provider<int>((ref) => ref.watch(myRequesterProvider
 int? _myRequesterId(Ref ref, bool mine, Provider<int> count) =>
     mine && ref.watch(count) > 0 ? ref.watch(myRequesterProvider)!.id : null;
 
-/// Highlights matching a filter, newest first; null without catalogue.
-final highlightResultsProvider = Provider.autoDispose.family<HighlightResults?, HighlightFilter>(
-  (ref, filter) => ref
-      .watch(currentCatalogueProvider)
-      ?.searchHighlights(
-        query: filter.query,
-        genre: filter.genre,
-        requesterId: _myRequesterId(ref, filter.mine, myHighlightCountProvider),
-        // as for "You": no filter on favourites while the list holds none (the chip is gone)
-        keys: filter.favourites && ref.watch(favouriteCountProvider) > 0 ? ref.watch(favouritesProvider) : null,
-      ),
-);
+/// Highlights matching a filter, newest first, with the counts of the chips
+/// ("You" counts the user's requests, the star the favourites); null without
+/// catalogue.
+final highlightResultsProvider = Provider.autoDispose.family<HighlightResults?, HighlightFilter>((ref, filter) {
+  final catalogue = ref.watch(currentCatalogueProvider);
+  if (catalogue == null) return null;
+  return catalogue.searchHighlights(
+    query: filter.query,
+    genre: filter.genre,
+    requesterId: ref.watch(myRequesterProvider)?.id,
+    onlyRequester: _myRequesterId(ref, filter.mine, myHighlightCountProvider) != null,
+    keys: ref.watch(favouritesProvider),
+    // as for "You": no filter on favourites while the list holds none (the chip is gone)
+    onlyKeys: filter.favourites && ref.watch(favouriteCountProvider) > 0,
+  );
+});
 
 /// Plays matching a filter, newest first; null without catalogue.
 final playResultsProvider = Provider.autoDispose.family<PlayResults?, PlayFilter>(

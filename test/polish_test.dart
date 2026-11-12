@@ -141,7 +141,7 @@ void main() {
       expect(favourites.height, 32);
       expect(favourites.left - rect(chip('All').hitTestable()).right, 8);
       final star = rect(inChip('Favourites', find.byIcon(Icons.star)));
-      final count = rect(inChip('Favourites', find.text('1')));
+      final count = rect(chipText('Favourites'));
       expect((star.left - favourites.left, count.left - star.right, favourites.right - count.right), (13, 6, 13));
       expect(star.size, const Size(16, 16));
     });

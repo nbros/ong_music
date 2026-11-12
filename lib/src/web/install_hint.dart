@@ -43,7 +43,7 @@ enum InstallHintKind {
 /// The install advice for one device.
 @immutable
 class InstallHint {
-  const InstallHint(this.kind, {this.device = 'iPhone'});
+  const InstallHint(this.kind, {this.device = 'iPhone', this.shareInMenu = true});
 
   /// Nothing to show.
   static const none = InstallHint(InstallHintKind.none);
@@ -53,17 +53,24 @@ class InstallHint {
   /// "iPhone" or "iPad", for the text ("Android" for [InstallHintKind.playStore]).
   final String device;
 
+  /// For [InstallHintKind.addToHomeScreen]: whether Safari keeps "Share" behind
+  /// the menu button next to the address, as it does since Safari 26. False
+  /// for the Safari versions before, whose own bar has the Share button. True
+  /// when the version cannot be told (another browser).
+  final bool shareInMenu;
+
   /// Whether there is something to show.
   bool get isVisible => kind != InstallHintKind.none;
 
   @override
-  bool operator ==(Object other) => other is InstallHint && other.kind == kind && other.device == device;
+  bool operator ==(Object other) =>
+      other is InstallHint && other.kind == kind && other.device == device && other.shareInMenu == shareInMenu;
 
   @override
-  int get hashCode => Object.hash(kind, device);
+  int get hashCode => Object.hash(kind, device, shareInMenu);
 
   @override
-  String toString() => 'InstallHint($kind, $device)';
+  String toString() => 'InstallHint($kind, $device${shareInMenu ? '' : ', Share button in the bar'})';
 }
 
 /// User agent tokens of in-app browsers that are known to be web views
@@ -112,5 +119,10 @@ InstallHint installHintFor(BrowserEnvironment? browser) {
     return InstallHint.none;
   }
   final inApp = !ua.contains('Safari/') || inAppBrowserTokens.any(ua.contains);
-  return InstallHint(inApp ? InstallHintKind.openInSafari : InstallHintKind.addToHomeScreen, device: device);
+  if (inApp) return InstallHint(InstallHintKind.openInSafari, device: device);
+  // Safari says its version in "Version/26.0" (the system version next to it no longer moves)
+  final safari = int.tryParse(_safariVersion.firstMatch(ua)?[1] ?? '');
+  return InstallHint(InstallHintKind.addToHomeScreen, device: device, shareInMenu: safari == null || safari >= 26);
 }
+
+final _safariVersion = RegExp(r'Version/(\d+)');

@@ -60,6 +60,26 @@ void main() {
     expect(find.text(title), findsNothing);
   });
 
+  testWidgets('the advice shows the symbol of the Safari button after its name', (tester) async {
+    Finder inBannerIcon(IconData icon) => find.descendant(of: find.byType(InstallBanner), matching: find.byIcon(icon));
+    // Safari 26 and later: the menu button next to the address
+    await pumpApp(tester, installHint: addToHomeScreen);
+    expect(find.textContaining('tap the menu button \uFFFC next to the address, then Share'), findsOneWidget);
+    expect(inBannerIcon(Icons.notes), findsOneWidget);
+    expect(inBannerIcon(Icons.ios_share), findsOneWidget, reason: 'the icon of the banner only');
+    await goToTab(tester, 'About');
+    await scrollToSection(tester);
+    expect(find.descendant(of: find.byType(InstallSection), matching: find.byIcon(Icons.notes)), findsOneWidget);
+
+    // before: the Share button of Safari's own bar
+    await tester.pumpWidget(const SizedBox());
+    await pumpApp(tester, installHint: const InstallHint(InstallHintKind.addToHomeScreen, shareInMenu: false));
+    expect(find.textContaining('tap the Share button \uFFFC, then “Add to Home Screen”.'), findsOneWidget);
+    expect(find.textContaining('menu button'), findsNothing);
+    expect(inBannerIcon(Icons.notes), findsNothing);
+    expect(inBannerIcon(Icons.ios_share), findsNWidgets(2));
+  });
+
   testWidgets('a dismissal is remembered', (tester) async {
     await pumpApp(tester, installHint: addToHomeScreen, prefs: {InstallBannerDismissedNotifier.key: true});
     expect(find.text(title), findsNothing);

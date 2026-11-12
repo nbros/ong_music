@@ -1,9 +1,14 @@
 import 'dart:ui' show Color;
 
+import 'fullscreen.dart';
 import 'install_hint.dart';
 
 /// The browser, or null outside a browser (native apps).
 BrowserEnvironment? currentBrowser() => null;
+
+/// The full screen mode of the whole page, or null where the browser offers
+/// none (see `offersFullscreen`); always null outside a browser.
+PageFullscreen? pageFullscreen() => null;
 
 /// Registers the fonts that the web build needs and does not get by itself.
 Future<void> loadWebFonts() async {}

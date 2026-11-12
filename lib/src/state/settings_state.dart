@@ -96,8 +96,8 @@ class ThemePreferenceNotifier extends Notifier<ThemePreference> {
   }
 }
 
-/// The user's Twitch name (trimmed), empty when not set. Used to badge their
-/// own requests.
+/// The user's Twitch name (trimmed), empty when not set. Used to highlight
+/// their name in their own requests.
 final twitchNameProvider = NotifierProvider<TwitchNameNotifier, String>(TwitchNameNotifier.new);
 
 /// Persists the Twitch name under [key].

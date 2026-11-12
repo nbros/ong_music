@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -14,8 +15,10 @@ import 'package:ong_music/src/state/twitch_state.dart';
 import 'package:ong_music/src/ui/about_page.dart';
 import 'package:ong_music/src/ui/actions.dart';
 import 'package:ong_music/src/ui/app.dart';
+import 'package:ong_music/src/ui/fullscreen_button.dart';
 import 'package:ong_music/src/ui/install_banner.dart';
 import 'package:ong_music/src/ui/widgets.dart';
+import 'package:ong_music/src/web/fullscreen.dart';
 import 'package:ong_music/src/web/install_hint.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -32,7 +35,9 @@ final testNow = DateTime.utc(2026, 11, 12, 12);
 ///   "Gloria Gaynor - I Will Survive" (loop, shadowvanta)
 /// - highlights: #1 Song of Storms (video, jsbach64), #2 I Will Survive
 ///   (video, shadowvanta, vocals, notes), #3 How Far I'll Go (no video).
-Catalogue testCatalogue() => catalogueOf(
+///
+/// [moreHighlights] come after them.
+Catalogue testCatalogue({List<List<String>> moreHighlights = const []}) => catalogueOf(
   highlights: [
     hRow(
       order: '1',
@@ -55,6 +60,7 @@ Catalogue testCatalogue() => catalogueOf(
       notes: 'An improvised arrangement.',
     ),
     hRow(order: '3', title: "Moana - How Far I'll Go", genre: 'DISNEY', upload: '2024-03-07'),
+    ...moreHighlights,
   ],
   songs: [
     start('2024-03-01'),
@@ -190,7 +196,8 @@ class TestApp {
 
 /// Pumps the app with [state] (default: [testCatalogue], fetched 2 hours
 /// before [testNow]) on a 412 × 892 phone, as a native app unless
-/// [installHint] says otherwise. The time is [clock] (default: [testNow]);
+/// [installHint] or [fullscreen] (default: none, as in the native apps) say
+/// otherwise. The time is [clock] (default: [testNow]);
 /// Twitch is [twitch] (default: nothing known, never live).
 Future<TestApp> pumpApp(
   WidgetTester tester, {
@@ -204,6 +211,7 @@ Future<TestApp> pumpApp(
   DateTime Function()? clock,
   bool alwaysUse24HourFormat = false,
   bool startsInBackground = false,
+  PageFullscreen? fullscreen,
 }) async {
   // before the size: setting it makes MediaQuery read the clock format again
   tester.platformDispatcher.alwaysUse24HourFormatTestValue = alwaysUse24HourFormat;
@@ -238,6 +246,7 @@ Future<TestApp> pumpApp(
         twitchApiProvider.overrideWithValue(twitchApi),
         installHintProvider.overrideWithValue(installHint),
         startsInBackgroundProvider.overrideWithValue(startsInBackground),
+        pageFullscreenProvider.overrideWithValue(fullscreen),
         thumbnailImageProvider.overrideWithValue((url) => MemoryImage(transparentPng)),
         urlOpenerProvider.overrideWithValue((uri) async {
           if (!effects.openWorks) return false;
@@ -285,21 +294,95 @@ Future<void> tapVisible(WidgetTester tester, Finder finder) async {
   await tester.pumpAndSettle();
 }
 
-/// The filter chip whose label starts with [label] (labels may carry a count).
-/// A chip without visible label is found by its label for screen readers.
-Finder chip(String label) => find.byWidgetPredicate((w) {
-  if (w is! FilterChip) return false;
-  final labelWidget = w.label;
-  if (labelWidget is Semantics) return labelWidget.properties.label == label;
-  // a chip with an icon has a row for label: the icon, then the text
-  final text = labelWidget is Row ? labelWidget.children.last : labelWidget;
-  if (text is! Text) return false;
-  final plain = text.data ?? text.textSpan!.toPlainText();
-  return plain == label || plain.startsWith('$label  ');
-});
+/// The filter chip of [label] (a chip without visible label is found by its
+/// label for screen readers).
+Finder chip(String label) => find.descendant(
+  of: find.byWidgetPredicate((w) => w is ListChip && w.label == label),
+  matching: find.byType(FilterChip),
+);
+
+/// The text chip [label] shows: its label and count, or its count alone,
+/// without the unseen copy that gives the chip the width of its largest count.
+Finder chipText(String label) => find.descendant(
+  of: chip(label),
+  matching: find.byElementPredicate((e) {
+    if (e.widget is! Text) return false;
+    var shown = true;
+    e.visitAncestorElements((a) {
+      final w = a.widget;
+      if (w is Visibility && !w.visible) shown = false;
+      return shown && w is! FilterChip;
+    });
+    return shown;
+  }),
+);
+
+/// The plain text of [chipText].
+String chipTextOf(WidgetTester tester, String label) {
+  final text = tester.widget<Text>(chipText(label));
+  return text.data ?? text.textSpan!.toPlainText();
+}
 
 /// The rich text whose plain text is [text].
 Finder richText(String text) => find.byWidgetPredicate((w) => w is RichText && w.text.toPlainText() == text);
 
 /// The scroll view of the About tab.
 Finder aboutScrollable() => find.descendant(of: find.byType(AboutPage), matching: find.byType(Scrollable)).first;
+
+/// A browser that accepts full screen requests, unless [refuses].
+class FakeFullscreen implements PageFullscreen {
+  final _state = ValueNotifier(false);
+  bool refuses = false;
+  int enters = 0;
+  int exits = 0;
+
+  @override
+  ValueListenable<bool> get isFullscreen => _state;
+
+  /// What the browser does by itself: Escape, its own gesture.
+  set browserState(bool value) => _state.value = value;
+
+  @override
+  Future<bool> enter() async {
+    enters++;
+    if (refuses) return false;
+    _state.value = true;
+    return true;
+  }
+
+  @override
+  Future<void> exit() async {
+    exits++;
+    _state.value = false;
+  }
+}
+
+/// The full screen button of the visible tab.
+Finder fullscreenButton() => find.byType(FullscreenButton).hitTestable();
+
+/// The pill of the search field of the visible tab.
+Finder pill() => find.descendant(of: find.byType(ListSearchField).hitTestable(), matching: find.byType(Material)).first;
+
+/// Checks the place of the button for a content column from [left] to
+/// [right]: the pill keeps its left edge and ends 48 px from the right, the
+/// button is at the right edge, as big as the ⋮ buttons of the highlight rows
+/// ([column] px: 48 on a phone, 40 on desktop, which has no padded tap
+/// targets), centred on the pill.
+void expectLayout(
+  WidgetTester tester, {
+  required double left,
+  required double right,
+  double column = 48,
+  String? reason,
+}) {
+  final field = tester.getRect(pill());
+  final button = tester.getRect(fullscreenButton());
+  expect((field.left, field.right), (left + 16, right - 48), reason: reason);
+  expect(field.height, greaterThanOrEqualTo(52), reason: reason);
+  final size = Size.square(column);
+  expect(
+    button,
+    Rect.fromCenter(center: Offset(right - column / 2, field.center.dy), width: size.width, height: size.height),
+    reason: reason,
+  );
+}

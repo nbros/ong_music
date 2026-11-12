@@ -17,6 +17,38 @@ import 'package:ong_music/src/ui/widgets.dart';
 import 'fixtures.dart';
 import 'ui_harness.dart';
 
+/// [testCatalogue] with counts of one and two digits on the Highlights chips:
+/// 10 more Game OST highlights by jsbach64, 11 more Popular ones by
+/// shadowvanta. Totals: Popular 12, Game OST 11, Disney 1; jsbach64 11.
+Catalogue _countedCatalogue() => testCatalogue(
+  moreHighlights: [
+    for (var i = 0; i < 10; i++) hRow(order: '${10 + i}', title: 'Zelda - Track $i', requester: 'jsbach64'),
+    for (var i = 0; i < 11; i++)
+      hRow(order: '${20 + i}', title: 'Pop Song $i', genre: 'POPULAR MUSIC', requester: 'shadowvanta'),
+  ],
+);
+
+/// Pumps [_countedCatalogue] as jsbach64, the highlights titled [favourites]
+/// (default: Song of Storms and "Pop Song 0" to "Pop Song 9") in the
+/// favourites.
+Future<TestApp> _pumpCounted(WidgetTester tester, {bool Function(String title)? favourites, Size? size}) {
+  final catalogue = _countedCatalogue();
+  final favourite =
+      favourites ?? (t) => t == 'Zelda - Song of Storms' || t.startsWith('Pop Song') && t != 'Pop Song 10';
+  return pumpApp(
+    tester,
+    state: CatalogueState(catalogue: catalogue, fetchedAt: testNow.subtract(const Duration(hours: 2))),
+    prefs: {
+      'twitchName': 'jsbach64',
+      FavouritesNotifier.key: [
+        for (final h in catalogue.highlights)
+          if (favourite(h.title)) h.key,
+      ],
+    },
+    size: size ?? const Size(412, 892),
+  );
+}
+
 void main() {
   group('Highlights', () {
     testWidgets('lists the highlights, newest first, with genre chips', (tester) async {
@@ -32,43 +64,84 @@ void main() {
       expect(find.textContaining('highlights'), findsOneWidget);
     });
 
-    testWidgets('selecting a chip does not move or resize the chips', (tester) async {
+    testWidgets('selecting a chip or typing a search does not move or resize the chips', (tester) async {
+      // counts with one and two digits, that fall to 0 with "You", the star, a genre or a search;
       // wide enough for the chips tapped to be on screen (the content keeps 640 px)
-      await pumpApp(
-        tester,
-        prefs: {
-          'twitchName': 'jsbach64',
-          FavouritesNotifier.key: [testCatalogue().highlights.first.key],
+      await _pumpCounted(tester, size: const Size(700, 892));
+      (String, Future<void> Function()) tap(String label) => (
+        'tap on $label',
+        () async {
+          await tester.tap(chip(label));
+          await tester.pumpAndSettle();
         },
-        size: const Size(700, 892),
       );
-      for (final (tab, page, labels, taps) in [
+      (String, Future<void> Function()) type(String query) => (
+        'search "$query"',
+        () async {
+          await tester.enterText(searchField(), query);
+          await tester.pumpAndSettle();
+        },
+      );
+      for (final (tab, page, labels, counted, steps) in [
         (
           'Highlights',
           HighlightsPage,
-          ['All', 'Favourites', 'You', 'Game OST', 'Popular', 'Disney'],
-          ['Game OST', 'You', 'Popular', 'You', 'All', 'You', 'All', 'Favourites', 'You', 'Favourites', 'All'],
+          ['All', 'Favourites', 'You', 'Popular', 'Game OST', 'Disney'],
+          ['Favourites', 'You', 'Popular', 'Game OST', 'Disney'],
+          [
+            for (final label in ['Game OST', 'You', 'Popular', 'You', 'All', 'You', 'All', 'Favourites', 'You'])
+              tap(label),
+            tap('Favourites'),
+            type('song'),
+            tap('Popular'),
+            tap('Favourites'),
+            type('zelda'),
+            tap('You'),
+            type('zelda track 1'),
+            tap('All'),
+            type('moana'),
+            type(''),
+          ],
         ),
         (
           'Ong Log',
           OngLogPage,
           ['All', 'You', 'Piano', 'Loop', 'With video'],
-          ['You', 'Piano', 'You', 'All', 'You', 'All'],
+          <String>[],
+          [
+            for (final label in ['You', 'Piano', 'You', 'All', 'You', 'All']) tap(label),
+          ],
         ),
       ]) {
         await goToTab(tester, tab);
         List<Rect> rects() => [for (final label in labels) tester.getRect(chip(label))];
         final list = find.descendant(of: find.byType(page), matching: find.byType(CustomScrollView));
         final before = rects();
-        // with any chip selected, the list has one place, the same with "You" and the star as with the others
+        final shown = {
+          for (final label in counted) label: <String>{chipTextOf(tester, label)},
+        };
+        // with any filter, the list has one place, the same with "You" and the star as with the others
         final listTops = <double>{};
-        for (final (i, label) in taps.indexed) {
-          await tester.tap(chip(label));
-          await tester.pumpAndSettle();
-          expect(rects(), before, reason: '$tab: after tap $i on $label');
-          if (label != 'All') listTops.add(tester.getRect(list).top);
+        for (final (i, (step, run)) in steps.indexed) {
+          await run();
+          expect(rects(), before, reason: '$tab: after step $i, $step');
+          for (final label in counted) {
+            shown[label]!.add(chipTextOf(tester, label));
+          }
+          if (find.descendant(of: find.byType(page), matching: find.byType(CountLine)).evaluate().isNotEmpty) {
+            listTops.add(tester.getRect(list).top);
+          }
         }
         expect(listTops, hasLength(1), reason: tab);
+        // the counts did change, from two digits to one and to 0
+        for (final label in counted) {
+          expect(shown[label]!.length, greaterThan(1), reason: '$label: $shown');
+        }
+        if (tab == 'Highlights') {
+          expect(shown['Popular'], containsAll(['Popular  12', 'Popular  10', 'Popular  0']));
+          expect(shown['You'], containsAll(['You  11', 'You  1', 'You  0']));
+          expect(shown['Favourites'], containsAll(['11', '1', '0']));
+        }
       }
     });
 
@@ -375,19 +448,142 @@ void main() {
     });
   });
 
-  testWidgets('"You" badge on the user’s requests', (tester) async {
-    await pumpApp(tester, prefs: {'twitchName': 'JSBACH64'});
-    expect(find.text('YOU'), findsOneWidget); // Song of Storms highlight
-    await goToTab(tester, 'Ong Log');
-    expect(find.descendant(of: find.byType(PlayRow), matching: find.text('YOU')), findsNWidgets(2));
+  group('Highlights chip counts', () {
+    Map<String, String> counts(WidgetTester tester) => {
+      for (final label in ['Favourites', 'You', 'Popular', 'Game OST', 'Disney']) label: chipTextOf(tester, label),
+    };
+    Map<String, String> expected(int favourites, int you, int popular, int gameOst, int disney) => {
+      'Favourites': '$favourites',
+      'You': 'You  $you',
+      'Popular': 'Popular  $popular',
+      'Game OST': 'Game OST  $gameOst',
+      'Disney': 'Disney  $disney',
+    };
+    Future<void> tap(WidgetTester tester, String label) async {
+      await tester.tap(chip(label));
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> search(WidgetTester tester, String query) async {
+      await tester.enterText(searchField(), query);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('each count is what the list would show with that chip selected', (tester) async {
+      await _pumpCounted(tester, size: const Size(700, 892));
+      // nothing filtered: the totals
+      expect(counts(tester), expected(11, 11, 12, 11, 1));
+      // the search: "Pop Song …" and Song of Storms
+      await search(tester, 'song');
+      expect(counts(tester), expected(11, 1, 11, 1, 0));
+      expect(find.text('12 highlights'), findsOneWidget);
+      await search(tester, '');
+      // "You": the genres, the star; its own count is the length of the list
+      await tap(tester, 'You');
+      expect(counts(tester), expected(1, 11, 0, 11, 0));
+      expect(find.text('11 highlights'), findsOneWidget);
+      // "You" and the star
+      await tap(tester, 'Favourites');
+      expect(counts(tester), expected(1, 1, 0, 1, 0));
+      expect(find.text('1 highlight'), findsOneWidget);
+      // the star alone
+      await tap(tester, 'You');
+      expect(counts(tester), expected(11, 1, 10, 1, 0));
+      expect(find.text('11 highlights'), findsOneWidget);
+      // the star and a genre: the other genres do not follow the genre selected
+      await tap(tester, 'Popular');
+      expect(counts(tester), expected(10, 0, 10, 1, 0));
+      expect(find.text('10 highlights'), findsOneWidget);
+      // a genre alone
+      await tap(tester, 'Favourites');
+      expect(counts(tester), expected(10, 0, 12, 11, 1));
+      expect(find.text('12 highlights'), findsOneWidget);
+      // a genre and the search
+      await search(tester, 'pop song 1');
+      expect(counts(tester), expected(1, 0, 2, 0, 0));
+      expect(find.text('2 highlights'), findsOneWidget);
+      // the search, the genre, "You" and the star together
+      await search(tester, 'zelda');
+      await tap(tester, 'Game OST');
+      await tap(tester, 'You');
+      await tap(tester, 'Favourites');
+      expect(counts(tester), expected(1, 1, 0, 1, 0));
+      // "All" clears the chips, the search stays
+      await tap(tester, 'All');
+      expect(counts(tester), expected(1, 11, 0, 11, 0));
+    });
+
+    testWidgets('screen readers hear the count shown', (tester) async {
+      final semantics = tester.ensureSemantics();
+      await _pumpCounted(tester);
+      expect(tester.getSemantics(chip('Popular')), isSemantics(label: 'Popular  12', isButton: true));
+      expect(tester.getSemantics(chip('Favourites')), isSemantics(label: 'Favourites\n11', isButton: true));
+      await tap(tester, 'You');
+      expect(tester.getSemantics(chip('Popular')), isSemantics(label: 'Popular  0', isButton: true));
+      expect(tester.getSemantics(chip('Favourites')), isSemantics(label: 'Favourites\n1', isButton: true));
+      expect(
+        tester.getSemantics(chip('You')),
+        isSemantics(label: 'You  11', isButton: true, isSelected: true, hasSelectedState: true),
+      );
+      semantics.dispose();
+    });
+
+    testWidgets('a chip whose count falls to 0 stays in place, and can be selected', (tester) async {
+      await _pumpCounted(tester, size: const Size(700, 892));
+      final popular = tester.getRect(chip('Popular'));
+      await tap(tester, 'You');
+      expect(chipTextOf(tester, 'Popular'), 'Popular  0');
+      expect(tester.getRect(chip('Popular')), popular);
+      await tap(tester, 'Popular');
+      expect(chipTextOf(tester, 'Popular'), 'Popular  0');
+      expect(find.text('0 highlights'), findsOneWidget);
+      expect(find.text('No highlight matches'), findsOneWidget);
+      // the star and "You" at 0 stay too
+      await tap(tester, 'All');
+      await search(tester, 'moana');
+      expect((chipTextOf(tester, 'Favourites'), chipTextOf(tester, 'You')), ('0', 'You  0'));
+    });
+
+    testWidgets('the star chip gone, its filter no longer narrows the counts', (tester) async {
+      final app = await _pumpCounted(tester, favourites: (t) => t == 'Zelda - Song of Storms');
+      await tap(tester, 'Favourites');
+      expect(counts(tester), expected(1, 1, 0, 1, 0));
+      final container = ProviderScope.containerOf(tester.element(find.byType(OngMusicApp)));
+      final catalogue = container.read(currentCatalogueProvider)!;
+      await container
+          .read(favouritesProvider.notifier)
+          .toggle(catalogue.highlights.firstWhere((h) => h.title == 'Zelda - Song of Storms'));
+      await tester.pumpAndSettle();
+      expect(chip('Favourites'), findsNothing);
+      expect({
+        for (final label in ['You', 'Popular', 'Game OST', 'Disney']) label: chipTextOf(tester, label),
+      }, expected(0, 11, 12, 11, 1)..remove('Favourites'));
+      expect(find.byType(HighlightRow), findsWidgets);
+      expect(app.prefs.getStringList(FavouritesNotifier.key), isEmpty);
+    });
+
+    testWidgets('the "You" chip gone, its filter no longer narrows the counts', (tester) async {
+      await _pumpCounted(tester);
+      await tap(tester, 'You');
+      expect(chipTextOf(tester, 'Popular'), 'Popular  0');
+      // MannyHub requested a play, no highlight: a requester whose filter would keep nothing
+      for (final name in ['mannyhub', 'nobody']) {
+        await goToTab(tester, 'About');
+        await tester.enterText(find.descendant(of: find.byType(AboutPage), matching: find.byType(TextField)), name);
+        await tester.pump();
+        await goToTab(tester, 'Highlights');
+        expect(chip('You'), findsNothing, reason: name);
+        expect(
+          (chipTextOf(tester, 'Favourites'), chipTextOf(tester, 'Popular'), chipTextOf(tester, 'Game OST')),
+          ('11', 'Popular  12', 'Game OST  11'),
+          reason: name,
+        );
+      }
+    });
   });
 
   group('"You" chip', () {
     bool selected(WidgetTester tester, String label) => tester.widget<FilterChip>(chip(label)).selected;
-    String chipText(WidgetTester tester, String label) {
-      final text = (tester.widget<FilterChip>(chip(label)).label as Row).children.last as Text;
-      return text.data ?? text.textSpan!.toPlainText();
-    }
 
     Finder twitchNameField() => find.descendant(of: find.byType(AboutPage), matching: find.byType(TextField));
     ProviderContainer container(WidgetTester tester) =>
@@ -396,7 +592,7 @@ void main() {
     testWidgets('keeps only the user’s requests, placed and drawn like its neighbours', (tester) async {
       await pumpApp(tester, prefs: {'twitchName': 'JSBACH64'});
       // Highlights: after "All", before the genres, with its count
-      expect(chipText(tester, 'You'), 'You  1');
+      expect(chipTextOf(tester, 'You'), 'You  1');
       expect(find.descendant(of: chip('You'), matching: find.byIcon(Icons.person)), findsOneWidget);
       expect(tester.getRect(chip('You')).left, greaterThan(tester.getRect(chip('All')).right));
       expect(tester.getRect(chip('You')).right, lessThan(tester.getRect(chip('Game OST')).left));
@@ -411,7 +607,7 @@ void main() {
 
       // Ong Log: right after "All" too, before the types, without count
       await goToTab(tester, 'Ong Log');
-      expect(chipText(tester, 'You'), 'You');
+      expect(chipTextOf(tester, 'You'), 'You');
       expect(find.descendant(of: chip('You'), matching: find.byIcon(Icons.person)), findsOneWidget);
       expect(tester.getRect(chip('You')).left, greaterThan(tester.getRect(chip('All')).right));
       expect(tester.getRect(chip('You')).right, lessThan(tester.getRect(chip('Piano')).left));
@@ -600,11 +796,11 @@ void main() {
       final app = await pumpApp(tester);
       await goToTab(tester, 'About');
       final field = find.widgetWithText(TextField, 'Optional');
-      expect(find.text('Your own requests get a “You” badge in every list.'), findsOneWidget);
+      expect(find.text('Your name will show in orange in every list.'), findsOneWidget);
       await tester.enterText(field, 'JSBach64 ');
       await tester.pump();
       expect(
-        find.text('Found 2 requests by jsbach64 — look for the “You” badge. Tap the “You” chip to see only yours.'),
+        find.text('Found 2 requests by jsbach64, now in orange. Tap the “You” chip to see only yours.'),
         findsOneWidget,
       );
       expect(app.prefs.getString('twitchName'), 'JSBach64');
@@ -613,7 +809,7 @@ void main() {
       expect(find.text('No request under that name yet.'), findsOneWidget);
       await tester.enterText(field, '');
       await tester.pump();
-      expect(find.text('Your own requests get a “You” badge in every list.'), findsOneWidget);
+      expect(find.text('Your name will show in orange in every list.'), findsOneWidget);
       expect(app.prefs.containsKey('twitchName'), isFalse);
     });
 

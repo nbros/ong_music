@@ -3,6 +3,8 @@
 /// [ListMetrics] for its kind.
 library;
 
+import 'dart:math' as math;
+
 import 'package:material_ui/material_ui.dart';
 
 import '../data/catalogue.dart';
@@ -32,7 +34,7 @@ class HighlightRow extends StatelessWidget {
   /// Dates of this year are shown without it.
   final int currentYear;
 
-  /// The folded Twitch name of the user, for the "You" badge.
+  /// The folded Twitch name of the user, whose name is highlighted.
   final String me;
   final VoidCallback onTap;
   final VoidCallback onMore;
@@ -83,7 +85,7 @@ class HighlightRow extends StatelessWidget {
                           style: TextStyle(fontSize: 13, height: 18 / 13, color: scheme.onSurfaceVariant),
                         ),
                       const SizedBox(height: 2),
-                      Text.rich(
+                      RequesterText(
                         TextSpan(
                           children: [
                             inlineWidget(GenreDot(h.genre)),
@@ -91,13 +93,16 @@ class HighlightRow extends StatelessWidget {
                             if (requester != null) ...[
                               const TextSpan(text: ' · '),
                               personIcon(ong.on3),
-                              ...markedSpans(requester.name, tokens, ong.mark),
-                              if (catalogue.isRequester(requester.id, me)) inlineWidget(const Tag.you()),
+                              ...requesterSpans(
+                                context,
+                                requester.name,
+                                tokens,
+                                own: catalogue.isRequester(requester.id, me),
+                              ),
                             ],
                           ],
                         ),
                         maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(fontSize: 12, height: 16 / 12, color: ong.on3),
                       ),
                     ],
@@ -169,8 +174,7 @@ class PlayRow extends StatelessWidget {
       if (artist.isNotEmpty && requester != null) const TextSpan(text: ' · '),
       if (requester != null) ...[
         personIcon(scheme.onSurfaceVariant),
-        ...markedSpans(requester.name, tokens, ong.mark),
-        if (catalogue.isRequester(requester.id, me)) inlineWidget(const Tag.you()),
+        ...requesterSpans(context, requester.name, tokens, own: catalogue.isRequester(requester.id, me)),
       ],
       if (p.flag != PlayFlag.none) inlineWidget(Tag(p.flag.label)),
     ];
@@ -209,10 +213,9 @@ class PlayRow extends StatelessWidget {
                         ),
                       ),
                       if (subtitle.isNotEmpty)
-                        Text.rich(
+                        RequesterText(
                           TextSpan(children: subtitle),
                           maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                           style: TextStyle(fontSize: 13, height: 18 / 13, color: scheme.onSurfaceVariant),
                         ),
                     ],
@@ -259,25 +262,39 @@ class StreamHeader extends StatelessWidget {
             height: metrics.streamHeader,
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.baseline,
-                textBaseline: TextBaseline.alphabetic,
-                children: [
-                  Text(
-                    date,
-                    style: TextStyle(fontSize: 13, height: 20 / 13, fontWeight: FontWeight.w500, color: scheme.primary),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      size,
-                      textAlign: TextAlign.end,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 12, color: OngColors.of(context).on3),
+              // the date first, whole if it fits (cut on a narrow screen with very large text, never over the
+              // edge); the size of the stream gets what is left
+              child: LayoutBuilder(
+                builder: (context, constraints) => Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: math.max(0, constraints.maxWidth - 8)),
+                      child: Text(
+                        date,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 13,
+                          height: 20 / 13,
+                          fontWeight: FontWeight.w500,
+                          color: scheme.primary,
+                        ),
+                      ),
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        size,
+                        textAlign: TextAlign.end,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 12, color: OngColors.of(context).on3),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -332,17 +349,22 @@ class HistoryRow extends StatelessWidget {
                       style: TextStyle(fontSize: 15, height: 20 / 15, color: scheme.onSurface),
                     ),
                     const SizedBox(height: 2),
-                    Text.rich(
+                    RequesterText(
                       TextSpan(
                         children: [
-                          TextSpan(text: requester?.name ?? 'No requester'),
-                          if (requester != null && catalogue.isRequester(requester.id, me))
-                            inlineWidget(const Tag.you()),
+                          if (requester == null)
+                            const TextSpan(text: 'No requester')
+                          else
+                            ...requesterSpans(
+                              context,
+                              requester.name,
+                              const [],
+                              own: catalogue.isRequester(requester.id, me),
+                            ),
                           if (p.flag != PlayFlag.none) TextSpan(text: ' · ${p.flag.label}'),
                         ],
                       ),
                       maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(fontSize: 12, height: 16 / 12, color: ong.on3),
                     ),
                   ],

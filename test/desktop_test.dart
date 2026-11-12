@@ -25,6 +25,20 @@ void main() {
     expect(star.right, tester.getRect(find.widgetWithIcon(IconButton, Icons.copy)).right);
   }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
+  testWidgets('desktop browser: the full screen button at the right of the content column', (tester) async {
+    await pumpApp(tester, fullscreen: FakeFullscreen(), size: const Size(1600, 900));
+    // the column of 640 px in the middle
+    const left = (1600 - 640) / 2, right = left + 640;
+    for (final tab in ['Highlights', 'Ong Log']) {
+      await goToTab(tester, tab);
+      expectLayout(tester, left: left, right: right, column: 40, reason: tab);
+    }
+    await goToTab(tester, 'Highlights');
+    final details = tester.getRect(find.widgetWithIcon(IconButton, Icons.more_vert).first);
+    final button = tester.getRect(fullscreenButton());
+    expect((details.left, details.right), (button.left, button.right));
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
   testWidgets('desktop: a mouse wheel beside the content scrolls what is at that height', (tester) async {
     // a wide and low window: 380 px of empty space on each side of the content, and lists longer than the window
     await pumpApp(tester, size: const Size(1400, 320));

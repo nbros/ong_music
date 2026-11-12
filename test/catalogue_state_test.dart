@@ -8,6 +8,8 @@ import 'package:ong_music/src/data/repository.dart';
 import 'package:ong_music/src/data/sheet_cache.dart';
 import 'package:ong_music/src/data/sheets.dart';
 import 'package:ong_music/src/state/catalogue_state.dart';
+import 'package:ong_music/src/state/settings_state.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'fixtures.dart';
 
@@ -43,11 +45,12 @@ void main() {
   CatalogueState state() => container.read(catalogueProvider);
   String firstTitle() => state().catalogue!.highlights.first.title;
 
-  void startWith({CachedSheets? cached}) {
+  void startWith({CachedSheets? cached, SharedPreferences? prefs}) {
     cache = MemorySheetCache(cached);
     parses = 0;
     container = ProviderContainer.test(
       overrides: [
+        if (prefs != null) sharedPreferencesProvider.overrideWithValue(prefs),
         sheetFetcherProvider.overrideWithValue(fetcher),
         sheetCacheProvider.overrideWithValue(cache),
         catalogueParserProvider.overrideWithValue((sheets) {
@@ -703,8 +706,12 @@ void main() {
   });
 
   test('query providers follow the catalogue', () async {
+    // the counts of the Highlights chips read the Twitch name and the favourites
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
     startWith(
       cached: CachedSheets(sheets: sampleSheets(extraPlays: 2), fetchedAt: now),
+      prefs: prefs,
     );
     expect(container.read(playResultsProvider(const PlayFilter())), isNull);
     await notifier().idle;

@@ -1,10 +1,13 @@
+import 'dart:async';
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:web/web.dart' as web;
 
 import '../logger.dart';
+import 'fullscreen.dart';
 import 'install_hint.dart';
 
 /// The browser, or null outside a browser (native apps).
@@ -21,6 +24,110 @@ BrowserEnvironment? currentBrowser() {
     maxTouchPoints: navigator.maxTouchPoints,
     standalone: standalone,
   );
+}
+
+/// The full screen mode of the whole page (the document element, so that
+/// the sheets and the navigation bar are in it too), or null where the browser
+/// offers none (see [offersFullscreen]).
+///
+/// The standard Fullscreen API, or its `webkit` names in Safari before 16.4
+/// (macOS, and iPadOS from 12), whose request returns no promise.
+PageFullscreen? pageFullscreen() {
+  final root = web.document.documentElement as JSObject?;
+  if (root == null) return null;
+  bool function(String name) => root.getProperty<JSAny?>(name.toJS).isA<JSFunction>();
+  final names = function('requestFullscreen')
+      ? _FullscreenNames.standard
+      : function('webkitRequestFullscreen')
+      ? _FullscreenNames.webkit
+      : null;
+  if (names == null) return null;
+  final enabled = (web.document as JSObject).getProperty<JSAny?>(names.enabled.toJS);
+  final isEnabled = enabled.isA<JSBoolean>() && (enabled as JSBoolean).toDart;
+  if (!offersFullscreen(currentBrowser(), enabled: isEnabled)) return null;
+  return _BrowserFullscreen(root, names);
+}
+
+/// The names of one version of the Fullscreen API.
+enum _FullscreenNames {
+  standard('fullscreenEnabled', 'fullscreenElement', 'requestFullscreen', 'exitFullscreen', ''),
+  webkit(
+    'webkitFullscreenEnabled',
+    'webkitFullscreenElement',
+    'webkitRequestFullscreen',
+    'webkitExitFullscreen',
+    'webkit',
+  );
+
+  const _FullscreenNames(this.enabled, this.element, this.request, this.exit, String eventPrefix)
+    : change = '${eventPrefix}fullscreenchange',
+      error = '${eventPrefix}fullscreenerror';
+
+  final String enabled, element, request, exit, change, error;
+}
+
+/// [PageFullscreen] of the browser, with [_names]. One for the app's lifetime
+/// (its event listeners are never removed).
+final class _BrowserFullscreen implements PageFullscreen {
+  _BrowserFullscreen(this._root, this._names) {
+    web.document
+      ..addEventListener(_names.change, ((web.Event _) => _changed(true)).toJS)
+      ..addEventListener(_names.error, ((web.Event _) => _changed(false)).toJS);
+  }
+
+  final JSObject _root;
+  final _FullscreenNames _names;
+  late final _state = ValueNotifier<bool>(_current());
+
+  /// The outcome of a request without promise (Safari before 16.4): the next
+  /// change (accepted) or error (refused) event.
+  Completer<bool>? _outcome;
+
+  bool _current() => (web.document as JSObject).getProperty<JSAny?>(_names.element.toJS) != null;
+
+  void _changed(bool accepted) {
+    _state.value = _current();
+    final outcome = _outcome;
+    _outcome = null;
+    if (outcome != null && !outcome.isCompleted) outcome.complete(accepted);
+  }
+
+  @override
+  ValueListenable<bool> get isFullscreen => _state;
+
+  @override
+  Future<bool> enter() async {
+    if (_current()) return true;
+    final outcome = _outcome = Completer<bool>();
+    try {
+      // right away: the browser grants full screen only within the user gesture
+      final result = _root.callMethod<JSAny?>(_names.request.toJS);
+      if (result.isA<JSPromise>()) {
+        await (result as JSPromise<JSAny?>).toDart;
+        return true;
+      }
+      return await outcome.future.timeout(const Duration(seconds: 2), onTimeout: _current);
+    } catch (e) {
+      logger.w('The browser refused full screen', error: e);
+      return false;
+    } finally {
+      if (identical(_outcome, outcome)) _outcome = null;
+      _state.value = _current();
+    }
+  }
+
+  @override
+  Future<void> exit() async {
+    if (!_current()) return;
+    try {
+      final result = (web.document as JSObject).callMethod<JSAny?>(_names.exit.toJS);
+      if (result.isA<JSPromise>()) await (result as JSPromise<JSAny?>).toDart;
+    } catch (e) {
+      logger.w('Cannot leave full screen', error: e);
+    } finally {
+      _state.value = _current();
+    }
+  }
 }
 
 /// Registers Roboto Medium (a web-only asset) in the `Roboto` family, next to

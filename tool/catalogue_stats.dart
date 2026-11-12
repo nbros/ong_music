@@ -42,6 +42,31 @@ void main(List<String> args) {
     _time('plays "$q"', () => c.searchPlays(query: q).length, c);
     _time('highlights "$q"', () => c.searchHighlights(query: q).length, c);
   }
+  // the Highlights list and the counts of its chips: "You" is the requester of the most highlights, one highlight in
+  // 10 is a favourite
+  final me = c.requesters.reduce((a, b) => c.highlightRequestCount(a) >= c.highlightRequestCount(b) ? a : b);
+  final favourites = {for (var i = 0; i < c.highlightCount; i += 10) c.highlights[i].key};
+  for (final (q, genre, mine, stars) in [
+    ('', null, false, false),
+    ('a', null, false, false),
+    ('zelda', Genre.gameOst, true, true),
+    ('the legend of zelda', Genre.popular, false, true),
+  ]) {
+    _time(
+      'highlights "$q" ${genre?.label ?? ''}${mine ? ' You' : ''}${stars ? ' star' : ''} + counts',
+      () => c
+          .searchHighlights(
+            query: q,
+            genre: genre,
+            requesterId: me.id,
+            onlyRequester: mine,
+            keys: favourites,
+            onlyKeys: stars,
+          )
+          .length,
+      c,
+    );
+  }
   _time('plays (no query, Loop, with video)', () => c.searchPlays(type: PlayType.loop, withVideo: true).length, c);
   _time('countPlays "zelda"', () => c.countPlays('zelda'), c);
 }

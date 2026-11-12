@@ -88,6 +88,7 @@ class _HighlightsPageState extends ConsumerState<HighlightsPage> {
     // without own highlight there is no "You" chip, and no filter on it; the same for the favourites
     final mine = filter.mine && myCount > 0;
     final favourites = filter.favourites && favouriteCount > 0;
+    final counts = results.counts;
     return Column(
       children: [
         ListSearchField(
@@ -99,22 +100,33 @@ class _HighlightsPageState extends ConsumerState<HighlightsPage> {
         ChipRow(
           children: [
             ListChip(label: 'All', selected: filter.genre == null && !mine && !favourites, onTap: notifier.clearChips),
+            // each count is what the list would show with that chip selected, the rest unchanged; each chip keeps
+            // the width of its count over the whole catalogue, the largest it can show
             if (favouriteCount > 0)
               ListChip(
                 label: 'Favourites',
                 showLabel: false,
                 icon: Icons.star,
-                count: favouriteCount,
+                count: counts.keys,
+                maxCount: favouriteCount,
                 selected: favourites,
                 onTap: notifier.toggleFavourites,
               ),
             if (myCount > 0)
-              ListChip(label: 'You', icon: Icons.person, count: myCount, selected: mine, onTap: notifier.toggleMine),
+              ListChip(
+                label: 'You',
+                icon: Icons.person,
+                count: counts.requester,
+                maxCount: myCount,
+                selected: mine,
+                onTap: notifier.toggleMine,
+              ),
             for (final g in catalogue.highlightGenreCounts)
               if (g.genre != Genre.other)
                 ListChip(
                   label: g.genre.label,
-                  count: g.count,
+                  count: counts.genre(g.genre),
+                  maxCount: g.count,
                   selected: filter.genre == g.genre,
                   onTap: () => notifier.toggleGenre(g.genre),
                 ),

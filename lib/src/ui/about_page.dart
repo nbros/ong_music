@@ -67,10 +67,10 @@ final List<(String, String, Widget Function(BuildContext))> aboutLinks = [
 
 /// The helper text under the Twitch name field.
 String twitchNameHelp(String name, Catalogue? catalogue) {
-  if (name.trim().isEmpty) return 'Your own requests get a “You” badge in every list.';
+  if (name.trim().isEmpty) return 'Your name will show in orange in every list.';
   final requester = catalogue?.requesterNamed(name);
   if (requester == null || requester.requestCount == 0) return 'No request under that name yet.';
-  return 'Found ${plural(requester.requestCount, 'request')} by ${requester.name} — look for the “You” badge. '
+  return 'Found ${plural(requester.requestCount, 'request')} by ${requester.name}, now in orange. '
       'Tap the “You” chip to see only yours.';
 }
 
