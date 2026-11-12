@@ -28,7 +28,7 @@ Map<String, Object> _favourites(List<String> tracks) {
 /// Opens the sheet of the highlight row showing [track].
 Future<void> _openSheet(WidgetTester tester, String track) async {
   final row = find.ancestor(of: find.text(track), matching: find.byType(HighlightRow));
-  await tester.tap(find.descendant(of: row, matching: find.byTooltip('Details')));
+  await tester.tap(find.descendant(of: row, matching: detailsButtons()));
   await tester.pumpAndSettle();
 }
 

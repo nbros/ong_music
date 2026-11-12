@@ -131,10 +131,10 @@ class _ListFrameState extends ConsumerState<ListFrame> {
       children: [
         RefreshIndicator(
           onRefresh: _pullToRefresh,
-          child: Scrollbar(
+          // the pinned header in the lane of the list too: nothing under the bar
+          child: LaneScrollbar(
             controller: widget.controller,
             interactive: true,
-            thumbVisibility: alwaysShowScrollbars(context),
             child: Stack(
               children: [
                 CustomScrollView(

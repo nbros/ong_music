@@ -69,7 +69,7 @@ void main() {
     final app = await pumpApp(tester);
     app.effects.shareWorks = false;
     // the first highlight has no video
-    await tester.tap(find.byTooltip('Details').first);
+    await tester.tap(detailsButtons().first);
     await tester.pumpAndSettle();
     expect(find.byType(HighlightSheet), findsOneWidget);
     await tester.tap(find.byTooltip('Share'));
@@ -94,7 +94,7 @@ void main() {
   testWidgets('a short message shows above the keyboard', (tester) async {
     final app = await pumpApp(tester);
     app.effects.shareWorks = false;
-    await tester.tap(find.byTooltip('Details').at(1));
+    await tester.tap(detailsButtons().at(1));
     await tester.pumpAndSettle();
     Future<Rect> message() async {
       await tester.tap(find.byTooltip('Share'));

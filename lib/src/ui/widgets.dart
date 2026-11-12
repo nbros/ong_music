@@ -15,6 +15,7 @@ import '../data/model.dart';
 import '../data/text.dart';
 import 'format.dart';
 import 'fullscreen_button.dart';
+import 'layout.dart';
 import 'theme.dart';
 
 // ------------------------------------------------------------------ metrics
@@ -413,22 +414,20 @@ class VideoPill extends StatelessWidget {
       label: 'Watch the video',
       onTap: onPressed,
       excludeSemantics: true,
-      child: Tooltip(
-        message: 'Watch the video',
-        child: InkResponse(
-          onTap: onPressed,
-          radius: 24,
-          containedInkWell: false,
-          child: SizedBox(
-            width: 48,
-            height: 48,
-            child: Center(
-              child: Container(
-                width: 36,
-                height: 28,
-                decoration: BoxDecoration(color: scheme.primaryContainer, borderRadius: BorderRadius.circular(14)),
-                child: Icon(Icons.play_arrow, size: 18, color: scheme.onPrimaryContainer),
-              ),
+      // no tooltip: the label is for screen readers
+      child: InkResponse(
+        onTap: onPressed,
+        radius: 24,
+        containedInkWell: false,
+        child: SizedBox(
+          width: 48,
+          height: 48,
+          child: Center(
+            child: Container(
+              width: 36,
+              height: 28,
+              decoration: BoxDecoration(color: scheme.primaryContainer, borderRadius: BorderRadius.circular(14)),
+              child: Icon(Icons.play_arrow, size: 18, color: scheme.onPrimaryContainer),
             ),
           ),
         ),
@@ -585,6 +584,7 @@ class _ListSearchFieldState extends ConsumerState<ListSearchField> {
     final scheme = Theme.of(context).colorScheme;
     final controller = widget.controller;
     final fullscreen = ref.watch(pageFullscreenProvider);
+    final mouse = AppLayout.mouseOf(context);
     final field = Padding(
       padding: EdgeInsets.fromLTRB(16, 6, fullscreen == null ? 16 : 0, 2),
       child: CallbackShortcuts(
@@ -646,14 +646,23 @@ class _ListSearchFieldState extends ConsumerState<ListSearchField> {
                       ),
                     ),
                     ListenableBuilder(
-                      listenable: controller,
-                      builder: (context, _) => controller.text.isEmpty
-                          ? const SizedBox.shrink()
-                          : IconButton(
+                      listenable: Listenable.merge([controller, _focusNode]),
+                      builder: (context, _) => controller.text.isNotEmpty
+                          ? IconButton(
                               tooltip: 'Clear',
                               icon: Icon(Icons.close, color: scheme.onSurfaceVariant),
                               onPressed: _clear,
-                            ),
+                            )
+                          : mouse
+                          // the place of the key cap stays while the field has the focus: nothing moves
+                          ? Visibility(
+                              visible: !_focusNode.hasFocus,
+                              maintainSize: true,
+                              maintainAnimation: true,
+                              maintainState: true,
+                              child: const _KeyCap('/'),
+                            )
+                          : const SizedBox.shrink(),
                     ),
                   ],
                 ),
@@ -667,9 +676,10 @@ class _ListSearchFieldState extends ConsumerState<ListSearchField> {
     return Row(
       children: [
         Expanded(child: field),
-        // the vertical padding of the field: centred on the pill
+        // the vertical padding of the field: centred on the pill; over the ⋮ buttons, which the lane of the
+        // scroll bar keeps away from the edge with a mouse
         Padding(
-          padding: const EdgeInsets.only(top: 6, bottom: 2),
+          padding: EdgeInsets.only(top: 6, bottom: 2, right: mouse ? scrollbarLane : 0),
           child: SizedBox(
             width: 48,
             child: Align(
@@ -683,16 +693,63 @@ class _ListSearchFieldState extends ConsumerState<ListSearchField> {
   }
 }
 
+/// The key that puts the cursor in a search field, at its right end while it
+/// is empty and has not the focus, with a mouse: a hint for the eye only.
+class _KeyCap extends StatelessWidget {
+  const _KeyCap(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => ExcludeSemantics(
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Container(
+        constraints: const BoxConstraints(minWidth: 22),
+        decoration: BoxDecoration(
+          border: Border.all(color: Theme.of(context).colorScheme.outline),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Text(
+          label,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 12,
+            height: 20 / 12,
+            fontWeight: FontWeight.w500,
+            color: OngColors.of(context).on3,
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
 /// A horizontal scroll view that a mouse wheel scrolls too.
 ///
 /// A wheel turns vertically only, and a mouse cannot drag a scroll view on
 /// desktop: without this, what is past the right edge (most genre chips) would
 /// be out of reach of a mouse.
+///
+/// With [arrows] (labelled [previousLabel] and [nextLabel] for screen
+/// readers), a mouse also gets a button at each end that can scroll further,
+/// over a fade of the background: drawn over the row, they never move nor
+/// resize what is in it.
 class HorizontalScroll extends StatefulWidget {
-  const HorizontalScroll({super.key, required this.padding, required this.child});
+  const HorizontalScroll({
+    super.key,
+    required this.padding,
+    required this.child,
+    this.arrows = false,
+    this.previousLabel = 'Previous',
+    this.nextLabel = 'Next',
+  });
 
   final EdgeInsetsGeometry padding;
   final Widget child;
+  final bool arrows;
+  final String previousLabel;
+  final String nextLabel;
 
   @override
   State<HorizontalScroll> createState() => _HorizontalScrollState();
@@ -701,10 +758,35 @@ class HorizontalScroll extends StatefulWidget {
 class _HorizontalScrollState extends State<HorizontalScroll> {
   final _controller = ScrollController();
 
+  /// Whether the row can scroll back, and further.
+  bool _before = false;
+  bool _after = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addListener(_follow);
+  }
+
   @override
   void dispose() {
     _controller.dispose();
     super.dispose();
+  }
+
+  void _follow() {
+    if (!widget.arrows || !mounted || !_controller.hasClients) return;
+    final position = _controller.position;
+    if (!position.hasContentDimensions || !position.hasPixels) return;
+    // half a pixel of tolerance: a fractional end of the row does not show an arrow for nothing
+    final before = position.pixels > position.minScrollExtent + 0.5;
+    final after = position.pixels < position.maxScrollExtent - 0.5;
+    if (before != _before || after != _after) {
+      setState(() {
+        _before = before;
+        _after = after;
+      });
+    }
   }
 
   void _onPointerSignal(PointerSignalEvent event) {
@@ -718,19 +800,137 @@ class _HorizontalScrollState extends State<HorizontalScroll> {
     GestureBinding.instance.pointerSignalResolver.register(event, (_) => position.pointerScroll(delta.dy));
   }
 
+  /// Scrolls by seven tenths of the visible width, back or further.
+  void _page(int direction) {
+    if (!_controller.hasClients) return;
+    final position = _controller.position;
+    final target = (position.pixels + direction * 0.7 * position.viewportDimension).clamp(
+      position.minScrollExtent,
+      position.maxScrollExtent,
+    );
+    if (MediaQuery.disableAnimationsOf(context)) {
+      position.jumpTo(target);
+    } else {
+      position.animateTo(target, duration: const Duration(milliseconds: 300), curve: Curves.easeInOutCubic);
+    }
+  }
+
   @override
-  Widget build(BuildContext context) => Listener(
-    onPointerSignal: _onPointerSignal,
-    child: SingleChildScrollView(
-      controller: _controller,
-      scrollDirection: Axis.horizontal,
-      padding: widget.padding,
-      child: widget.child,
-    ),
-  );
+  Widget build(BuildContext context) {
+    final scroll = NotificationListener<ScrollMetricsNotification>(
+      // the row or its content changed size: an end may come into view or go out of it
+      onNotification: (_) {
+        _follow();
+        return false;
+      },
+      child: Listener(
+        onPointerSignal: _onPointerSignal,
+        child: SingleChildScrollView(
+          controller: _controller,
+          scrollDirection: Axis.horizontal,
+          padding: widget.padding,
+          child: widget.child,
+        ),
+      ),
+    );
+    if (!widget.arrows) return scroll;
+    final mouse = AppLayout.mouseOf(context);
+    return Stack(
+      children: [
+        scroll,
+        _ScrollArrow(
+          forward: false,
+          visible: mouse && _before,
+          label: widget.previousLabel,
+          onPressed: () => _page(-1),
+        ),
+        _ScrollArrow(forward: true, visible: mouse && _after, label: widget.nextLabel, onPressed: () => _page(1)),
+      ],
+    );
+  }
 }
 
-/// A horizontally scrolling row of filter chips.
+/// A button at an end of a [HorizontalScroll], over a fade of the background
+/// 64 px wide that lets the taps through to what is under it.
+class _ScrollArrow extends StatelessWidget {
+  const _ScrollArrow({required this.forward, required this.visible, required this.label, required this.onPressed});
+
+  final bool forward;
+  final bool visible;
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final side = forward ? Alignment.centerRight : Alignment.centerLeft;
+    return Positioned(
+      top: 0,
+      bottom: 0,
+      left: forward ? null : 0,
+      right: forward ? 0 : null,
+      width: 64,
+      child: Visibility(
+        visible: visible,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: side,
+                    end: forward ? Alignment.centerLeft : Alignment.centerRight,
+                    colors: [scheme.surface, scheme.surface, scheme.surface.withValues(alpha: 0)],
+                    stops: const [0, 0.55, 1],
+                  ),
+                ),
+              ),
+            ),
+            Align(
+              alignment: side,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Semantics(
+                  button: true,
+                  label: label,
+                  excludeSemantics: true,
+                  onTap: onPressed,
+                  child: Material(
+                    type: MaterialType.transparency,
+                    shape: const CircleBorder(),
+                    clipBehavior: Clip.antiAlias,
+                    child: InkWell(
+                      onTap: onPressed,
+                      // the keyboard has the chips themselves
+                      canRequestFocus: false,
+                      overlayColor: WidgetStateProperty.resolveWith(
+                        (states) => states.contains(WidgetState.pressed) || states.contains(WidgetState.hovered)
+                            ? scheme.onSurface.withValues(alpha: 0.1)
+                            : Colors.transparent,
+                      ),
+                      child: SizedBox.square(
+                        dimension: 32,
+                        child: Icon(
+                          forward ? Icons.chevron_right : Icons.chevron_left,
+                          size: 20,
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A horizontally scrolling row of filter chips, with arrows at its ends for
+/// a mouse.
 class ChipRow extends StatelessWidget {
   const ChipRow({super.key, required this.children});
 
@@ -739,6 +939,9 @@ class ChipRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) => HorizontalScroll(
     padding: const EdgeInsets.symmetric(horizontal: 16),
+    arrows: true,
+    previousLabel: 'Previous filters',
+    nextLabel: 'More filters',
     child: Row(spacing: 8, children: children),
   );
 }
@@ -973,10 +1176,52 @@ class EmptyMessage extends StatelessWidget {
   }
 }
 
-/// Whether scrollbars are always shown: on desktop (Windows app and desktop
-/// browsers), where a mouse may drag them. Phones, in the browser too, show
-/// them only while scrolling, over the content.
-bool alwaysShowScrollbars(BuildContext context) => switch (Theme.of(context).platform) {
-  TargetPlatform.windows || TargetPlatform.macOS || TargetPlatform.linux => true,
-  _ => false,
-};
+/// The vertical scroll bar of [child]: a scroll view, or a stack of one and
+/// what is drawn over it (a pinned header).
+///
+/// With a mouse, which may drag it, the bar is always shown, in a lane of its
+/// own: [child] ends [scrollbarLane] px before the right edge, so that nothing
+/// lies under the bar. With touch, it shows while scrolling, over the content,
+/// as it always has on phones. The pointer may change while the user scrolls:
+/// the same widgets either way, the scroll position stays.
+class LaneScrollbar extends StatelessWidget {
+  const LaneScrollbar({super.key, this.controller, this.interactive, required this.child});
+
+  /// The controller of the scroll view, or null for the primary one.
+  final ScrollController? controller;
+  final bool? interactive;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final mouse = AppLayout.mouseOf(context);
+    final theme = ScrollbarTheme.of(context);
+    final color = Theme.of(context).colorScheme.onSurfaceVariant;
+    return ScrollbarTheme(
+      // a thumb of 6 px in the middle of its lane, brighter under the mouse
+      data: mouse
+          ? theme.copyWith(
+              thickness: const WidgetStatePropertyAll(6),
+              crossAxisMargin: (scrollbarLane - 6) / 2,
+              radius: const Radius.circular(3),
+              minThumbLength: 48,
+              thumbColor: WidgetStateProperty.resolveWith(
+                (states) => color.withValues(
+                  alpha: states.contains(WidgetState.hovered) || states.contains(WidgetState.dragged) ? 0.7 : 0.45,
+                ),
+              ),
+            )
+          : theme,
+      child: Scrollbar(
+        controller: controller,
+        // a bar shown for a mouse can be dragged with it: on Android the Material bar is not draggable by default
+        interactive: interactive ?? (mouse ? true : null),
+        thumbVisibility: mouse,
+        child: Padding(
+          padding: EdgeInsets.only(right: mouse ? scrollbarLane : 0),
+          child: child,
+        ),
+      ),
+    );
+  }
+}

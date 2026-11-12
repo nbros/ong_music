@@ -202,7 +202,7 @@ void main() {
   testWidgets('a screen reader hears "Watch on YouTube" once in a highlight sheet', (tester) async {
     final handle = tester.ensureSemantics();
     await pumpApp(tester);
-    await tester.tap(find.byTooltip('Details').at(1));
+    await tester.tap(detailsButtons().at(1));
     await tester.pumpAndSettle();
     expect(find.byType(HighlightSheet), findsOneWidget);
     // the thumbnail opens the video too, but is not a second button of the same name
@@ -212,7 +212,7 @@ void main() {
 
   testWidgets('the video thumbnail of a highlight sheet shows the click cursor', (tester) async {
     await pumpApp(tester);
-    await tester.tap(find.byTooltip('Details').at(1));
+    await tester.tap(detailsButtons().at(1));
     await tester.pumpAndSettle();
     final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
     addTearDown(gesture.removePointer);
@@ -227,7 +227,7 @@ void main() {
     testWidgets('a message fades out instead of vanishing', (tester) async {
       final app = await pumpApp(tester);
       app.effects.shareWorks = false;
-      await tester.tap(find.byTooltip('Details').at(1));
+      await tester.tap(detailsButtons().at(1));
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Share'));
       await tester.pump();
@@ -248,7 +248,7 @@ void main() {
       );
       addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
       final app = await pumpApp(tester);
-      await tester.tap(find.byTooltip('Details').at(1));
+      await tester.tap(detailsButtons().at(1));
       await tester.pump();
       await tester.pump();
       final shown = tester.getRect(find.byType(HighlightSheet));

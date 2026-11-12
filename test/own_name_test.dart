@@ -115,7 +115,7 @@ void main() {
     testWidgets('highlighted in the sheets, the others untouched', (tester) async {
       await pumpApp(tester, prefs: {'twitchName': 'jsbach64'});
       // highlight sheet: "Requested by …"
-      await tester.tap(find.byTooltip('Details').at(2)); // Song of Storms
+      await tester.tap(detailsButtons().at(2)); // Song of Storms
       await tester.pumpAndSettle();
       final requested = _line('Requested by', within: find.byType(HighlightSheet));
       expect(
@@ -125,7 +125,7 @@ void main() {
       _expectHighlighted(tester, requested, 'jsbach64');
       Navigator.of(tester.element(find.byType(HighlightSheet))).pop();
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('Details').at(1)); // I Will Survive
+      await tester.tap(detailsButtons().at(1)); // I Will Survive
       await tester.pumpAndSettle();
       _expectPlain(tester, _line('Requested by', within: find.byType(HighlightSheet)), 'shadowvanta');
       Navigator.of(tester.element(find.byType(HighlightSheet))).pop();
@@ -179,7 +179,7 @@ void main() {
       await tester.enterText(searchField(), 'bach');
       await tester.pumpAndSettle();
       expect(label(find.byType(HighlightRow)), endsWith('Game OST · 2 Mar 2024 · \njsbach64, you'));
-      await tester.tap(find.byTooltip('Details'));
+      await tester.tap(detailsButtons());
       await tester.pumpAndSettle();
       expect(find.bySemanticsLabel('Requested by jsbach64, you\n2 requests in the Ong Log'), findsOneWidget);
       semantics.dispose();

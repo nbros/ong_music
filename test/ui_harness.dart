@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -17,6 +18,8 @@ import 'package:ong_music/src/ui/actions.dart';
 import 'package:ong_music/src/ui/app.dart';
 import 'package:ong_music/src/ui/fullscreen_button.dart';
 import 'package:ong_music/src/ui/install_banner.dart';
+import 'package:ong_music/src/ui/layout.dart';
+import 'package:ong_music/src/ui/nav_rail.dart';
 import 'package:ong_music/src/ui/widgets.dart';
 import 'package:ong_music/src/web/fullscreen.dart';
 import 'package:ong_music/src/web/install_hint.dart';
@@ -207,6 +210,10 @@ class TestApp {
 /// [installHint] or [fullscreen] (default: none, as in the native apps) say
 /// otherwise. The time is [clock] (default: [testNow]);
 /// Twitch is [twitch] (default: nothing known, never live).
+///
+/// The pointer follows the pointer events from the guess of the platform, as
+/// in the app, unless [pointer] pins it (whatever the test taps with: a tap of
+/// a test is a touch).
 Future<TestApp> pumpApp(
   WidgetTester tester, {
   CatalogueState? state,
@@ -220,6 +227,7 @@ Future<TestApp> pumpApp(
   bool alwaysUse24HourFormat = false,
   bool startsInBackground = false,
   PageFullscreen? fullscreen,
+  PointerKind? pointer,
 }) async {
   // before the size: setting it makes MediaQuery read the clock format again
   tester.platformDispatcher.alwaysUse24HourFormatTestValue = alwaysUse24HourFormat;
@@ -255,6 +263,7 @@ Future<TestApp> pumpApp(
         installHintProvider.overrideWithValue(installHint),
         startsInBackgroundProvider.overrideWithValue(startsInBackground),
         pageFullscreenProvider.overrideWithValue(fullscreen),
+        if (pointer != null) pointerProvider.overrideWith(() => PinnedPointer(pointer)),
         thumbnailImageProvider.overrideWithValue((url) => MemoryImage(transparentPng)),
         urlOpenerProvider.overrideWithValue((uri) async {
           if (!effects.openWorks) return false;
@@ -278,11 +287,37 @@ Future<TestApp> pumpApp(
   return TestApp(notifier, effects, preferences, twitchApi);
 }
 
-/// Taps the navigation bar destination [label].
+/// A pointer that stays [kind] whatever the pointer events.
+class PinnedPointer extends PointerNotifier {
+  PinnedPointer(this.kind);
+
+  final PointerKind kind;
+
+  @override
+  PointerKind build() => kind;
+
+  @override
+  void saw(PointerDeviceKind kind) {}
+}
+
+/// The navigation: the bottom bar of a compact window, or the rail of the others.
+Finder navigation() => find.byWidgetPredicate((w) => w is NavigationBar || w is AppNavigationRail);
+
+/// Taps the navigation destination [label] (of the bar or of the rail).
 Future<void> goToTab(WidgetTester tester, String label) async {
-  await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text(label)));
+  await tester.tap(find.descendant(of: navigation(), matching: find.text(label)));
   await tester.pumpAndSettle();
 }
+
+/// The index of the selected navigation destination.
+int selectedTab(WidgetTester tester) => switch (tester.widget(navigation())) {
+  NavigationBar(:final selectedIndex) || AppNavigationRail(:final selectedIndex) => selectedIndex,
+  _ => throw StateError('no navigation'),
+};
+
+/// The ⋮ buttons of the highlight rows, which open the sheet of their row.
+Finder detailsButtons() =>
+    find.byWidgetPredicate((w) => w is IconButton && w.icon is Icon && (w.icon as Icon).semanticLabel == 'Details');
 
 /// The search field of the visible tab.
 Finder searchField() =>

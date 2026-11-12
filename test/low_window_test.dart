@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:ong_music/src/ui/highlights_page.dart';
+import 'package:ong_music/src/ui/layout.dart';
 import 'package:ong_music/src/ui/ong_log_page.dart';
 import 'package:ong_music/src/ui/rows.dart';
 import 'package:ong_music/src/ui/sheets.dart';
@@ -77,19 +78,20 @@ void main() {
     testWidgets('phone held sideways: the title and the buttons show under a lower thumbnail', (tester) async {
       await pumpApp(tester, size: _sideways);
       // the second highlight: the first has no video
-      await tester.tap(find.byTooltip('Details').at(1));
+      await tester.tap(detailsButtons().at(1));
       await tester.pumpAndSettle();
       final picture = tester.getRect(thumbnail());
       expect(picture.height, closeTo(_sideways.height * 0.4, 0.5));
       expect(picture.width / picture.height, closeTo(16 / 9, 0.01));
-      expect(picture.center.dx, _sideways.width / 2);
+      // in the middle of the sheet, which is in the middle of what the navigation rail leaves
+      expect(picture.center.dx, railWidth + (_sideways.width - railWidth) / 2);
       expect(find.text('Watch on YouTube').hitTestable(), findsOneWidget);
       expect(find.byTooltip('Share').hitTestable(), findsOneWidget);
     });
 
     testWidgets('phone held upright: the thumbnail as wide as the sheet, as before', (tester) async {
       await pumpApp(tester);
-      await tester.tap(find.byTooltip('Details').at(1));
+      await tester.tap(detailsButtons().at(1));
       await tester.pumpAndSettle();
       final picture = tester.getRect(thumbnail());
       expect((picture.left, picture.right), (20, 412 - 20));
@@ -98,7 +100,7 @@ void main() {
 
     testWidgets('a window turned under an open sheet: the sheet follows, a strip stays to close it', (tester) async {
       await pumpApp(tester);
-      await tester.tap(find.byTooltip('Details').at(1));
+      await tester.tap(detailsButtons().at(1));
       await tester.pumpAndSettle();
       Rect sheet() => tester.getRect(find.byType(BottomSheet));
       expect(sheet().bottom, 892);

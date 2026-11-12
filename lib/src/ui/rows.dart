@@ -114,10 +114,10 @@ class HighlightRow extends StatelessWidget {
           Positioned(
             top: 0,
             right: 0,
+            // no tooltip: a name for screen readers only
             child: IconButton(
-              tooltip: 'Details',
               onPressed: onMore,
-              icon: Icon(Icons.more_vert, color: scheme.onSurfaceVariant),
+              icon: Icon(Icons.more_vert, color: scheme.onSurfaceVariant, semanticLabel: 'Details'),
             ),
           ),
         ],

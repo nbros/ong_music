@@ -20,6 +20,7 @@ import '../state/catalogue_state.dart';
 import '../state/settings_state.dart';
 import 'actions.dart';
 import 'format.dart';
+import 'layout.dart';
 import 'rows.dart';
 import 'theme.dart';
 import 'view_state.dart';
@@ -33,23 +34,70 @@ Future<void> showDetailSheet(BuildContext context, WidgetBuilder builder) {
   // On a phone, the search field may have the focus with its keyboard closed, to read the list: the focus, given
   // back when the sheet closes, would bring the keyboard up over the list after every sheet.
   if (_hasScreenKeyboard) FocusManager.instance.primaryFocus?.unfocus();
-  return showModalBottomSheet<void>(
-    context: host,
-    isScrollControlled: true,
-    showDragHandle: true,
-    useSafeArea: true,
-    constraints: const BoxConstraints(maxWidth: 640),
-    // no slide when the system asks for less motion
-    sheetAnimationStyle: MediaQuery.disableAnimationsOf(host) ? AnimationStyle.noAnimation : null,
-    // At most nine tenths of the window, drag handle included: read at each layout, not once on opening, for a
-    // window that is turned or resized under the sheet.
-    builder: (context) => ConstrainedBox(
-      constraints: BoxConstraints(
-        maxHeight: math.max(0, MediaQuery.sizeOf(context).height * 0.9 - kMinInteractiveDimension),
+  final localizations = MaterialLocalizations.of(host);
+  return navigator.push(
+    _DetailSheetRoute(
+      capturedThemes: InheritedTheme.capture(from: host, to: navigator.context),
+      barrierLabel: localizations.scrimLabel,
+      barrierOnTapHint: localizations.scrimOnTapHint(localizations.bottomSheetLabel),
+      modalBarrierColor: Theme.of(host).bottomSheetTheme.modalBarrierColor,
+      isScrollControlled: true,
+      showDragHandle: true,
+      useSafeArea: true,
+      constraints: const BoxConstraints(maxWidth: 640),
+      // no slide when the system asks for less motion
+      sheetAnimationStyle: MediaQuery.disableAnimationsOf(host) ? AnimationStyle.noAnimation : null,
+      // At most nine tenths of the window, drag handle included: read at each layout, not once on opening, for a
+      // window that is turned or resized under the sheet.
+      builder: (context) => ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: math.max(0, MediaQuery.sizeOf(context).height * 0.9 - kMinInteractiveDimension),
+        ),
+        child: builder(context),
       ),
-      child: builder(context),
     ),
   );
+}
+
+/// The route of a detail sheet: a modal bottom sheet ([showModalBottomSheet]
+/// with the arguments above) centred on the content beside the navigation
+/// rail, not on the window, when there is a rail. The scrim covers the whole
+/// window.
+class _DetailSheetRoute extends ModalBottomSheetRoute<void> {
+  _DetailSheetRoute({
+    required super.builder,
+    required super.capturedThemes,
+    required super.barrierLabel,
+    required super.barrierOnTapHint,
+    required super.modalBarrierColor,
+    required super.isScrollControlled,
+    required super.showDragHandle,
+    required super.useSafeArea,
+    required super.constraints,
+    required super.sheetAnimationStyle,
+  });
+
+  @override
+  Widget buildPage(BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation) =>
+      _BesideRail(child: super.buildPage(context, animation, secondaryAnimation));
+}
+
+/// Lays [child] out right of the navigation rail, followed live (a window
+/// resized under the sheet), with the safe area on the left taken by the rail.
+class _BesideRail extends StatelessWidget {
+  const _BesideRail({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final left = AppLayout.contentLeftOf(context);
+    // the same widgets in every mode: the sheet keeps its state when the mode changes under it
+    return Padding(
+      padding: EdgeInsets.only(left: left),
+      child: MediaQuery.removePadding(context: context, removeLeft: left > 0, child: child),
+    );
+  }
 }
 
 /// Phones and tablets, in the apps and in their browsers.
@@ -95,9 +143,8 @@ class _SheetBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bottom = MediaQuery.viewPaddingOf(context).bottom;
-    return Scrollbar(
+    return LaneScrollbar(
       controller: controller,
-      thumbVisibility: alwaysShowScrollbars(context),
       child: CustomScrollView(
         controller: controller,
         // without a controller, the scrollbar follows the primary one: desktop does not attach it by itself

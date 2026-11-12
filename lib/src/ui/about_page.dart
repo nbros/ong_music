@@ -82,8 +82,7 @@ class AboutPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
     final ong = OngColors.of(context);
-    return Scrollbar(
-      thumbVisibility: alwaysShowScrollbars(context),
+    return LaneScrollbar(
       child: ListView(
         // the scrollbar follows the primary scroll controller: desktop does not attach it by itself
         primary: true,

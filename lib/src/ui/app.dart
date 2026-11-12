@@ -13,13 +13,26 @@ import '../web/web_platform.dart';
 import 'about_page.dart';
 import 'highlights_page.dart';
 import 'install_banner.dart';
+import 'layout.dart';
+import 'nav_rail.dart';
 import 'ong_log_page.dart';
 import 'theme.dart';
 import 'view_state.dart';
 import 'widgets.dart';
 
-/// Content wider than this is centred (desktop window, browser, tablet).
+/// The widest the content is in a compact window, and the About tab in any
+/// window: wider windows centre it.
 const double maxContentWidth = 640;
+
+/// The widest the column of a list tab is beside the navigation rail.
+const double maxListColumnWidth = 720;
+
+/// The three destinations, in the order of [AppTab].
+const List<NavDestination> _destinations = [
+  (icon: Icons.video_library, label: 'Highlights'),
+  (icon: Icons.queue_music, label: 'Ong Log'),
+  (icon: Icons.person, label: 'About'),
+];
 
 final _lightTheme = buildTheme(Brightness.light);
 final _darkTheme = buildTheme(Brightness.dark);
@@ -68,9 +81,11 @@ class _OngMusicAppState extends ConsumerState<OngMusicApp> {
       themeMode: ref.watch(themePreferenceProvider).themeMode,
       theme: _lightTheme,
       darkTheme: _darkTheme,
-      builder: (context, child) => _browserUses24HourClock == true
-          ? MediaQuery(data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true), child: child!)
-          : child!,
+      builder: (context, child) => AppLayout(
+        child: _browserUses24HourClock == true
+            ? MediaQuery(data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true), child: child!)
+            : child!,
+      ),
       home: const AppShell(),
     );
   }
@@ -85,14 +100,30 @@ final startsInBackgroundProvider = Provider<bool>((ref) {
   return state == AppLifecycleState.hidden || state == AppLifecycleState.paused || pageIsHidden();
 });
 
-/// The navigation bar and the three tabs, each one kept alive with its query,
-/// filters and scroll position.
-class AppShell extends ConsumerWidget {
+/// The navigation (a bar at the bottom of a compact window, a rail on the
+/// left of the others) and the three tabs, each one kept alive with its query,
+/// filters and scroll position, whatever the window mode.
+class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AppShell> createState() => _AppShellState();
+}
+
+class _AppShellState extends ConsumerState<AppShell> {
+  // Each page keeps its state (search field, scroll positions) wherever a mode change puts it.
+  final _pages = {for (final tab in AppTab.values) tab: GlobalKey(debugLabel: tab.name)};
+
+  void _select(int index) {
+    FocusManager.instance.primaryFocus?.unfocus();
+    ref.read(selectedTabProvider.notifier).select(AppTab.values[index]);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final tab = ref.watch(selectedTabProvider);
+    final mode = AppLayout.modeOf(context);
+    final rail = mode.hasRail;
     final theme = Theme.of(context);
     // web: theme-color tags of index.html, color-scheme and page background in the app theme, which may
     // differ from the system one (no-op in the native apps)
@@ -116,70 +147,104 @@ class AppShell extends ConsumerWidget {
               MediaQuery.viewInsetsOf(context).bottom > 0 &&
               MediaQuery.sizeOf(context).height < InstallBanner.minHeight,
           child: Scaffold(
-            body: SafeArea(
-              bottom: false,
-              child: _ContentColumn(
-                child: Column(
-                  children: [
-                    const InstallBanner(),
-                    Expanded(
-                      child: _SearchShortcut(
-                        child: IndexedStack(
-                          index: tab.index,
-                          children: [
-                            for (final t in AppTab.values)
-                              TickerMode(
-                                enabled: t == tab,
-                                child: switch (t) {
-                                  AppTab.highlights => const HighlightsPage(),
-                                  AppTab.ongLog => const OngLogPage(),
-                                  AppTab.about => const AboutPage(),
-                                },
-                              ),
+            body: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (rail)
+                  AppNavigationRail(
+                    destinations: _destinations,
+                    selectedIndex: tab.index,
+                    onDestinationSelected: _select,
+                  ),
+                Expanded(
+                  // the rail takes the safe area on the left (a camera cutout of a phone held sideways)
+                  child: MediaQuery.removePadding(
+                    context: context,
+                    removeLeft: rail,
+                    child: SafeArea(bottom: false, child: _content(tab, rail)),
+                  ),
+                ),
+              ],
+            ),
+            bottomNavigationBar: rail
+                ? null
+                : ColoredBox(
+                    color: theme.colorScheme.surfaceContainer,
+                    child: Center(
+                      heightFactor: 1,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: maxContentWidth),
+                        child: NavigationBar(
+                          selectedIndex: tab.index,
+                          onDestinationSelected: _select,
+                          destinations: [
+                            // no tooltip: it would only repeat the label under the icon
+                            for (final d in _destinations)
+                              NavigationDestination(icon: Icon(d.icon), label: d.label, tooltip: ''),
                           ],
                         ),
                       ),
                     ),
-                  ],
-                ),
-              ),
-            ),
-            bottomNavigationBar: ColoredBox(
-              color: theme.colorScheme.surfaceContainer,
-              child: Center(
-                heightFactor: 1,
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: maxContentWidth),
-                  child: NavigationBar(
-                    selectedIndex: tab.index,
-                    onDestinationSelected: (i) {
-                      FocusManager.instance.primaryFocus?.unfocus();
-                      ref.read(selectedTabProvider.notifier).select(AppTab.values[i]);
-                    },
-                    destinations: const [
-                      NavigationDestination(icon: Icon(Icons.video_library), label: 'Highlights'),
-                      NavigationDestination(icon: Icon(Icons.queue_music), label: 'Ong Log'),
-                      NavigationDestination(icon: Icon(Icons.person), label: 'About'),
-                    ],
                   ),
-                ),
-              ),
-            ),
           ),
         ),
       ),
     );
   }
+
+  /// The install banner over the tab on screen, each tab in its column.
+  ///
+  /// The place where the detail pane of an expanded window goes: today every
+  /// mode shows a single column.
+  Widget _content(AppTab tab, bool rail) {
+    final listWidth = rail ? maxListColumnWidth : maxContentWidth;
+    return Column(
+      children: [
+        // as wide as the lists, whatever the tab: it does not change size when the tab changes
+        Center(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: listWidth),
+            child: const InstallBanner(),
+          ),
+        ),
+        Expanded(
+          child: _SearchShortcut(
+            child: IndexedStack(
+              index: tab.index,
+              children: [
+                for (final t in AppTab.values)
+                  TickerMode(
+                    enabled: t == tab,
+                    child: _ContentColumn(
+                      maxWidth: t == AppTab.about ? maxContentWidth : listWidth,
+                      child: KeyedSubtree(
+                        key: _pages[t],
+                        child: switch (t) {
+                          AppTab.highlights => const HighlightsPage(),
+                          AppTab.ongLog => const OngLogPage(),
+                          AppTab.about => const AboutPage(),
+                        },
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }
 
-/// The content, centred and at most [maxContentWidth] wide.
+/// A column centred and at most [maxWidth] wide.
 ///
 /// In a wider window, a mouse wheel turned in the empty space beside the
-/// content scrolls what is at that height in it, as on a web page: without
+/// column scrolls what is at that height in it, as on a web page: without
 /// this, the wheel would do nothing there.
 class _ContentColumn extends StatefulWidget {
-  const _ContentColumn({required this.child});
+  const _ContentColumn({required this.maxWidth, required this.child});
 
+  final double maxWidth;
   final Widget child;
 
   @override
@@ -210,7 +275,7 @@ class _ContentColumnState extends State<_ContentColumn> {
     child: Center(
       child: ConstrainedBox(
         key: _content,
-        constraints: const BoxConstraints(maxWidth: maxContentWidth),
+        constraints: BoxConstraints(maxWidth: widget.maxWidth),
         child: widget.child,
       ),
     ),

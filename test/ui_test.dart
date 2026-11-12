@@ -245,7 +245,7 @@ void main() {
       final app = await pumpApp(tester);
       await goToTab(tester, 'Ong Log');
       final storms = find.ancestor(of: find.text('Song of Storms').hitTestable(), matching: find.byType(PlayRow));
-      await tester.tap(find.descendant(of: storms, matching: find.byTooltip('Watch the video')));
+      await tester.tap(find.descendant(of: storms, matching: find.byType(VideoPill)));
       await tester.pumpAndSettle();
       expect(app.effects.opened.single.toString(), 'https://www.youtube.com/watch?v=aaaaaaaaaaa');
       await tester.tap(find.text('Fri 1 Mar 2024'));
@@ -327,7 +327,7 @@ void main() {
   group('Sheets', () {
     testWidgets('highlight sheet: facts, actions, links', (tester) async {
       final app = await pumpApp(tester);
-      await tester.tap(find.byTooltip('Details').at(1)); // I Will Survive
+      await tester.tap(detailsButtons().at(1)); // I Will Survive
       await tester.pumpAndSettle();
       expect(find.text('Popular · Highlight #2'), findsOneWidget);
       expect(find.text('Played live on Sat 2 Mar 2024'), findsOneWidget);
@@ -381,7 +381,7 @@ void main() {
 
     testWidgets('highlight without video: "Copy" copies the title alone, as "Share" shares it', (tester) async {
       final app = await pumpApp(tester);
-      await tester.tap(find.byTooltip('Details').first);
+      await tester.tap(detailsButtons().first);
       await tester.pumpAndSettle();
       expect(find.text('Video unavailable'), findsOneWidget);
       await tester.tap(find.byTooltip('Share'));
@@ -397,7 +397,7 @@ void main() {
 
     testWidgets('highlight sheet → song sheet → stream sheet, each replacing the last', (tester) async {
       await pumpApp(tester);
-      await tester.tap(find.byTooltip('Details').at(1));
+      await tester.tap(detailsButtons().at(1));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Played 2 times live'));
       await tester.pumpAndSettle();
@@ -420,7 +420,7 @@ void main() {
 
     testWidgets('played-live fact opens the stream with that play tinted', (tester) async {
       await pumpApp(tester);
-      await tester.tap(find.byTooltip('Details').at(2)); // Song of Storms
+      await tester.tap(detailsButtons().at(2)); // Song of Storms
       await tester.pumpAndSettle();
       await tester.tap(find.text('Played live on Sat 2 Mar 2024'));
       await tester.pumpAndSettle();
@@ -434,7 +434,7 @@ void main() {
       await goToTab(tester, 'Ong Log');
       await tapVisible(tester, chip('Loop'));
       await goToTab(tester, 'Highlights');
-      await tester.tap(find.byTooltip('Details').at(2));
+      await tester.tap(detailsButtons().at(2));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Requested by jsbach64'));
       await tester.pumpAndSettle();
@@ -772,7 +772,7 @@ void main() {
       await goToTab(tester, 'Highlights');
       await tester.enterText(searchField(), '');
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('Details').at(1));
+      await tester.tap(detailsButtons().at(1));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Requested by shadowvanta'));
       await tester.pumpAndSettle();
@@ -975,8 +975,6 @@ void main() {
   });
 
   group('Back button', () {
-    int selectedTab(WidgetTester tester) => tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex;
-
     testWidgets('goes back to Highlights first, then leaves the app', (tester) async {
       final app = await pumpApp(tester);
       await goToTab(tester, 'About');
@@ -1207,7 +1205,7 @@ void main() {
       testWidgets('no overflow at text scale $scale', (tester) async {
         await pumpApp(tester, textScale: scale, prefs: {'twitchName': 'jsbach64'});
         expect(tester.takeException(), isNull);
-        await tester.tap(find.byTooltip('Details').at(1));
+        await tester.tap(detailsButtons().at(1));
         await tester.pumpAndSettle();
         await tapVisible(tester, find.text('Played 2 times live'));
         await tapVisible(tester, find.text('Fri 1 Mar 2024'));
@@ -1222,11 +1220,11 @@ void main() {
       });
     }
 
-    testWidgets('wide window: content keeps a phone width, centred', (tester) async {
+    testWidgets('wide window: a list keeps a column of 720 px, centred right of the rail', (tester) async {
       await pumpApp(tester, size: const Size(1400, 900));
       final list = tester.getRect(find.byType(CustomScrollView).first);
-      expect(list.width, 640);
-      expect(list.center.dx, 700);
+      expect(list.width, 720);
+      expect(list.center.dx, 80 + (1400 - 80) / 2);
     });
   });
 }
