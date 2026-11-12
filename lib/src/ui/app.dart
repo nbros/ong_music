@@ -107,19 +107,21 @@ class AppShell extends ConsumerWidget {
                   children: [
                     const InstallBanner(),
                     Expanded(
-                      child: IndexedStack(
-                        index: tab.index,
-                        children: [
-                          for (final t in AppTab.values)
-                            TickerMode(
-                              enabled: t == tab,
-                              child: switch (t) {
-                                AppTab.highlights => const HighlightsPage(),
-                                AppTab.ongLog => const OngLogPage(),
-                                AppTab.about => const AboutPage(),
-                              },
-                            ),
-                        ],
+                      child: _SearchShortcut(
+                        child: IndexedStack(
+                          index: tab.index,
+                          children: [
+                            for (final t in AppTab.values)
+                              TickerMode(
+                                enabled: t == tab,
+                                child: switch (t) {
+                                  AppTab.highlights => const HighlightsPage(),
+                                  AppTab.ongLog => const OngLogPage(),
+                                  AppTab.about => const AboutPage(),
+                                },
+                              ),
+                          ],
+                        ),
                       ),
                     ),
                   ],
@@ -152,4 +154,53 @@ class AppShell extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// Ctrl+F (⌘F on Apple devices) or `/` puts the cursor in the search field of
+/// the list on screen, as on most sites with a search field.
+class _SearchShortcut extends ConsumerStatefulWidget {
+  const _SearchShortcut({required this.child});
+
+  final Widget child;
+
+  @override
+  ConsumerState<_SearchShortcut> createState() => _SearchShortcutState();
+}
+
+class _SearchShortcutState extends ConsumerState<_SearchShortcut> {
+  @override
+  void initState() {
+    super.initState();
+    // a key handler, not Shortcuts: those only hear keys while something below them has the focus
+    HardwareKeyboard.instance.addHandler(_onKey);
+  }
+
+  @override
+  void dispose() {
+    HardwareKeyboard.instance.removeHandler(_onKey);
+    super.dispose();
+  }
+
+  bool _onKey(KeyEvent event) {
+    if (event is! KeyDownEvent || !mounted) return false;
+    // not under a sheet or a dialog
+    if (!(ModalRoute.of(context)?.isCurrent ?? true)) return false;
+    final tab = ref.read(selectedTabProvider);
+    if (tab == AppTab.about) return false;
+    final keyboard = HardwareKeyboard.instance;
+    final find =
+        event.logicalKey == LogicalKeyboardKey.keyF &&
+        (keyboard.isControlPressed || keyboard.isMetaPressed) &&
+        !keyboard.isAltPressed &&
+        !keyboard.isShiftPressed;
+    // `/` is typed as text in a text field
+    final editing = FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<EditableText>() != null;
+    final slash = event.character == '/' && !editing;
+    if (!find && !slash) return false;
+    ref.read(searchFocusProvider(tab)).requestFocus();
+    return true;
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }

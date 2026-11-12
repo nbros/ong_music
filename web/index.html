@@ -29,13 +29,14 @@
   <link rel="manifest" href="manifest.json">
 
   <style>
-    :root { --bg: #fff8f4; --fg: #54443a; --brand: #f4721f; --track: #f0e1d6; }
+    /* --spin: the primary colour of the app theme, that of its own progress indicator */
+    :root { --bg: #fff8f4; --fg: #54443a; --brand: #f4721f; --spin: #9a4600; }
     @media (prefers-color-scheme: dark) {
-      :root { --bg: #15110e; --fg: #cbb9ac; --brand: #ff7a1a; --track: #2e2721; }
+      :root { --bg: #15110e; --fg: #cbb9ac; --brand: #ff7a1a; --spin: #ffb37a; }
     }
     /* the theme chosen in the app's settings wins over the system one (set by the script below) */
-    :root[data-theme="light"] { --bg: #fff8f4; --fg: #54443a; --brand: #f4721f; --track: #f0e1d6; }
-    :root[data-theme="dark"] { --bg: #15110e; --fg: #cbb9ac; --brand: #ff7a1a; --track: #2e2721; }
+    :root[data-theme="light"] { --bg: #fff8f4; --fg: #54443a; --brand: #f4721f; --spin: #9a4600; }
+    :root[data-theme="dark"] { --bg: #15110e; --fg: #cbb9ac; --brand: #ff7a1a; --spin: #ffb37a; }
     html, body { margin: 0; height: 100%; background: var(--bg); }
     body {
       overscroll-behavior: none;
@@ -43,17 +44,23 @@
       -webkit-touch-callout: none;
       -webkit-text-size-adjust: 100%;
     }
+    /*
+      The spinner is where the app draws its own on the first frame while it downloads the catalogue, at the
+      same size and in the same colour: the hand-over does not move it. The app centres its spinner (36 px), a
+      20 px gap and a 20 px line of text in the space above its 68 px navigation bar and below the notch.
+    */
     #loading {
-      position: fixed; inset: 0; z-index: 10;
+      position: fixed; inset: 0; z-index: 10; box-sizing: border-box;
+      padding: env(safe-area-inset-top) 0 calc(68px + env(safe-area-inset-bottom));
       display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px;
       background: var(--bg); color: var(--fg);
-      font: 500 20px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font: 500 20px/20px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       transition: opacity 0.2s;
     }
     #loading.done { opacity: 0; pointer-events: none; }
     #loading .spinner {
-      width: 32px; height: 32px; border-radius: 50%;
-      border: 3px solid var(--track); border-top-color: var(--brand);
+      box-sizing: border-box; width: 36px; height: 36px; border-radius: 50%;
+      border: 4px solid transparent; border-top-color: var(--spin);
       animation: spin 0.9s linear infinite;
     }
     #loading .message { display: none; max-width: 280px; text-align: center; font-size: 14px; font-weight: 400; }

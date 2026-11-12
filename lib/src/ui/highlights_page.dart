@@ -83,6 +83,7 @@ class _HighlightsPageState extends ConsumerState<HighlightsPage> {
       children: [
         ListSearchField(
           controller: _search,
+          focusNode: ref.watch(searchFocusProvider(AppTab.highlights)),
           hint: 'Search ${formatCount(catalogue.highlightCount)} highlights',
           onChanged: notifier.setQuery,
         ),

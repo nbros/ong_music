@@ -35,6 +35,8 @@ Future<void> showDetailSheet(BuildContext context, WidgetBuilder builder) {
     showDragHandle: true,
     useSafeArea: true,
     constraints: BoxConstraints(maxWidth: 640, maxHeight: size.height * 0.9),
+    // no slide when the system asks for less motion
+    sheetAnimationStyle: MediaQuery.disableAnimationsOf(host) ? AnimationStyle.noAnimation : null,
     builder: builder,
   );
 }
@@ -74,6 +76,8 @@ class _SheetBody extends StatelessWidget {
       thumbVisibility: alwaysShowScrollbars(context),
       child: CustomScrollView(
         controller: controller,
+        // without a controller, the scrollbar follows the primary one: desktop does not attach it by itself
+        primary: controller == null,
         shrinkWrap: true,
         scrollBehavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
         slivers: [
@@ -302,18 +306,21 @@ class HighlightSheet extends ConsumerWidget {
                 excludeSemantics: true,
                 child: GestureDetector(
                   onTap: () => openVideo(context, ref, h),
-                  child: LayoutBuilder(
-                    builder: (context, constraints) => Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        Thumbnail(youtubeId: h.youtubeId, width: constraints.maxWidth, big: true, radius: 16),
-                        Container(
-                          width: 56,
-                          height: 56,
-                          decoration: const BoxDecoration(color: Color(0xAA000000), shape: BoxShape.circle),
-                          child: const Icon(Icons.play_arrow, size: 32, color: Colors.white),
-                        ),
-                      ],
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: LayoutBuilder(
+                      builder: (context, constraints) => Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Thumbnail(youtubeId: h.youtubeId, width: constraints.maxWidth, big: true, radius: 16),
+                          Container(
+                            width: 56,
+                            height: 56,
+                            decoration: const BoxDecoration(color: Color(0xAA000000), shape: BoxShape.circle),
+                            child: const Icon(Icons.play_arrow, size: 32, color: Colors.white),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -495,8 +502,7 @@ class SongSheet extends ConsumerWidget {
         ),
         if (videos.isNotEmpty)
           SliverToBoxAdapter(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
+            child: HorizontalScroll(
               padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
               child: Row(
                 spacing: 12,

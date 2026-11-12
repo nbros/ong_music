@@ -202,7 +202,11 @@ ThemeData buildTheme(Brightness brightness) {
   final dark = brightness == Brightness.dark;
   final scheme = dark ? darkScheme : lightScheme;
   final ong = dark ? OngColors.dark : OngColors.light;
-  final base = ThemeData(colorScheme: scheme, useMaterial3: true);
+  // The design gives its sizes once for every platform (40 px buttons, 32 px
+  // chips): without the standard density, Windows and desktop browsers would
+  // shrink every control by 4 to 8 px (a "Watch" button lower than the round
+  // buttons beside it).
+  final base = ThemeData(colorScheme: scheme, useMaterial3: true, visualDensity: VisualDensity.standard);
   final text = base.textTheme;
   return base.copyWith(
     scaffoldBackgroundColor: scheme.surface,

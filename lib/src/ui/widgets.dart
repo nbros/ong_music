@@ -1,7 +1,8 @@
 /// Small building blocks shared by the lists and the sheets.
 library;
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -351,49 +352,114 @@ class Thumbnail extends ConsumerWidget {
 // ------------------------------------------------------------------ list chrome
 
 /// The search field at the top of a list.
+///
+/// Escape clears it, or leaves it when it is empty.
 class ListSearchField extends StatelessWidget {
-  const ListSearchField({super.key, required this.controller, required this.hint, required this.onChanged});
+  const ListSearchField({
+    super.key,
+    required this.controller,
+    required this.hint,
+    required this.onChanged,
+    this.focusNode,
+  });
 
   final TextEditingController controller;
   final String hint;
   final ValueChanged<String> onChanged;
+  final FocusNode? focusNode;
+
+  void _clear() {
+    controller.clear();
+    onChanged('');
+  }
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 6, 16, 2),
-      child: SearchBar(
-        controller: controller,
-        hintText: hint,
-        onChanged: onChanged,
-        textInputAction: TextInputAction.search,
-        onSubmitted: (_) => FocusManager.instance.primaryFocus?.unfocus(),
-        elevation: const WidgetStatePropertyAll(0),
-        backgroundColor: WidgetStatePropertyAll(scheme.surfaceContainerHigh),
-        constraints: const BoxConstraints(minHeight: 52),
-        padding: const WidgetStatePropertyAll(EdgeInsets.only(left: 16, right: 4)),
-        textStyle: WidgetStatePropertyAll(TextStyle(fontSize: 16, color: scheme.onSurface)),
-        hintStyle: WidgetStatePropertyAll(TextStyle(fontSize: 16, color: scheme.onSurfaceVariant)),
-        leading: Icon(Icons.search, color: scheme.onSurfaceVariant),
-        trailing: [
-          ListenableBuilder(
-            listenable: controller,
-            builder: (context, _) => controller.text.isEmpty
-                ? const SizedBox.shrink()
-                : IconButton(
-                    tooltip: 'Clear',
-                    icon: Icon(Icons.close, color: scheme.onSurfaceVariant),
-                    onPressed: () {
-                      controller.clear();
-                      onChanged('');
-                    },
-                  ),
-          ),
-        ],
+      child: CallbackShortcuts(
+        bindings: {
+          const SingleActivator(LogicalKeyboardKey.escape): () =>
+              controller.text.isEmpty ? FocusManager.instance.primaryFocus?.unfocus() : _clear(),
+        },
+        child: SearchBar(
+          controller: controller,
+          focusNode: focusNode,
+          hintText: hint,
+          onChanged: onChanged,
+          textInputAction: TextInputAction.search,
+          onSubmitted: (_) => FocusManager.instance.primaryFocus?.unfocus(),
+          elevation: const WidgetStatePropertyAll(0),
+          backgroundColor: WidgetStatePropertyAll(scheme.surfaceContainerHigh),
+          constraints: const BoxConstraints(minHeight: 52),
+          padding: const WidgetStatePropertyAll(EdgeInsets.only(left: 16, right: 4)),
+          textStyle: WidgetStatePropertyAll(TextStyle(fontSize: 16, color: scheme.onSurface)),
+          hintStyle: WidgetStatePropertyAll(TextStyle(fontSize: 16, color: scheme.onSurfaceVariant)),
+          leading: Icon(Icons.search, color: scheme.onSurfaceVariant),
+          trailing: [
+            ListenableBuilder(
+              listenable: controller,
+              builder: (context, _) => controller.text.isEmpty
+                  ? const SizedBox.shrink()
+                  : IconButton(
+                      tooltip: 'Clear',
+                      icon: Icon(Icons.close, color: scheme.onSurfaceVariant),
+                      onPressed: _clear,
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }
+}
+
+/// A horizontal scroll view that a mouse wheel scrolls too.
+///
+/// A wheel turns vertically only, and a mouse cannot drag a scroll view on
+/// desktop: without this, what is past the right edge (most genre chips) would
+/// be out of reach of a mouse.
+class HorizontalScroll extends StatefulWidget {
+  const HorizontalScroll({super.key, required this.padding, required this.child});
+
+  final EdgeInsetsGeometry padding;
+  final Widget child;
+
+  @override
+  State<HorizontalScroll> createState() => _HorizontalScrollState();
+}
+
+class _HorizontalScrollState extends State<HorizontalScroll> {
+  final _controller = ScrollController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _onPointerSignal(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent || event.kind != PointerDeviceKind.mouse || !_controller.hasClients) return;
+    // a horizontal delta (trackpad, Shift + wheel) is the scroll view's own business
+    final delta = event.scrollDelta;
+    if (delta.dx != 0 || delta.dy == 0) return;
+    final position = _controller.position;
+    final target = (position.pixels + delta.dy).clamp(position.minScrollExtent, position.maxScrollExtent);
+    if (target == position.pixels) return;
+    GestureBinding.instance.pointerSignalResolver.register(event, (_) => position.pointerScroll(delta.dy));
+  }
+
+  @override
+  Widget build(BuildContext context) => Listener(
+    onPointerSignal: _onPointerSignal,
+    child: SingleChildScrollView(
+      controller: _controller,
+      scrollDirection: Axis.horizontal,
+      padding: widget.padding,
+      child: widget.child,
+    ),
+  );
 }
 
 /// A horizontally scrolling row of filter chips.
@@ -403,8 +469,7 @@ class ChipRow extends StatelessWidget {
   final List<Widget> children;
 
   @override
-  Widget build(BuildContext context) => SingleChildScrollView(
-    scrollDirection: Axis.horizontal,
+  Widget build(BuildContext context) => HorizontalScroll(
     padding: const EdgeInsets.symmetric(horizontal: 16),
     child: Row(spacing: 8, children: children),
   );
@@ -426,6 +491,9 @@ class ListChip extends StatelessWidget {
     final color = selected ? scheme.onSecondaryContainer : scheme.onSurfaceVariant;
     final count = this.count;
     return FilterChip(
+      // 48 px high everywhere, as on phones: the row keeps the height of the
+      // design on desktop too, where targets would shrink to the chip
+      materialTapTargetSize: MaterialTapTargetSize.padded,
       selected: selected,
       onSelected: (_) => onTap(),
       labelStyle: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: color),
@@ -458,12 +526,18 @@ class ChipSeparator extends StatelessWidget {
 }
 
 /// The "N results" line under the chips, with an optional link on the right.
+///
+/// With [onLink], the line keeps the height of the link while [link] is null:
+/// the list below does not move when the link comes and goes as the query
+/// changes.
 class CountLine extends StatelessWidget {
   const CountLine({super.key, required this.text, this.link, this.onLink});
 
   final String text;
   final String? link;
   final VoidCallback? onLink;
+
+  static const double _linkHeight = 40;
 
   @override
   Widget build(BuildContext context) {
@@ -491,14 +565,14 @@ class CountLine extends StatelessWidget {
               style: TextButton.styleFrom(
                 foregroundColor: scheme.primary,
                 padding: const EdgeInsets.symmetric(horizontal: 12),
-                minimumSize: const Size(48, 40),
+                minimumSize: const Size(48, _linkHeight),
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
               ),
               child: Text('$link →'),
             )
           else
-            const SizedBox(height: 28),
+            SizedBox(height: onLink == null ? 28 : _linkHeight),
         ],
       ),
     );
@@ -536,8 +610,10 @@ class EmptyMessage extends StatelessWidget {
   }
 }
 
-/// Whether scrollbars are always shown (desktop and web).
+/// Whether scrollbars are always shown: on desktop (Windows app and desktop
+/// browsers), where a mouse may drag them. Phones, in the browser too, show
+/// them only while scrolling, over the content.
 bool alwaysShowScrollbars(BuildContext context) => switch (Theme.of(context).platform) {
   TargetPlatform.windows || TargetPlatform.macOS || TargetPlatform.linux => true,
-  _ => kIsWeb,
+  _ => false,
 };

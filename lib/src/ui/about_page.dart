@@ -84,6 +84,8 @@ class AboutPage extends ConsumerWidget {
     return Scrollbar(
       thumbVisibility: alwaysShowScrollbars(context),
       child: ListView(
+        // the scrollbar follows the primary scroll controller: desktop does not attach it by itself
+        primary: true,
         padding: EdgeInsets.only(top: 20, bottom: MediaQuery.paddingOf(context).bottom),
         children: [
           // hero

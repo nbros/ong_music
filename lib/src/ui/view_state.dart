@@ -25,6 +25,14 @@ class SelectedTabNotifier extends Notifier<AppTab> {
   void select(AppTab tab) => state = tab;
 }
 
+/// The focus node of the search field of [AppTab.highlights] or
+/// [AppTab.ongLog], for the keyboard shortcut that reaches it.
+final searchFocusProvider = Provider.family<FocusNode, AppTab>((ref, tab) {
+  final node = FocusNode(debugLabel: 'search ${tab.name}');
+  ref.onDispose(node.dispose);
+  return node;
+});
+
 /// Filters of the Highlights list.
 final highlightFilterProvider = NotifierProvider<HighlightFilterNotifier, HighlightFilter>(HighlightFilterNotifier.new);
 

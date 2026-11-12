@@ -95,6 +95,12 @@ Future<bool> copyText(String text) async {
 OverlayEntry? _messageEntry;
 Timer? _messageTimer;
 
+/// How long a message stays, from the start of its fade in to the end of its
+/// fade out.
+const _messageDuration = Duration(milliseconds: 2600);
+
+const _messageFade = Duration(milliseconds: 180);
+
 /// Shows a short message at the bottom of the screen, above any bottom sheet
 /// (a [SnackBar] would stay under an open sheet).
 void showMessage(BuildContext context, String text) {
@@ -102,26 +108,54 @@ void showMessage(BuildContext context, String text) {
   if (overlay == null) return;
   _messageTimer?.cancel();
   _messageEntry?.remove();
-  final entry = OverlayEntry(builder: (context) => _Message(text: text));
+  final key = GlobalKey<_MessageState>();
+  final entry = OverlayEntry(
+    builder: (context) => _Message(key: key, text: text),
+  );
   _messageEntry = entry;
   overlay.insert(entry);
-  _messageTimer = Timer(const Duration(milliseconds: 2600), () {
+  void remove() {
     if (identical(_messageEntry, entry)) {
       entry.remove();
       _messageEntry = null;
     }
+  }
+
+  _messageTimer = Timer(_messageDuration - _messageFade, () {
+    final state = key.currentState;
+    if (state == null) return remove();
+    _messageTimer = Timer(_messageFade, remove);
+    state.hide();
   });
 }
 
-class _Message extends StatelessWidget {
-  const _Message({required this.text});
+class _Message extends StatefulWidget {
+  const _Message({super.key, required this.text});
 
   final String text;
+
+  @override
+  State<_Message> createState() => _MessageState();
+}
+
+/// Fades in rising by 8 px, fades out the same way (without the rise when
+/// the system asks for less motion).
+class _MessageState extends State<_Message> with SingleTickerProviderStateMixin {
+  late final _controller = AnimationController(vsync: this, duration: _messageFade)..forward();
+
+  void hide() => _controller.reverse();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final padding = MediaQuery.paddingOf(context);
+    final rise = MediaQuery.disableAnimationsOf(context) ? 0.0 : 8.0;
     return Positioned(
       left: 16,
       right: 16,
@@ -130,12 +164,11 @@ class _Message extends StatelessWidget {
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 560),
-            child: TweenAnimationBuilder<double>(
-              tween: Tween(begin: 0, end: 1),
-              duration: const Duration(milliseconds: 180),
-              builder: (context, t, child) => Opacity(
-                opacity: t,
-                child: Transform.translate(offset: Offset(0, 8 * (1 - t)), child: child),
+            child: AnimatedBuilder(
+              animation: _controller,
+              builder: (context, child) => Opacity(
+                opacity: _controller.value,
+                child: Transform.translate(offset: Offset(0, rise * (1 - _controller.value)), child: child),
               ),
               child: Semantics(
                 liveRegion: true,
@@ -145,7 +178,7 @@ class _Message extends StatelessWidget {
                   borderRadius: BorderRadius.circular(8),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    child: Text(text, style: TextStyle(color: scheme.onInverseSurface, fontSize: 14)),
+                    child: Text(widget.text, style: TextStyle(color: scheme.onInverseSurface, fontSize: 14)),
                   ),
                 ),
               ),

@@ -109,6 +109,7 @@ class _OngLogPageState extends ConsumerState<OngLogPage> {
       children: [
         ListSearchField(
           controller: _search,
+          focusNode: ref.watch(searchFocusProvider(AppTab.ongLog)),
           hint: 'Search ${formatCount(catalogue.playCount)} songs played live',
           onChanged: notifier.setQuery,
         ),
