@@ -8,7 +8,7 @@ import 'dart:js_interop_unsafe';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:ong_music/src/data/sheet_prefetch.dart';
-import 'package:ong_music/src/data/sheet_prefetch_web.dart' show prefetchGlobal, prefetchMaxAge;
+import 'package:ong_music/src/data/sheet_prefetch_web.dart' show prefetchGlobal;
 import 'package:ong_music/src/data/sheets.dart';
 import 'package:web/web.dart' as web;
 
@@ -26,13 +26,12 @@ JSPromise<web.Response> rejected() => JSPromise<web.Response>(
 
 web.Response response(String body, {int status = 200}) => web.Response(body.toJS, web.ResponseInit(status: status));
 
-/// Sets the global as the page script does, for a download started [age] ago.
-void prefetch(JSPromise<web.Response>? highlights, JSPromise<web.Response>? songs, {Duration age = Duration.zero}) {
+/// Sets the global as the page script does.
+void prefetch(JSPromise<web.Response>? highlights, JSPromise<web.Response>? songs) {
   globalContext[prefetchGlobal] = resolved(
     highlights == null
         ? null
         : (JSObject()
-            ..['at'] = (DateTime.now().millisecondsSinceEpoch - age.inMilliseconds).toJS
             ..['highlights'] = highlights
             ..['songs'] = songs),
   );
@@ -58,22 +57,13 @@ void main() {
     expect(await takePrefetchedSheets(), isNull, reason: 'only the first download uses it');
   });
 
-  test('a download started minutes ago is not used: the app downloads again', () async {
-    // the app found a fresh cache at its start (another tab wrote it) and only downloads hours later
-    prefetch(
-      resolved(response('"old"')),
-      resolved(response('"old"')),
-      age: prefetchMaxAge + const Duration(seconds: 1),
-    );
-    expect(await takePrefetchedSheets(), isNull);
+  test('a discarded download is not taken later', () async {
+    // the app started on a fresh cache (another tab wrote it) and downloaded nothing
+    prefetch(resolved(response('"old"')), resolved(response('"old"')));
+    discardPrefetchedSheets();
     expect(globalContext.has(prefetchGlobal), isFalse);
-    // within the limit: used
-    prefetch(
-      resolved(response('"new"')),
-      resolved(response('"new"')),
-      age: prefetchMaxAge - const Duration(seconds: 30),
-    );
-    expect((await takePrefetchedSheets())!.highlightsCsv, '"new"');
+    expect(await takePrefetchedSheets(), isNull);
+    discardPrefetchedSheets(); // nothing to forget: harmless
   });
 
   test('an HTTP error is a SheetHttpException', () async {

@@ -39,6 +39,9 @@ class InstallBannerDismissedNotifier extends Notifier<bool> {
   }
 }
 
+/// The advice to Android users, in the banner and in the About tab alike.
+const playStoreAdvice = 'Install Ong Music from the Play Store for better performance.';
+
 /// Title of the advice.
 String installHintTitle(InstallHint hint) => switch (hint.kind) {
   InstallHintKind.openInSafari => 'Open in Safari to install Ong Music',
@@ -49,7 +52,7 @@ String installHintTitle(InstallHint hint) => switch (hint.kind) {
 /// The advice in one or two lines, for the banner.
 String installHintShortText(InstallHint hint) => switch (hint.kind) {
   InstallHintKind.openInSafari => 'This app’s browser can’t add it to your Home Screen: open the page in Safari.',
-  InstallHintKind.playStore => 'It starts faster than the web app and shows the lists offline once downloaded.',
+  InstallHintKind.playStore => playStoreAdvice,
   _ => 'In Safari, tap the menu button next to the address, then Share, View More and “Add to Home Screen”.',
 };
 
@@ -59,9 +62,7 @@ String installHintText(InstallHint hint) => switch (hint.kind) {
     'This page is open inside another app, which can’t add it to your Home Screen. '
         'Open it in Safari (look for “Open in Safari” or “Open in browser” in this app’s menu, or copy the link), '
         'then follow the steps shown there.',
-  InstallHintKind.playStore =>
-    'Ong Music is on Google Play. The app starts faster than this web app, and once it has downloaded the lists '
-        'it shows them without a connection (thumbnails still need one).',
+  InstallHintKind.playStore => playStoreAdvice,
   _ =>
     'In Safari, tap the menu button next to the address (on older iOS versions, the Share button), '
         'then Share, View More and “Add to Home Screen”. In another browser, look for “Add to Home Screen” '
@@ -87,13 +88,21 @@ Future<void> _copyLink(BuildContext context) async {
 }
 
 /// The banner at the top of the app, until dismissed.
+///
+/// Not on a window lower than [minHeight] (a phone held sideways): with the
+/// search field, the chips and the navigation bar, the banner would leave the
+/// list no room. The About tab keeps the advice.
 class InstallBanner extends ConsumerWidget {
   const InstallBanner({super.key});
+
+  /// The banner shows from this window height.
+  static const double minHeight = 480;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final hint = ref.watch(installHintProvider);
     if (!hint.isVisible || ref.watch(installBannerDismissedProvider)) return const SizedBox.shrink();
+    if (MediaQuery.sizeOf(context).height < minHeight) return const SizedBox.shrink();
     final scheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
@@ -198,7 +207,7 @@ class _HintBody extends ConsumerWidget {
               style: TextButton.styleFrom(foregroundColor: color, padding: const EdgeInsets.symmetric(horizontal: 8)),
               onPressed: () => openLink(context, ref, playStoreUrl),
               icon: Icon(Icons.open_in_new, size: 18, color: on3),
-              label: const Text('Open Google Play'),
+              label: const Text('Open the Play Store'),
             ),
           )
         else

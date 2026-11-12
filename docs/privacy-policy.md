@@ -28,7 +28,9 @@ As **Ong Music** does not collect any personal data, none is stored by us. The a
 - small technical settings (for example that you closed the "install" hint of the web version);
 - on Android and Windows, a technical log file of the app's own activity (start, downloads, errors), to help diagnose problems.
 
-This data is never sent anywhere. The web version keeps the same data in your browser's storage. You can delete it by uninstalling the app or clearing the app's (or the website's) data.
+The app itself never sends this data anywhere. The web version keeps the same data in your browser's storage. You can delete it by clearing the app's (or the website's) data, or by uninstalling the app.
+
+On Android, the system's own backup, if you have turned it on, can save your theme choice, your Twitch name and your favourites to your Google account, and bring them back when you install the app again or set up a new phone. The downloaded data and the log file are left out of it. You can turn this off in Android's backup settings.
 
 ## Data Sharing
 Since no data is collected, there is no data to share with third parties.

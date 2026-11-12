@@ -9,6 +9,9 @@ import 'package:ong_music/src/data/sheets.dart';
 import 'package:ong_music/src/state/catalogue_state.dart';
 import 'package:ong_music/src/state/settings_state.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+// the storage under the plugin, to write to it as another window of the app would
+// ignore: depend_on_referenced_packages
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 
 import 'fixtures.dart';
 
@@ -63,7 +66,23 @@ void main() {
     return [for (final id in results.ids) catalogue(c).highlights[id].title];
   }
 
-  test('a highlight is known by its number and its song key', () {
+  test('a highlight with a video is known by its YouTube id, whatever its number and its title become', () {
+    List<List<String>> rows({String order = '7', String title = 'Zelda - Song of Storms'}) => [
+      hRow(order: order, title: title, link: 'https://youtu.be/aaaaaaaaaaa'),
+      // the same video on another row: one star for both
+      hRow(order: '8', title: 'Zelda - Song of Storms (again)', link: 'https://www.youtube.com/watch?v=aaaaaaaaaaa'),
+      hRow(order: '9', title: 'No video yet'),
+    ];
+    final before = catalogueOf(highlights: rows()).highlights;
+    expect([for (final h in before) h.key], ['aaaaaaaaaaa', 'aaaaaaaaaaa', '9 no video yet']);
+    // the sheet is renumbered and the title written another way
+    final after = catalogueOf(
+      highlights: rows(order: '12', title: 'The Legend of Zelda: Ocarina of Time - Song of Storms'),
+    ).highlights;
+    expect(after.first.key, before.first.key);
+  });
+
+  test('a highlight without video is known by its number and its song key', () {
     final highlights = catalogueOf(highlights: _rows()).highlights;
     expect(
       [for (final h in highlights) h.key],
@@ -72,6 +91,33 @@ void main() {
     // case, accents and punctuation of the title do not change it
     final retyped = catalogueOf(highlights: _rows(firstTitle: 'ZELDA – Song of Störms!')).highlights;
     expect(retyped.first.key, highlights.first.key);
+  });
+
+  test('a star added by another window of the app is kept when this one adds its own', () async {
+    final (c, prefs) = await start({}, _Fetcher(_sheets(_rows())));
+    final [first, _, third] = catalogue(c).highlights;
+    // a second browser tab (or a second instance on Windows), which read the same empty list, stars the third row
+    await SharedPreferencesStorePlatform.instance.setValue('StringList', 'flutter.$key', [third.key]);
+    expect(prefs.getStringList(key), isNull, reason: 'this window has not read the storage again yet');
+    await c.read(favouritesProvider.notifier).toggle(first);
+    expect(prefs.getStringList(key), [third.key, first.key]);
+    expect(c.read(favouritesProvider), [third.key, first.key], reason: 'and the other star shows here too');
+    // removing works on what is stored as well
+    await SharedPreferencesStorePlatform.instance.setValue('StringList', 'flutter.$key', [third.key]);
+    await c.read(favouritesProvider.notifier).toggle(third);
+    expect(prefs.getStringList(key), isEmpty);
+  });
+
+  test('two stars given one right after the other are both kept, and neither goes off meanwhile', () async {
+    final (c, prefs) = await start({}, _Fetcher(_sheets(_rows())));
+    final [first, second, _] = catalogue(c).highlights;
+    final states = <Set<String>>[];
+    c.listen(favouritesProvider, (_, next) => states.add(next));
+    final notifier = c.read(favouritesProvider.notifier);
+    await Future.wait([notifier.toggle(first), notifier.toggle(second)]);
+    expect(prefs.getStringList(key), [first.key, second.key]);
+    expect(states.first, [first.key]);
+    expect(states.skip(1), everyElement([first.key, second.key]));
   });
 
   test('round trip: a star is stored at once and read back after a restart, in the order given', () async {

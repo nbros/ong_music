@@ -15,6 +15,7 @@ import '../data/model.dart';
 import '../data/parser.dart';
 import '../data/repository.dart';
 import '../data/sheet_cache.dart';
+import '../data/sheet_prefetch.dart';
 import '../data/sheets.dart';
 import '../logger.dart';
 import 'settings_state.dart';
@@ -45,6 +46,10 @@ final sheetFetcherProvider = Provider<SheetFetcher>((ref) => HttpSheetFetcher())
 
 /// Persists the raw sheets (files on IO, Cache API on web).
 final sheetCacheProvider = Provider<SheetCache>((ref) => createSheetCache());
+
+/// Forgets the download the web page may have started (see
+/// [discardPrefetchedSheets]).
+final prefetchDiscarderProvider = Provider<void Function()>((ref) => discardPrefetchedSheets);
 
 /// Parses sheets: on a background isolate on native platforms, inline on web.
 final catalogueParserProvider = Provider<CatalogueParser>(
@@ -127,7 +132,8 @@ final catalogueProvider = NotifierProvider<CatalogueNotifier, CatalogueState>(Ca
 ///   tried again by itself after [catalogueRetryDelays], while the app is in
 ///   the foreground; a download refused for its content (a [FormatException]:
 ///   a sheet the app cannot read, or half emptied) is not a passing failure,
-///   and megabytes each time: its next attempt waits [catalogueMaxAge];
+///   and megabytes each time: its next attempt, by the timer or when the app
+///   resumes, waits [catalogueMaxAge] (a manual [refresh] does not);
 /// - a refresh never blanks the UI: the current catalogue stays until a new
 ///   one downloaded and parsed successfully replaces it at once; on failure it
 ///   stays and [CatalogueState.lastError] is set;
@@ -204,6 +210,8 @@ class CatalogueNotifier extends Notifier<CatalogueState> {
     if (cached == null || _isStale(cached.fetchedAt)) {
       unawaited(refresh());
     } else {
+      // no download now: the one the page started, if any, must not wait for the next refresh
+      ref.read(prefetchDiscarderProvider)();
       _scheduleCheck();
     }
   }
@@ -309,7 +317,11 @@ class CatalogueNotifier extends Notifier<CatalogueState> {
     if (_disposed || !_started) return;
     final running = _refresh;
     if (running != null) return running;
-    if (state.catalogue == null || _isStale(state.fetchedAt)) return refresh();
+    if (state.catalogue == null || _isStale(state.fetchedAt)) {
+      // refused for its content: not again at each return to the app (see [_untilDue]); "Retry" still does
+      if (state.lastError is FormatException && _untilDue() > Duration.zero) return;
+      return refresh();
+    }
   }
 
   /// "Clear downloaded data": deletes the cache, then downloads and parses

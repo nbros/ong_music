@@ -52,6 +52,9 @@ bool? browserUses24HourClock() {
   }
 }
 
+/// Whether the page is hidden right now (a tab opened behind another one).
+bool pageIsHidden() => web.document.hidden;
+
 String _hex(Color color) => '#${(color.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0')}';
 
 /// Colours the browser bars (theme-color) and the page behind the app with

@@ -76,12 +76,17 @@ const List<String> inAppBrowserTokens = [
   'GSA/', // Google app
 ];
 
+/// User agent tokens of systems that say "Android" and have no Google Play:
+/// Amazon's Fire tablets (Silk browser), Huawei's HarmonyOS and its phones
+/// without Google services, KaiOS.
+const List<String> noGooglePlayTokens = ['Silk/', 'HarmonyOS', 'OpenHarmony', 'HMSCore', 'KAIOS'];
+
 /// The install advice for [browser] (null: not a browser, i.e. a native app).
 ///
 /// On Android (the `Android` token, which every Android browser and web view
 /// sends, and no iOS one does): the Android app. Its "desktop site" mode
-/// sends a Linux or Windows user agent instead: nothing then. Nor on Amazon's
-/// Fire tablets (Silk browser), which have no Google Play.
+/// sends a Linux or Windows user agent instead: nothing then. Nor where there
+/// is no Google Play ([noGooglePlayTokens]).
 ///
 /// Otherwise shown only on iPhone and iPad (including an iPad whose Safari asks
 /// for desktop sites and claims to be a Mac). Never once installed. In a web
@@ -94,7 +99,9 @@ InstallHint installHintFor(BrowserEnvironment? browser) {
   if (browser == null || browser.standalone) return InstallHint.none;
   final ua = browser.userAgent;
   if (ua.contains('Android')) {
-    return ua.contains('Silk/') ? InstallHint.none : const InstallHint(InstallHintKind.playStore, device: 'Android');
+    return noGooglePlayTokens.any(ua.contains)
+        ? InstallHint.none
+        : const InstallHint(InstallHintKind.playStore, device: 'Android');
   }
   final String device;
   if (ua.contains('iPhone') || ua.contains('iPod')) {

@@ -47,11 +47,8 @@ class _OngMusicAppState extends ConsumerState<OngMusicApp> {
           .read(catalogueProvider.notifier)
           .setForeground(state == AppLifecycleState.resumed || state == AppLifecycleState.inactive),
     );
-    // already in the background at the start (a browser tab opened behind another): no change will tell
-    final state = WidgetsBinding.instance.lifecycleState;
-    if (state == AppLifecycleState.hidden || state == AppLifecycleState.paused) {
-      ref.read(catalogueProvider.notifier).setForeground(false);
-    }
+    // already in the background at the start: no change of state will tell
+    if (ref.read(startsInBackgroundProvider)) ref.read(catalogueProvider.notifier).setForeground(false);
   }
 
   @override
@@ -77,6 +74,15 @@ class _OngMusicAppState extends ConsumerState<OngMusicApp> {
     );
   }
 }
+
+/// Whether the app starts in the background: a browser tab opened behind
+/// another one (the web engine reports "resumed" until the page is first shown
+/// and hidden again, so the page itself is asked), or a native app started
+/// hidden. Overridden in tests.
+final startsInBackgroundProvider = Provider<bool>((ref) {
+  final state = WidgetsBinding.instance.lifecycleState;
+  return state == AppLifecycleState.hidden || state == AppLifecycleState.paused || pageIsHidden();
+});
 
 /// The navigation bar and the three tabs, each one kept alive with its query,
 /// filters and scroll position.

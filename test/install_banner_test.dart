@@ -10,7 +10,8 @@ const title = 'Install Ong Music on your iPhone';
 
 const playStore = InstallHint(InstallHintKind.playStore, device: 'Android');
 const playTitle = 'Get the Android app';
-const playButton = 'Open Google Play';
+const playButton = 'Open the Play Store';
+const playAdvice = 'Install Ong Music from the Play Store for better performance.';
 
 /// The banner title (the About section has the same one).
 Finder bannerTitle() => find.descendant(of: find.byType(InstallBanner), matching: find.text(title));
@@ -95,7 +96,7 @@ void main() {
   ) async {
     final app = await pumpApp(tester, installHint: playStore);
     expect(inBanner(playTitle), findsOneWidget);
-    expect(inBanner('It starts faster than the web app and shows the lists offline once downloaded.'), findsOneWidget);
+    expect(inBanner(playAdvice), findsOneWidget);
     expect(find.textContaining('Home Screen'), findsNothing);
     await tester.tap(inBanner(playButton));
     await tester.pumpAndSettle();
@@ -106,13 +107,7 @@ void main() {
     await goToTab(tester, 'About');
     await scrollToSection(tester);
     expect(inSection(playTitle), findsOneWidget);
-    expect(
-      inSection(
-        'Ong Music is on Google Play. The app starts faster than this web app, and once it has downloaded the lists '
-        'it shows them without a connection (thumbnails still need one).',
-      ),
-      findsOneWidget,
-    );
+    expect(inSection(playAdvice), findsOneWidget);
     await tester.tap(inSection(playButton));
     await tester.pumpAndSettle();
     expect(app.effects.opened, hasLength(2));
@@ -134,6 +129,36 @@ void main() {
     await scrollToSection(tester);
     expect(inSection(playTitle), findsOneWidget);
     expect(inSection(playButton), findsOneWidget);
+  });
+
+  testWidgets('no banner on a window too low for it (a phone held sideways); the About tab keeps the advice', (
+    tester,
+  ) async {
+    for (final hint in [playStore, addToHomeScreen]) {
+      await pumpApp(tester, installHint: hint, size: const Size(740, 300));
+      expect(tester.takeException(), isNull);
+      expect(find.descendant(of: find.byType(InstallBanner), matching: find.byType(Text)), findsNothing);
+      // the list has the room it has without any hint
+      final withHint = tester.getSize(find.byType(CustomScrollView).hitTestable()).height;
+      await goToTab(tester, 'About');
+      await scrollToSection(tester);
+      expect(find.byType(InstallSection), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+      await pumpApp(tester, size: const Size(740, 300));
+      expect(tester.getSize(find.byType(CustomScrollView).hitTestable()).height, withHint);
+      await tester.pumpWidget(const SizedBox());
+    }
+    // upright again: the banner is back
+    await pumpApp(tester, installHint: playStore, size: const Size(360, 740));
+    expect(inBanner(playTitle), findsOneWidget);
+  });
+
+  testWidgets('the banner scrolls by itself, without taking the scroll controller of the pages', (tester) async {
+    await pumpApp(tester, installHint: playStore);
+    final scroll = tester.widget<SingleChildScrollView>(
+      find.descendant(of: find.byType(InstallBanner), matching: find.byType(SingleChildScrollView)),
+    );
+    expect(scroll.primary, isFalse);
   });
 
   testWidgets('desktop browser: no banner, no About section', (tester) async {

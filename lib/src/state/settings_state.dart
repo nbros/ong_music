@@ -135,9 +135,14 @@ class FavouritesNotifier extends Notifier<Set<String>> {
   /// Preference key.
   static const key = 'favouriteHighlights';
 
+  /// The writes still to do, one after the other.
+  Future<void> _writes = Future.value();
+  int _pending = 0;
+
   @override
-  Set<String> build() {
-    final prefs = ref.watch(sharedPreferencesProvider);
+  Set<String> build() => _stored(ref.watch(sharedPreferencesProvider));
+
+  static Set<String> _stored(SharedPreferences prefs) {
     try {
       return Set.unmodifiable(prefs.getStringList(key) ?? const <String>[]);
     } catch (e, st) {
@@ -148,14 +153,29 @@ class FavouritesNotifier extends Notifier<Set<String>> {
   }
 
   /// Adds [highlight] to the favourites, or removes it, and persists the list.
-  Future<void> toggle(Highlight highlight) async {
+  ///
+  /// The star changes at once. The list is then read again from the storage
+  /// before the change is written to it: another window of the app (a browser
+  /// tab, a second instance on Windows) may have added favourites since this
+  /// one read them, which writing this window's own list would erase.
+  Future<void> toggle(Highlight highlight) {
     final k = highlight.key;
-    state = Set.unmodifiable(state.contains(k) ? ({...state}..remove(k)) : {...state, k});
-    try {
-      await ref.read(sharedPreferencesProvider).setStringList(key, state.toList());
-    } catch (e, st) {
-      // kept in memory for this session
-      logger.w('Cannot store the favourites', error: e, stackTrace: st);
-    }
+    final add = !state.contains(k);
+    state = Set.unmodifiable(add ? {...state, k} : ({...state}..remove(k)));
+    final prefs = ref.read(sharedPreferencesProvider);
+    _pending++;
+    return _writes = _writes.then((_) async {
+      try {
+        await prefs.reload();
+        final merged = add ? {..._stored(prefs), k} : ({..._stored(prefs)}..remove(k));
+        await prefs.setStringList(key, merged.toList());
+        // what the other windows added shows here too, once no later change of this one waits
+        if (--_pending == 0 && ref.mounted) state = Set.unmodifiable(merged);
+      } catch (e, st) {
+        _pending--;
+        // kept in memory for this session
+        logger.w('Cannot store the favourites', error: e, stackTrace: st);
+      }
+    });
   }
 }

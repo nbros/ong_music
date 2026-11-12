@@ -12,3 +12,10 @@ import 'sheet_prefetch_stub.dart' if (dart.library.js_interop) 'sheet_prefetch_w
 /// call can return them. Throws like [HttpSheetFetcher.fetch] when that download
 /// failed.
 Future<RawSheets?> takePrefetchedSheets() => platform.takePrefetchedSheets();
+
+/// Forgets the sheets downloaded by the page, if any. To call when the app
+/// starts on a cache it finds fresh after all (another tab wrote it while this
+/// one was loading) and so downloads nothing: left there, the page's download
+/// would be taken by the next refresh, hours later, and pass for the sheets of
+/// that moment.
+void discardPrefetchedSheets() => platform.discardPrefetchedSheets();

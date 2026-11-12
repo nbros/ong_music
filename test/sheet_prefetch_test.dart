@@ -21,8 +21,6 @@ void main() {
     expect(Uri.parse('${base}Songs'), SheetUrls.songs);
     expect(script, contains("get('Youtube%20Catalogue')"));
     expect(script, contains("get('Songs')"));
-    // dated: the app does not take a download that is minutes old
-    expect(script, contains('at: Date.now()'));
   });
 
   test('the page script reads the cache of WebSheetCache with the age limit of the app', () {

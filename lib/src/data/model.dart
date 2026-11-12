@@ -339,12 +339,19 @@ final class Highlight {
   /// `https://www.youtube.com/watch?v=<id>`, or [link] when there is no id.
   String get url => youtubeId == null ? link : 'https://www.youtube.com/watch?v=$youtubeId';
 
-  /// What finds this highlight again in another catalogue ([id] does not):
-  /// [seq], and [songKey] to tell apart the rows that share a [seq]. A change
-  /// of case, accents or punctuation in the title keeps it; a renumbering or
-  /// another wording of the title gives another key. Stored on the device (the
-  /// favourites): a change of this format or of [songKey] forgets them.
-  String get key => '$seq $songKey';
+  /// What finds this highlight again in another catalogue ([id] does not): the
+  /// id of its YouTube video, which a renumbering of the sheet or another
+  /// wording of the title leaves alone. Rows showing the same video share it.
+  ///
+  /// Without video: [seq], and [songKey] to tell apart the rows that share a
+  /// [seq]. A change of case, accents or punctuation in the title keeps that
+  /// one; a renumbering or another wording does not, nor a video given to the
+  /// row later. The two forms cannot be taken for each other: a video id holds
+  /// no space.
+  ///
+  /// Stored on the device (the favourites): a change of this format forgets
+  /// them.
+  String get key => youtubeId ?? '$seq $songKey';
 
   @override
   String toString() => 'Highlight#$id(#$seq $title, $genre, ${date ?? '-'})';

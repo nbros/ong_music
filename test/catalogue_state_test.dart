@@ -518,7 +518,12 @@ void main() {
       }
 
       // megabytes each time: not after 15 seconds, a minute, 5 minutes...
-      await wait(catalogueMaxAge - const Duration(minutes: 1));
+      await wait(const Duration(minutes: 10));
+      expect(fetcher.calls, 1);
+      // ...nor at each return to the app
+      await notifier().refreshIfStale();
+      expect(fetcher.calls, 1);
+      await wait(catalogueMaxAge - const Duration(minutes: 11));
       expect(fetcher.calls, 1);
       await wait(const Duration(minutes: 1));
       expect(fetcher.calls, 2);
@@ -579,6 +584,65 @@ void main() {
       expect(state().lastError, isA<CatalogueFormatException>());
       expect(cache.writes, 0);
     });
+
+    for (final Error error in [StateError('no element'), RangeError.index(3, const []), TypeError()]) {
+      test('a parser failing on the payload with a ${error.runtimeType} counts as an unexpected format', () async {
+        cache = MemorySheetCache(
+          CachedSheets(
+            sheets: sampleSheets(tag: 'cached'),
+            fetchedAt: now,
+          ),
+        );
+        var parses = 0;
+        container = ProviderContainer.test(
+          overrides: [
+            sheetFetcherProvider.overrideWithValue(fetcher),
+            sheetCacheProvider.overrideWithValue(cache),
+            // the cache, then the first download: both unreadable
+            catalogueParserProvider.overrideWithValue(
+              (sheets) => ++parses <= 2 ? throw error : parseOnCurrentIsolate(sheets),
+            ),
+            clockProvider.overrideWithValue(() => clock),
+          ],
+        );
+        fetcher.results.add(sampleSheets(tag: 'downloaded'));
+        container.read(catalogueProvider);
+        await notifier().idle;
+        expect(cache.clears, 1, reason: 'a cache that cannot be read is deleted');
+        expect(state().lastError, isA<CatalogueFormatException>());
+        expect(state().hasData, isFalse);
+      });
+    }
+
+    test(
+      'a fresh cache at start forgets the download the page may have started; a stale or missing one does not',
+      () async {
+        var discards = 0;
+        Future<void> start(CachedSheets? cached) async {
+          container = ProviderContainer.test(
+            overrides: [
+              sheetFetcherProvider.overrideWithValue(fetcher),
+              sheetCacheProvider.overrideWithValue(MemorySheetCache(cached)),
+              catalogueParserProvider.overrideWithValue(parseOnCurrentIsolate),
+              clockProvider.overrideWithValue(() => clock),
+              prefetchDiscarderProvider.overrideWithValue(() => discards++),
+            ],
+          );
+          container.read(catalogueProvider);
+          await notifier().idle;
+          container.dispose();
+        }
+
+        // fresh: nothing is downloaded now, and the next refresh must not get sheets hours old
+        await start(CachedSheets(sheets: sampleSheets(), fetchedAt: now.subtract(const Duration(hours: 1))));
+        expect((discards, fetcher.calls), (1, 0));
+        // stale, or no cache: the download that starts takes it
+        fetcher.results.addAll([sampleSheets(), sampleSheets()]);
+        await start(CachedSheets(sheets: sampleSheets(), fetchedAt: now.subtract(const Duration(hours: 7))));
+        await start(null);
+        expect((discards, fetcher.calls), (1, 2));
+      },
+    );
 
     test('a failure that is not about the payload (the isolate could not start) keeps the cache', () async {
       cache = MemorySheetCache(

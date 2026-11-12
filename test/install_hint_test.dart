@@ -63,6 +63,17 @@ const androidSamsungDesktopSite =
 const fireSilk =
     'Mozilla/5.0 (Linux; Android 11; KFRASWI) AppleWebKit/537.36 (KHTML, like Gecko) Silk/131.6.1 '
     'like Chrome/131.0.6778.260 Safari/537.36';
+// Without Google Play too. Written after the published formats of these browsers, not captured on devices.
+const huaweiHarmony =
+    'Mozilla/5.0 (Linux; Android 12; HarmonyOS; NOH-AN00; HMSCore 6.13.0.321) AppleWebKit/537.36 (KHTML, like Gecko) '
+    'Chrome/114.0.5735.196 HuaweiBrowser/15.0.4.312 Mobile Safari/537.36';
+const huaweiWithoutGoogle =
+    'Mozilla/5.0 (Linux; Android 10; ELS-NX9; HMSCore 6.11.0.302) AppleWebKit/537.36 (KHTML, like Gecko) '
+    'Chrome/99.0.4844.88 HuaweiBrowser/13.0.5.303 Mobile Safari/537.36';
+const openHarmony =
+    'Mozilla/5.0 (Phone; OpenHarmony 5.0; Android 12) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 '
+    'Safari/537.36 ArkWeb/4.1.6.1 Mobile';
+const kaiOs = 'Mozilla/5.0 (Mobile; Nokia 8110 4G; Android; rv:48.0) Gecko/48.0 Firefox/48.0 KAIOS/2.5';
 const windowsChrome =
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36';
 
@@ -114,6 +125,12 @@ void main() {
 
   test('Android "desktop site" and Fire tablets: nothing', () {
     for (final ua in [androidChromeDesktopSite, androidFirefoxDesktopSite, androidSamsungDesktopSite, fireSilk]) {
+      expect(hintFor(ua), InstallHint.none, reason: ua);
+    }
+  });
+
+  test('systems that say Android and have no Google Play: nothing', () {
+    for (final ua in [huaweiHarmony, huaweiWithoutGoogle, openHarmony, kaiOs]) {
       expect(hintFor(ua), InstallHint.none, reason: ua);
     }
   });

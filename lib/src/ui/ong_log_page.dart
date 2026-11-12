@@ -119,7 +119,7 @@ class _OngLogPageState extends ConsumerState<OngLogPage> {
         ChipRow(
           children: [
             ListChip(label: 'All', selected: !anyChip, onTap: notifier.clearChips),
-            // second, as in the Highlights list: in sight on a phone without scrolling the row
+            // right after "All", near where the Highlights list has it: in sight on a phone without scrolling the row
             if (hasMine) ListChip(label: 'You', icon: Icons.person, selected: mine, onTap: notifier.toggleMine),
             ListChip(
               label: 'Piano',

@@ -203,6 +203,7 @@ Future<TestApp> pumpApp(
   FakeTwitchApi? twitch,
   DateTime Function()? clock,
   bool alwaysUse24HourFormat = false,
+  bool startsInBackground = false,
 }) async {
   // before the size: setting it makes MediaQuery read the clock format again
   tester.platformDispatcher.alwaysUse24HourFormatTestValue = alwaysUse24HourFormat;
@@ -236,6 +237,7 @@ Future<TestApp> pumpApp(
         clockProvider.overrideWithValue(clock ?? () => testNow),
         twitchApiProvider.overrideWithValue(twitchApi),
         installHintProvider.overrideWithValue(installHint),
+        startsInBackgroundProvider.overrideWithValue(startsInBackground),
         thumbnailImageProvider.overrideWithValue((url) => MemoryImage(transparentPng)),
         urlOpenerProvider.overrideWithValue((uri) async {
           if (!effects.openWorks) return false;

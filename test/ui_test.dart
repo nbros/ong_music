@@ -750,6 +750,15 @@ void main() {
       expect(app.notifier.staleChecks, 1);
       expect(app.notifier.foreground, [true, false, false, false, true, true]);
     });
+
+    testWidgets('an app that starts in the background (a tab opened behind another) says so at once', (tester) async {
+      // no lifecycle event tells it: the automatic refreshes would run in a tab nobody looks at
+      final hidden = await pumpApp(tester, startsInBackground: true);
+      expect(hidden.notifier.foreground, [false]);
+      await tester.pumpWidget(const SizedBox());
+      final shown = await pumpApp(tester);
+      expect(shown.notifier.foreground, isEmpty);
+    });
   });
 
   group('Back button', () {
