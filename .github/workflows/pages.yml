@@ -65,20 +65,18 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v6
 
-      # jekyll-build-pages is a Docker action running as root: a destination directory it creates is owned
-      # by root, and the runner user then cannot add app/ into it (actions/jekyll-build-pages#101, #18).
-      # Creating it beforehand keeps it owned by the runner user.
-      - name: Create site directory
-        run: mkdir _site
-
       # Same build as legacy Pages from /docs (github-pages gem, same plugins, default theme), so that
       # privacy-policy.md renders at /privacy-policy as before. docs/ must have no index.md (nor README.md, which
       # the gem would turn into one): the index of the site is the web app.
+      #
+      # Into a directory of its own: jekyll-build-pages is a Docker action running as root, so everything it
+      # writes is owned by root, and the runner user cannot add a file next to it (actions/jekyll-build-pages#101,
+      # #18). The site is put together below, from copies.
       - name: Build Jekyll site
         uses: actions/jekyll-build-pages@v1
         with:
           source: ./docs
-          destination: ./_site
+          destination: ./_jekyll
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -110,10 +108,13 @@ jobs:
           --build-number=${{ github.run_number }}
           --dart-define=APP_VERSION=${{ steps.version.outputs.majorMinorPatch }}
 
-      # At the root of the site, next to the Jekyll pages. The two only share the assets/ directory, where Jekyll
-      # writes assets/css/ and Flutter everything else.
-      - name: Add web app to site
+      # The Jekyll pages, then the web app at the root of the site, next to them. The two only share the assets/
+      # directory, where Jekyll writes assets/css/ and Flutter everything else.
+      - name: Put the site together
         run: |
+          mkdir _site
+          cp -R _jekyll/. _site/
+          chmod -R u+w _site
           if [[ -e _site/index.html ]]; then
             echo "::error::docs/ produced an index.html: it would be replaced by the web app's, which is the site's"
             exit 1
