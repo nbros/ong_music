@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:ong_music/src/ui/install_banner.dart';
 import 'package:ong_music/src/web/install_hint.dart';
 
@@ -7,11 +8,21 @@ import 'ui_harness.dart';
 const addToHomeScreen = InstallHint(InstallHintKind.addToHomeScreen);
 const title = 'Install Ong Music on your iPhone';
 
+const playStore = InstallHint(InstallHintKind.playStore, device: 'Android');
+const playTitle = 'Get the Android app';
+const playButton = 'Open Google Play';
+
 /// The banner title (the About section has the same one).
 Finder bannerTitle() => find.descendant(of: find.byType(InstallBanner), matching: find.text(title));
 
 /// The About section title.
 Finder sectionTitle() => find.descendant(of: find.byType(InstallSection), matching: find.text(title));
+
+/// [text] in the banner.
+Finder inBanner(String text) => find.descendant(of: find.byType(InstallBanner), matching: find.text(text));
+
+/// [text] in the About section.
+Finder inSection(String text) => find.descendant(of: find.byType(InstallSection), matching: find.text(text));
 
 /// Scrolls the About tab to its install section.
 Future<void> scrollToSection(WidgetTester tester) async {
@@ -78,4 +89,83 @@ void main() {
     expect(tester.takeException(), isNull);
     await waitForMessage(tester);
   });
+
+  testWidgets('Android browser: the Play app, on every tab until dismissed for good, then still in About', (
+    tester,
+  ) async {
+    final app = await pumpApp(tester, installHint: playStore);
+    expect(inBanner(playTitle), findsOneWidget);
+    expect(inBanner('It starts faster than the web app and shows the lists offline once downloaded.'), findsOneWidget);
+    expect(find.textContaining('Home Screen'), findsNothing);
+    await tester.tap(inBanner(playButton));
+    await tester.pumpAndSettle();
+    expect(app.effects.opened, [Uri.parse('https://play.google.com/store/apps/details?id=nbros.ong_music')]);
+
+    await goToTab(tester, 'Ong Log');
+    expect(inBanner(playTitle), findsOneWidget);
+    await goToTab(tester, 'About');
+    await scrollToSection(tester);
+    expect(inSection(playTitle), findsOneWidget);
+    expect(
+      inSection(
+        'Ong Music is on Google Play. The app starts faster than this web app, and once it has downloaded the lists '
+        'it shows them without a connection (thumbnails still need one).',
+      ),
+      findsOneWidget,
+    );
+    await tester.tap(inSection(playButton));
+    await tester.pumpAndSettle();
+    expect(app.effects.opened, hasLength(2));
+    expect(app.effects.opened.last, Uri.parse(playStoreUrl));
+
+    await tester.tap(find.byTooltip('Dismiss'));
+    await tester.pumpAndSettle();
+    expect(inBanner(playTitle), findsNothing);
+    expect(inSection(playTitle), findsOneWidget);
+    expect(app.prefs.getBool(InstallBannerDismissedNotifier.key), isTrue);
+    await goToTab(tester, 'Highlights');
+    expect(find.text(playTitle), findsNothing);
+  });
+
+  testWidgets('Android: a dismissal is remembered', (tester) async {
+    await pumpApp(tester, installHint: playStore, prefs: {InstallBannerDismissedNotifier.key: true});
+    expect(find.text(playTitle), findsNothing);
+    await goToTab(tester, 'About');
+    await scrollToSection(tester);
+    expect(inSection(playTitle), findsOneWidget);
+    expect(inSection(playButton), findsOneWidget);
+  });
+
+  testWidgets('desktop browser: no banner, no About section', (tester) async {
+    const windowsChrome =
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 '
+        'Safari/537.36';
+    final hint = installHintFor(
+      const BrowserEnvironment(userAgent: windowsChrome, maxTouchPoints: 0, standalone: false),
+    );
+    await pumpApp(tester, installHint: hint);
+    expect(find.text(playTitle), findsNothing);
+    expect(find.text(playButton), findsNothing);
+    await goToTab(tester, 'About');
+    await tester.scrollUntilVisible(find.text('Data'), 200, scrollable: aboutScrollable());
+    expect(find.text(playTitle), findsNothing);
+    expect(find.text(playButton), findsNothing);
+    expect(find.textContaining('Install Ong Music'), findsNothing);
+  });
+
+  // 320 px is the narrowest phone; large text makes the banner scroll rather than push the page out
+  for (final hint in [addToHomeScreen, const InstallHint(InstallHintKind.openInSafari), playStore]) {
+    for (final scale in [1.0, 1.3, 2.0]) {
+      testWidgets('${hint.kind.name}: banner and About section fit 320 × 568 at text scale $scale', (tester) async {
+        await pumpApp(tester, installHint: hint, size: const Size(320, 568), textScale: scale);
+        expect(tester.takeException(), isNull);
+        // half the screen, plus the margins around the banner
+        expect(tester.getSize(find.byType(InstallBanner)).height, lessThanOrEqualTo(568 / 2 + 12));
+        expect(find.byTooltip('Dismiss').hitTestable(), findsOneWidget);
+        await goToTab(tester, 'About');
+        await scrollToSection(tester);
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
 }

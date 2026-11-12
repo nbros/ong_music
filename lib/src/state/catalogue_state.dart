@@ -125,7 +125,9 @@ final catalogueProvider = NotifierProvider<CatalogueNotifier, CatalogueState>(Ca
 ///   foreground ([setForeground]);
 /// - a failed download (no data, or data older than [catalogueMaxAge]) is
 ///   tried again by itself after [catalogueRetryDelays], while the app is in
-///   the foreground;
+///   the foreground; a download refused for its content (a [FormatException]:
+///   a sheet the app cannot read, or half emptied) is not a passing failure,
+///   and megabytes each time: its next attempt waits [catalogueMaxAge];
 /// - a refresh never blanks the UI: the current catalogue stays until a new
 ///   one downloaded and parsed successfully replaces it at once; on failure it
 ///   stays and [CatalogueState.lastError] is set;
@@ -259,7 +261,9 @@ class CatalogueNotifier extends Notifier<CatalogueState> {
         : catalogueMaxAge - now.difference(fetchedAt!);
     final attemptAt = _attemptAt;
     if (_failures > 0 && attemptAt != null) {
-      final delay = catalogueRetryDelays[math.min(_failures, catalogueRetryDelays.length) - 1];
+      final delay = state.lastError is FormatException
+          ? catalogueMaxAge
+          : catalogueRetryDelays[math.min(_failures, catalogueRetryDelays.length) - 1];
       final retryWait = delay - now.difference(attemptAt).abs();
       if (retryWait > wait) wait = retryWait;
     }
@@ -348,7 +352,7 @@ class CatalogueNotifier extends Notifier<CatalogueState> {
 @immutable
 final class HighlightFilter {
   /// Creates a filter; the defaults match everything.
-  const HighlightFilter({this.query = '', this.genre, this.mine = false});
+  const HighlightFilter({this.query = '', this.genre, this.mine = false, this.favourites = false});
 
   /// Search text (see `tokenize`).
   final String query;
@@ -359,12 +363,19 @@ final class HighlightFilter {
   /// Only the user's own requests (the "You" chip, see [myRequesterProvider]).
   final bool mine;
 
-  @override
-  bool operator ==(Object other) =>
-      other is HighlightFilter && other.query == query && other.genre == genre && other.mine == mine;
+  /// Only the user's favourites (the star chip, see [favouritesProvider]).
+  final bool favourites;
 
   @override
-  int get hashCode => Object.hash(query, genre, mine);
+  bool operator ==(Object other) =>
+      other is HighlightFilter &&
+      other.query == query &&
+      other.genre == genre &&
+      other.mine == mine &&
+      other.favourites == favourites;
+
+  @override
+  int get hashCode => Object.hash(query, genre, mine, favourites);
 }
 
 /// The Ong Log list filters.
@@ -419,6 +430,13 @@ final myHighlightCountProvider = Provider<int>((ref) {
   return me == null ? 0 : ref.watch(currentCatalogueProvider)!.highlightRequestCount(me);
 });
 
+/// How many highlights of the current catalogue are favourites: the count of
+/// the star chip of the Highlights list, which only shows when it is not 0.
+/// Stored favourites absent from the catalogue do not count.
+final favouriteCountProvider = Provider<int>(
+  (ref) => ref.watch(currentCatalogueProvider)?.highlightCountWithKeys(ref.watch(favouritesProvider)) ?? 0,
+);
+
 /// How many plays the user requested; the "You" chip of the Ong Log only shows
 /// when it is not 0.
 final myPlayCountProvider = Provider<int>((ref) => ref.watch(myRequesterProvider)?.requestCount ?? 0);
@@ -438,6 +456,8 @@ final highlightResultsProvider = Provider.autoDispose.family<HighlightResults?, 
         query: filter.query,
         genre: filter.genre,
         requesterId: _myRequesterId(ref, filter.mine, myHighlightCountProvider),
+        // as for "You": no filter on favourites while the list holds none (the chip is gone)
+        keys: filter.favourites && ref.watch(favouriteCountProvider) > 0 ? ref.watch(favouritesProvider) : null,
       ),
 );
 

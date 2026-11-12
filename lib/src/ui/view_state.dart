@@ -42,22 +42,40 @@ class HighlightFilterNotifier extends Notifier<HighlightFilter> {
   HighlightFilter build() {
     // the "You" chip is gone (Twitch name changed, refresh): its filter goes with it, and does not come back with it
     ref.listen(myHighlightCountProvider, (_, count) {
-      if (count == 0 && state.mine) state = HighlightFilter(query: state.query, genre: state.genre);
+      if (count == 0 && state.mine) {
+        state = HighlightFilter(query: state.query, genre: state.genre, favourites: state.favourites);
+      }
+    });
+    // the star chip is gone (last star removed, refresh): the same
+    ref.listen(favouriteCountProvider, (_, count) {
+      if (count == 0 && state.favourites) {
+        state = HighlightFilter(query: state.query, genre: state.genre, mine: state.mine);
+      }
     });
     return const HighlightFilter();
   }
 
-  void setQuery(String query) => state = HighlightFilter(query: query, genre: state.genre, mine: state.mine);
+  void setQuery(String query) =>
+      state = HighlightFilter(query: query, genre: state.genre, mine: state.mine, favourites: state.favourites);
 
   /// Removes every chip filter, keeps the query ("All").
   void clearChips() => state = HighlightFilter(query: state.query);
 
   /// Selects [genre], or all genres when it is null or already selected.
-  void toggleGenre(Genre? genre) =>
-      state = HighlightFilter(query: state.query, genre: genre == state.genre ? null : genre, mine: state.mine);
+  void toggleGenre(Genre? genre) => state = HighlightFilter(
+    query: state.query,
+    genre: genre == state.genre ? null : genre,
+    mine: state.mine,
+    favourites: state.favourites,
+  );
 
   /// Shows only the user's own requests, or all of them again ("You").
-  void toggleMine() => state = HighlightFilter(query: state.query, genre: state.genre, mine: !state.mine);
+  void toggleMine() =>
+      state = HighlightFilter(query: state.query, genre: state.genre, mine: !state.mine, favourites: state.favourites);
+
+  /// Shows only the favourites, or all highlights again (the star chip).
+  void toggleFavourites() =>
+      state = HighlightFilter(query: state.query, genre: state.genre, mine: state.mine, favourites: !state.favourites);
 }
 
 /// Filters of the Ong Log list.

@@ -73,6 +73,10 @@ jobs:
       - name: Run tests
         run: flutter test
 
+      # the tests that only run in a browser (the web cache, the download the page starts): Chrome is on the runner
+      - name: Run browser tests
+        run: flutter test --platform chrome test/sheet_cache_web_test.dart test/sheet_prefetch_web_test.dart
+
       - name: Build App Bundle
         run: flutter build appbundle --build-name=${{ steps.version.outputs.majorMinorPatch }}+${{ steps.version.outputs.shortSha }} --build-number=${{ github.run_number }} --dart-define=APP_VERSION=${{ steps.version.outputs.majorMinorPatch }}
 

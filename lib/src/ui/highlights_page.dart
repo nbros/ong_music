@@ -30,6 +30,7 @@ class _HighlightsPageState extends ConsumerState<HighlightsPage> {
 
   HighlightResults? _shownResults;
   HighlightFilter? _shownFilter;
+  Catalogue? _shownCatalogue;
   double _shownRowExtent = 0;
 
   @override
@@ -40,21 +41,24 @@ class _HighlightsPageState extends ConsumerState<HighlightsPage> {
 
   /// Keeps what is on screen there when the rows change under the same
   /// [filter] (a filter change jumps to the top instead).
-  void _keepPosition(HighlightResults results, HighlightFilter filter, double rowExtent) {
+  void _keepPosition(Catalogue catalogue, HighlightResults results, HighlightFilter filter, double rowExtent) {
     final shown = _shownResults;
     if (shown != null && identical(results, shown)) {
       // the text size changed: the row at the top of the list stays there
       final oldExtent = _shownRowExtent;
       if (rowExtent != oldExtent) reanchorScroll(_scroll, (offset) => offset * rowExtent / oldExtent);
-    } else if (shown != null && filter == _shownFilter) {
+    } else if (shown != null && filter == _shownFilter && !identical(catalogue, _shownCatalogue)) {
       // a refresh brought another catalogue: new highlights come first, the
       // rows on screen keep their distance to the end of the list (after the
       // text size correction, should both change in the same frame)
       final resize = rowExtent / _shownRowExtent;
       reanchorScroll(_scroll, (offset) => offset * resize + (results.length - shown.length) * rowExtent);
     }
+    // otherwise the same catalogue lost or gained rows in place (a star removed under the star chip): the offset
+    // stays, the rows below move up
     _shownResults = results;
     _shownFilter = filter;
+    _shownCatalogue = catalogue;
     _shownRowExtent = rowExtent;
   }
 
@@ -75,13 +79,15 @@ class _HighlightsPageState extends ConsumerState<HighlightsPage> {
     if (catalogue == null) return const CatalogueStatusView();
     final filter = ref.watch(highlightFilterProvider);
     final results = ref.watch(highlightResultsProvider(filter))!;
-    _keepPosition(results, filter, ListMetrics.of(context).highlightRow);
+    _keepPosition(catalogue, results, filter, ListMetrics.of(context).highlightRow);
     final searching = results.tokens.isNotEmpty;
     final inOngLog = searching ? ref.watch(playCountForQueryProvider(filter.query)) : 0;
     final notifier = ref.read(highlightFilterProvider.notifier);
     final myCount = ref.watch(myHighlightCountProvider);
-    // without own highlight there is no "You" chip, and no filter on it
+    final favouriteCount = ref.watch(favouriteCountProvider);
+    // without own highlight there is no "You" chip, and no filter on it; the same for the favourites
     final mine = filter.mine && myCount > 0;
+    final favourites = filter.favourites && favouriteCount > 0;
     return Column(
       children: [
         ListSearchField(
@@ -92,7 +98,16 @@ class _HighlightsPageState extends ConsumerState<HighlightsPage> {
         ),
         ChipRow(
           children: [
-            ListChip(label: 'All', selected: filter.genre == null && !mine, onTap: notifier.clearChips),
+            ListChip(label: 'All', selected: filter.genre == null && !mine && !favourites, onTap: notifier.clearChips),
+            if (favouriteCount > 0)
+              ListChip(
+                label: 'Favourites',
+                showLabel: false,
+                icon: Icons.star,
+                count: favouriteCount,
+                selected: favourites,
+                onTap: notifier.toggleFavourites,
+              ),
             if (myCount > 0)
               ListChip(label: 'You', icon: Icons.person, count: myCount, selected: mine, onTap: notifier.toggleMine),
             for (final g in catalogue.highlightGenreCounts)
@@ -105,7 +120,7 @@ class _HighlightsPageState extends ConsumerState<HighlightsPage> {
                 ),
           ],
         ),
-        if (searching || filter.genre != null || mine)
+        if (searching || filter.genre != null || mine || favourites)
           CountLine(
             text: plural(results.length, 'highlight'),
             link: inOngLog > 0 ? '${formatCount(inOngLog)} in the Ong Log' : null,

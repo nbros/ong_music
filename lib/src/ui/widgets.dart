@@ -538,33 +538,51 @@ class ChipRow extends StatelessWidget {
 }
 
 /// A filter chip of the design: label, optional icon and count.
+///
+/// Without [showLabel] it shows its [icon] (required then) and its count
+/// alone, and [label] is only said to screen readers.
 class ListChip extends StatelessWidget {
-  const ListChip({super.key, required this.label, required this.selected, required this.onTap, this.icon, this.count});
+  const ListChip({
+    super.key,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    this.icon,
+    this.count,
+    this.showLabel = true,
+  }) : assert(showLabel || icon != null, 'a chip without label shows an icon');
 
   final String label;
   final bool selected;
   final VoidCallback onTap;
   final IconData? icon;
   final int? count;
+  final bool showLabel;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final color = selected ? scheme.onSecondaryContainer : scheme.onSurfaceVariant;
     final count = this.count;
-    final text = count == null
+    final countStyle = TextStyle(fontSize: 11, fontWeight: FontWeight.w400, color: color.withValues(alpha: 0.75));
+    final Widget? text = !showLabel
+        ? (count == null ? null : Text(formatCount(count), style: countStyle))
+        : count == null
         ? Text(label)
         : Text.rich(
             TextSpan(
               text: label,
-              children: [
-                TextSpan(
-                  text: '  ${formatCount(count)}',
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w400, color: color.withValues(alpha: 0.75)),
-                ),
-              ],
+              children: [TextSpan(text: '  ${formatCount(count)}', style: countStyle)],
             ),
           );
+    final withIcon = Row(
+      mainAxisSize: MainAxisSize.min,
+      spacing: 6,
+      children: [
+        Icon(icon, size: 16, color: color),
+        ?text,
+      ],
+    );
     // The sizes of the design: 32 px high, 12 px on each side inside the border, the icon 6 px
     // from the label. The icon is part of the label: as an avatar, the chip
     // would give it a 32 px box.
@@ -576,16 +594,7 @@ class ListChip extends StatelessWidget {
         selected: selected,
         onSelected: (_) => onTap(),
         labelStyle: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: color),
-        label: icon == null
-            ? text
-            : Row(
-                mainAxisSize: MainAxisSize.min,
-                spacing: 6,
-                children: [
-                  Icon(icon, size: 16, color: color),
-                  text,
-                ],
-              ),
+        label: icon == null ? text! : (showLabel ? withIcon : Semantics(label: label, child: withIcon)),
       ),
     );
   }

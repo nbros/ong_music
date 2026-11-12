@@ -61,7 +61,8 @@ final class PlayResults {
 /// row) must keep the [Catalogue] it was opened with, or the entity objects, and
 /// never look an old id up in a newer catalogue. To find "the same thing" again
 /// across catalogues use what does not move: `Song.key`, a stream's date, a
-/// highlight's `seq`, a requester's folded name. The catalogue instance itself
+/// highlight's `seq` (`Highlight.key` also tells apart the rows sharing one), a
+/// requester's folded name. The catalogue instance itself
 /// is kept when a refresh finds the sheets unchanged.
 final class Catalogue {
   /// Assembles a catalogue; use `parseCatalogue` instead.
@@ -81,6 +82,7 @@ final class Catalogue {
       for (final h in highlights)
         '${fold(h.title)}\n${h.requesterId == null ? '' : _requesterFolds[h.requesterId!]}\n${_genreFolds[h.genre.index]}',
     ];
+    _highlightKeys = [for (final h in highlights) h.key];
     _highlightGenreCounts = _countGenres(highlights.map((h) => h.genre));
     _highlightRequests = Int32List(requesters.length);
     for (final h in highlights) {
@@ -111,6 +113,7 @@ final class Catalogue {
   late final List<String> _requesterFolds;
   late final Map<String, int> _requesterByFold;
   late final List<String> _highlightFields;
+  late final List<String> _highlightKeys;
   late final List<GenreCount> _highlightGenreCounts;
   late final List<GenreCount> _playGenreCounts;
   late final Int32List _highlightRequests;
@@ -196,17 +199,22 @@ final class Catalogue {
   /// counts their plays).
   int highlightRequestCount(Requester requester) => _highlightRequests[requester.id];
 
+  /// Number of highlights whose `Highlight.key` is in [keys]; keys of no
+  /// highlight of this catalogue do not count.
+  int highlightCountWithKeys(Set<String> keys) => keys.isEmpty ? 0 : _highlightKeys.where(keys.contains).length;
+
   // ---------------------------------------------------------------- search
 
   /// Highlights matching [query] (every token in the title, requester or genre
-  /// label) and, when given, of [genre] and requested by requester
-  /// [requesterId]; newest first.
-  HighlightResults searchHighlights({String query = '', Genre? genre, int? requesterId}) {
+  /// label) and, when given, of [genre], requested by requester [requesterId]
+  /// and with a `Highlight.key` in [keys]; newest first.
+  HighlightResults searchHighlights({String query = '', Genre? genre, int? requesterId, Set<String>? keys}) {
     final tokens = tokenize(query);
     final ids = <int>[];
     for (var i = highlights.length - 1; i >= 0; i--) {
       if (genre != null && highlights[i].genre != genre) continue;
       if (requesterId != null && highlights[i].requesterId != requesterId) continue;
+      if (keys != null && !keys.contains(_highlightKeys[i])) continue;
       final fields = _highlightFields[i];
       if (tokens.every(fields.contains)) ids.add(i);
     }

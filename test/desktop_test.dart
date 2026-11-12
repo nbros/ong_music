@@ -19,6 +19,10 @@ void main() {
     // the "Watch" button as high as the round buttons beside it
     expect(tester.getSize(find.widgetWithText(FilledButton, 'Watch on YouTube')).height, 40);
     expect(tester.getSize(find.widgetWithIcon(IconButton, Icons.share)).height, 40);
+    // the star as big as its round neighbours, and still in line with Copy
+    final star = tester.getRect(find.widgetWithIcon(IconButton, Icons.star_border));
+    expect(star.size, const Size(40, 40));
+    expect(star.right, tester.getRect(find.widgetWithIcon(IconButton, Icons.copy)).right);
   }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
   testWidgets('desktop: a mouse wheel beside the content scrolls what is at that height', (tester) async {

@@ -12,6 +12,13 @@
     "theme_color": "#15110e",
     "categories": ["music", "entertainment"],
     "prefer_related_applications": false,
+    "related_applications": [
+        {
+            "platform": "play",
+            "url": "https://play.google.com/store/apps/details?id=nbros.ong_music",
+            "id": "nbros.ong_music"
+        }
+    ],
     "icons": [
         {
             "src": "icons/Icon-192.png",

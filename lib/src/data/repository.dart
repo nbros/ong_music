@@ -53,14 +53,19 @@ final class CatalogueRepository {
     }
   }
 
-  /// [parse], any failure of which is a [CatalogueFormatException]: the parser
-  /// may fail on a payload it was not written for with another error.
+  /// [parse], whose failures on a payload it was not written for (a
+  /// [StateError], a [RangeError], a [TypeError]: bugs met on unexpected
+  /// input) count as a [CatalogueFormatException]. Any other failure is not
+  /// about the payload (the isolate could not start, no memory left) and
+  /// is thrown as it is: the cache it was reading is good and must be kept.
   Future<Catalogue> _parse(RawSheets sheets) async {
     try {
       return await parse(sheets);
-    } on FormatException {
-      rethrow;
-    } catch (e) {
+    } on StateError catch (e) {
+      throw CatalogueFormatException('Unreadable sheets: $e');
+    } on ArgumentError catch (e) {
+      throw CatalogueFormatException('Unreadable sheets: $e');
+    } on TypeError catch (e) {
       throw CatalogueFormatException('Unreadable sheets: $e');
     }
   }

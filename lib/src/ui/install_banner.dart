@@ -1,5 +1,6 @@
-/// "Add to Home Screen" advice for iPhone and iPad users of the web app: a
-/// banner until dismissed, and a section of the About tab.
+/// "Add to Home Screen" advice for iPhone and iPad users of the web app, and
+/// the Android app for Android users: a banner until dismissed, and a section
+/// of the About tab.
 library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,6 +11,9 @@ import '../web/install_hint.dart';
 import '../web/web_platform.dart';
 import 'actions.dart';
 import 'theme.dart';
+
+/// The Google Play page of the Android app.
+const playStoreUrl = 'https://play.google.com/store/apps/details?id=nbros.ong_music';
 
 /// The advice for this browser; [InstallHint.none] in the native apps.
 /// Overridden in tests.
@@ -38,12 +42,14 @@ class InstallBannerDismissedNotifier extends Notifier<bool> {
 /// Title of the advice.
 String installHintTitle(InstallHint hint) => switch (hint.kind) {
   InstallHintKind.openInSafari => 'Open in Safari to install Ong Music',
+  InstallHintKind.playStore => 'Get the Android app',
   _ => 'Install Ong Music on your ${hint.device}',
 };
 
 /// The advice in one or two lines, for the banner.
 String installHintShortText(InstallHint hint) => switch (hint.kind) {
   InstallHintKind.openInSafari => 'This app’s browser can’t add it to your Home Screen: open the page in Safari.',
+  InstallHintKind.playStore => 'It starts faster than the web app and shows the lists offline once downloaded.',
   _ => 'In Safari, tap the menu button next to the address, then Share, View More and “Add to Home Screen”.',
 };
 
@@ -53,6 +59,9 @@ String installHintText(InstallHint hint) => switch (hint.kind) {
     'This page is open inside another app, which can’t add it to your Home Screen. '
         'Open it in Safari (look for “Open in Safari” or “Open in browser” in this app’s menu, or copy the link), '
         'then follow the steps shown there.',
+  InstallHintKind.playStore =>
+    'Ong Music is on Google Play. The app starts faster than this web app, and once it has downloaded the lists '
+        'it shows them without a connection (thumbnails still need one).',
   _ =>
     'In Safari, tap the menu button next to the address (on older iOS versions, the Share button), '
         'then Share, View More and “Add to Home Screen”. In another browser, look for “Add to Home Screen” '
@@ -91,27 +100,35 @@ class InstallBanner extends ConsumerWidget {
       child: Material(
         color: scheme.secondaryContainer,
         borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 4, 8),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(top: 2, right: 12),
-                child: Icon(
-                  hint.kind == InstallHintKind.openInSafari ? Icons.open_in_browser : Icons.ios_share,
-                  color: scheme.onSecondaryContainer,
+        clipBehavior: Clip.antiAlias,
+        // never more than half the screen, which large text would exceed (it would leave no room for the page
+        // below): it scrolls instead
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height / 2),
+          child: SingleChildScrollView(
+            primary: false,
+            padding: const EdgeInsets.fromLTRB(16, 12, 4, 8),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 2, right: 12),
+                  child: Icon(switch (hint.kind) {
+                    InstallHintKind.openInSafari => Icons.open_in_browser,
+                    InstallHintKind.playStore => Icons.install_mobile,
+                    _ => Icons.ios_share,
+                  }, color: scheme.onSecondaryContainer),
                 ),
-              ),
-              Expanded(
-                child: _HintBody(hint: hint, color: scheme.onSecondaryContainer, short: true),
-              ),
-              IconButton(
-                tooltip: 'Dismiss',
-                onPressed: () => ref.read(installBannerDismissedProvider.notifier).dismiss(),
-                icon: Icon(Icons.close, color: scheme.onSecondaryContainer),
-              ),
-            ],
+                Expanded(
+                  child: _HintBody(hint: hint, color: scheme.onSecondaryContainer, short: true),
+                ),
+                IconButton(
+                  tooltip: 'Dismiss',
+                  onPressed: () => ref.read(installBannerDismissedProvider.notifier).dismiss(),
+                  icon: Icon(Icons.close, color: scheme.onSecondaryContainer),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -119,8 +136,8 @@ class InstallBanner extends ConsumerWidget {
   }
 }
 
-/// The advice in the About tab: always there on iPhone and iPad, in the
-/// browser.
+/// The advice in the About tab: always there on iPhone, iPad and Android, in
+/// the browser.
 class InstallSection extends ConsumerWidget {
   const InstallSection({super.key});
 
@@ -140,7 +157,7 @@ class InstallSection extends ConsumerWidget {
   }
 }
 
-class _HintBody extends StatelessWidget {
+class _HintBody extends ConsumerWidget {
   const _HintBody({required this.hint, required this.color, this.short = false});
 
   final InstallHint hint;
@@ -150,7 +167,7 @@ class _HintBody extends StatelessWidget {
   final bool short;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final on3 = OngColors.of(context).on3;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -172,6 +189,16 @@ class _HintBody extends StatelessWidget {
               onPressed: () => _copyLink(context),
               icon: Icon(Icons.link, size: 18, color: on3),
               label: const Text('Copy link'),
+            ),
+          )
+        else if (hint.kind == InstallHintKind.playStore)
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: TextButton.icon(
+              style: TextButton.styleFrom(foregroundColor: color, padding: const EdgeInsets.symmetric(horizontal: 8)),
+              onPressed: () => openLink(context, ref, playStoreUrl),
+              icon: Icon(Icons.open_in_new, size: 18, color: on3),
+              label: const Text('Open Google Play'),
             ),
           )
         else

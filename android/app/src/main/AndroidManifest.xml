@@ -1,9 +1,16 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     package="nbros.ong_music">
+   <!-- Backup: the user's settings and favourites only, see res/xml/backup_rules.xml (Android 11 and lower)
+        and res/xml/data_extraction_rules.xml (Android 12 and higher). -->
    <application
         android:label="Ong Music"
         android:name="${applicationName}"
-        android:icon="@mipmap/launcher_icon">
+        android:icon="@mipmap/launcher_icon"
+        android:allowBackup="true"
+        android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        tools:targetApi="31">
         <activity
             android:name=".MainActivity"
             android:exported="true"

@@ -284,10 +284,12 @@ Future<void> tapVisible(WidgetTester tester, Finder finder) async {
 }
 
 /// The filter chip whose label starts with [label] (labels may carry a count).
+/// A chip without visible label is found by its label for screen readers.
 Finder chip(String label) => find.byWidgetPredicate((w) {
   if (w is! FilterChip) return false;
-  // a chip with an icon has a row for label: the icon, then the text
   final labelWidget = w.label;
+  if (labelWidget is Semantics) return labelWidget.properties.label == label;
+  // a chip with an icon has a row for label: the icon, then the text
   final text = labelWidget is Row ? labelWidget.children.last : labelWidget;
   if (text is! Text) return false;
   final plain = text.data ?? text.textSpan!.toPlainText();

@@ -33,6 +33,36 @@ const iPhoneWebView =
     'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148';
 const androidChrome =
     'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Mobile Safari/537.36';
+// a tablet: no "Mobile"
+const androidChromeTablet =
+    'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36';
+const androidFirefox = 'Mozilla/5.0 (Android 15; Mobile; rv:141.0) Gecko/141.0 Firefox/141.0';
+const androidFirefoxTablet = 'Mozilla/5.0 (Android 15; Tablet; rv:141.0) Gecko/141.0 Firefox/141.0';
+const androidSamsung =
+    'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/28.0 '
+    'Chrome/130.0.0.0 Mobile Safari/537.36';
+const androidEdge =
+    'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Mobile Safari/537.36 '
+    'EdgA/138.0.0.0';
+// web views of other apps ("wv"), with the in-app tokens of their iOS versions
+const androidInstagram =
+    'Mozilla/5.0 (Linux; Android 14; Pixel 8 Build/AP2A.240805.005; wv) AppleWebKit/537.36 (KHTML, like Gecko) '
+    'Version/4.0 Chrome/127.0.6533.103 Mobile Safari/537.36 Instagram 343.0.0.32.112 Android (34/14; 420dpi; '
+    '1080x2205; Google/google; Pixel 8; shiba; shiba; en_US; 629237468)';
+const androidFacebook =
+    'Mozilla/5.0 (Linux; Android 14; SM-S918B Build/UP1A.231005.007; wv) AppleWebKit/537.36 (KHTML, like Gecko) '
+    'Version/4.0 Chrome/130.0.6723.107 Mobile Safari/537.36 [FB_IAB/FB4A;FBAV/490.0.0.48.82;]';
+// "Desktop site" on Android: Chrome, Firefox, Samsung Internet
+const androidChromeDesktopSite =
+    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36';
+const androidFirefoxDesktopSite = 'Mozilla/5.0 (X11; Linux x86_64; rv:141.0) Gecko/20100101 Firefox/141.0';
+const androidSamsungDesktopSite =
+    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/28.0 Chrome/130.0.0.0 '
+    'Safari/537.36';
+// Amazon Fire tablet: no Google Play
+const fireSilk =
+    'Mozilla/5.0 (Linux; Android 11; KFRASWI) AppleWebKit/537.36 (KHTML, like Gecko) Silk/131.6.1 '
+    'like Chrome/131.0.6778.260 Safari/537.36';
 const windowsChrome =
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36';
 
@@ -61,13 +91,34 @@ void main() {
   });
 
   test('installed (standalone): nothing', () {
-    for (final ua in [iPhoneSafari, iPadSafari, iPhoneInstagram]) {
+    for (final ua in [iPhoneSafari, iPadSafari, iPhoneInstagram, androidChrome, androidSamsung]) {
       expect(hintFor(ua, standalone: true), InstallHint.none, reason: ua);
     }
   });
 
-  test('Android and desktop: nothing', () {
-    expect(hintFor(androidChrome), InstallHint.none);
+  test('Android browsers and web views, phones and tablets: the Play app', () {
+    const playStore = InstallHint(InstallHintKind.playStore, device: 'Android');
+    for (final ua in [
+      androidChrome,
+      androidChromeTablet,
+      androidFirefox,
+      androidFirefoxTablet,
+      androidSamsung,
+      androidEdge,
+      androidInstagram,
+      androidFacebook,
+    ]) {
+      expect(hintFor(ua), playStore, reason: ua);
+    }
+  });
+
+  test('Android "desktop site" and Fire tablets: nothing', () {
+    for (final ua in [androidChromeDesktopSite, androidFirefoxDesktopSite, androidSamsungDesktopSite, fireSilk]) {
+      expect(hintFor(ua), InstallHint.none, reason: ua);
+    }
+  });
+
+  test('desktop: nothing', () {
     expect(hintFor(windowsChrome, touchPoints: 0), InstallHint.none);
     expect(hintFor(windowsChrome, touchPoints: 10), InstallHint.none);
   });

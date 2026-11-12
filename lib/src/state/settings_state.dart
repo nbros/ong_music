@@ -15,6 +15,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart' show ThemeMode;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../data/model.dart';
 import '../data/text.dart';
 import '../logger.dart';
 
@@ -123,3 +124,38 @@ class TwitchNameNotifier extends Notifier<String> {
 /// The folded Twitch name, empty when not set: compare it with
 /// `Requester.folded`, or pass it to `Catalogue.isRequester`.
 final myRequesterKeyProvider = Provider<String>((ref) => fold(ref.watch(twitchNameProvider)));
+
+/// The keys (`Highlight.key`) of the user's favourite highlights, in the order
+/// they were added. Keys of highlights absent from the current catalogue stay:
+/// the highlight may come back with a later refresh.
+final favouritesProvider = NotifierProvider<FavouritesNotifier, Set<String>>(FavouritesNotifier.new);
+
+/// Persists the favourites under [key], a list of `Highlight.key`.
+class FavouritesNotifier extends Notifier<Set<String>> {
+  /// Preference key.
+  static const key = 'favouriteHighlights';
+
+  @override
+  Set<String> build() {
+    final prefs = ref.watch(sharedPreferencesProvider);
+    try {
+      return Set.unmodifiable(prefs.getStringList(key) ?? const <String>[]);
+    } catch (e, st) {
+      // something else than a list of strings under the key: none, until the next star replaces it
+      logger.w('Unreadable favourites', error: e, stackTrace: st);
+      return const {};
+    }
+  }
+
+  /// Adds [highlight] to the favourites, or removes it, and persists the list.
+  Future<void> toggle(Highlight highlight) async {
+    final k = highlight.key;
+    state = Set.unmodifiable(state.contains(k) ? ({...state}..remove(k)) : {...state, k});
+    try {
+      await ref.read(sharedPreferencesProvider).setStringList(key, state.toList());
+    } catch (e, st) {
+      // kept in memory for this session
+      logger.w('Cannot store the favourites', error: e, stackTrace: st);
+    }
+  }
+}

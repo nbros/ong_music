@@ -502,6 +502,32 @@ void main() {
       notifier().setForeground(false);
     });
 
+    testWidgets('a download refused for its content waits for the next refresh, not for the retry delays', (
+      tester,
+    ) async {
+      startWith();
+      // a page of HTML instead of the sheet, twice, then the sheet
+      const html = RawSheets(highlightsCsv: '<html>', songsCsv: '<html>');
+      fetcher.results.addAll([html, html, sampleSheets()]);
+      await tester.pump(Duration.zero);
+      expect(fetcher.calls, 1);
+      expect(state().lastError, isA<FormatException>());
+      Future<void> wait(Duration d) async {
+        clock = clock.add(d);
+        await tester.pump(d);
+      }
+
+      // megabytes each time: not after 15 seconds, a minute, 5 minutes...
+      await wait(catalogueMaxAge - const Duration(minutes: 1));
+      expect(fetcher.calls, 1);
+      await wait(const Duration(minutes: 1));
+      expect(fetcher.calls, 2);
+      await wait(catalogueMaxAge);
+      expect(fetcher.calls, 3);
+      expect(state().hasData, isTrue);
+      container.dispose();
+    });
+
     testWidgets('the clock set back by days does not stop the retries', (tester) async {
       startWith();
       fetcher.results.addAll([const SocketException('offline'), sampleSheets()]);
@@ -552,6 +578,33 @@ void main() {
       expect(state().isFailed, isTrue);
       expect(state().lastError, isA<CatalogueFormatException>());
       expect(cache.writes, 0);
+    });
+
+    test('a failure that is not about the payload (the isolate could not start) keeps the cache', () async {
+      cache = MemorySheetCache(
+        CachedSheets(
+          sheets: sampleSheets(tag: 'cached'),
+          fetchedAt: now,
+        ),
+      );
+      var parses = 0;
+      container = ProviderContainer.test(
+        overrides: [
+          sheetFetcherProvider.overrideWithValue(fetcher),
+          sheetCacheProvider.overrideWithValue(cache),
+          catalogueParserProvider.overrideWithValue(
+            (sheets) => ++parses == 1 ? throw Exception('Unable to spawn isolate') : parseOnCurrentIsolate(sheets),
+          ),
+          clockProvider.overrideWithValue(() => clock),
+        ],
+      );
+      // offline: with the cache deleted, nothing would be left for the next start
+      fetcher.results.add(const SocketException('offline'));
+      container.read(catalogueProvider);
+      await notifier().idle;
+      expect(cache.clears, 0);
+      expect(cache.value!.sheets.highlightsCsv, sampleSheets(tag: 'cached').highlightsCsv);
+      expect(state().lastError, isA<SocketException>());
     });
 
     test('clear downloaded data offline: the cache is gone, the data in memory stays with the error', () async {

@@ -276,6 +276,34 @@ class _CopyButtonState extends State<_CopyButton> {
   );
 }
 
+/// The star of a highlight sheet: adds the highlight to the favourites, or
+/// removes it. A state, not an action: a plain icon, not a tonal circle like
+/// [_TonalIcon]. Its tap target follows the theme as theirs does (48 px on
+/// touch screens, 40 with a mouse), so that it stays in line with the Copy
+/// button below it.
+class _FavouriteButton extends ConsumerWidget {
+  const _FavouriteButton({required this.highlight});
+
+  final Highlight highlight;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final key = highlight.key;
+    final favourite = ref.watch(favouritesProvider.select((keys) => keys.contains(key)));
+    return IconButton(
+      tooltip: favourite ? 'Remove from favourites' : 'Add to favourites',
+      onPressed: () => ref.read(favouritesProvider.notifier).toggle(highlight),
+      // a toggle for screen readers, with its state
+      icon: Semantics(
+        toggled: favourite,
+        child: favourite
+            ? Icon(Icons.star, color: OngColors.of(context).brand)
+            : Icon(Icons.star_border, color: Theme.of(context).colorScheme.onSurfaceVariant),
+      ),
+    );
+  }
+}
+
 // ------------------------------------------------------------------ highlight
 
 /// Details of a highlight: big thumbnail, actions, stream, requester, other
@@ -338,7 +366,15 @@ class HighlightSheet extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _Overline(genre: h.genre, text: '${h.genre.label} · Highlight #${h.seq}'),
-                _Title(title: h.track, subtitle: h.artist),
+                // the star always has its place: the title wraps before it, and nothing moves when it changes
+                Row(
+                  children: [
+                    Expanded(
+                      child: _Title(title: h.track, subtitle: h.artist),
+                    ),
+                    _FavouriteButton(highlight: h),
+                  ],
+                ),
                 Padding(
                   padding: const EdgeInsets.only(top: 16, bottom: 6),
                   child: Row(

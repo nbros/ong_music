@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  What Android's automatic backup keeps, on Android 11 and lower (android:fullBackupContent).
+
+  Only the shared preferences: what the user chose (favourites, Twitch name, theme), so that a new phone
+  gets it back when the app is installed. The downloaded sheets (files/sheets/) and the log are megabytes
+  that the app gets again by itself: left out.
+-->
+<full-backup-content>
+    <include domain="sharedpref" path="." />
+</full-backup-content>

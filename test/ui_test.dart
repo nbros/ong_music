@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:ong_music/src/data/sheets.dart';
 import 'package:ong_music/src/data/catalogue.dart';
 import 'package:ong_music/src/state/catalogue_state.dart';
+import 'package:ong_music/src/state/settings_state.dart';
 import 'package:ong_music/src/ui/about_page.dart';
 import 'package:ong_music/src/ui/app.dart';
 import 'package:ong_music/src/ui/highlights_page.dart';
@@ -33,18 +34,25 @@ void main() {
 
     testWidgets('selecting a chip does not move or resize the chips', (tester) async {
       // wide enough for the chips tapped to be on screen (the content keeps 640 px)
-      await pumpApp(tester, prefs: {'twitchName': 'jsbach64'}, size: const Size(700, 892));
+      await pumpApp(
+        tester,
+        prefs: {
+          'twitchName': 'jsbach64',
+          FavouritesNotifier.key: [testCatalogue().highlights.first.key],
+        },
+        size: const Size(700, 892),
+      );
       for (final (tab, page, labels, taps) in [
         (
           'Highlights',
           HighlightsPage,
-          ['All', 'You', 'Game OST', 'Popular', 'Disney'],
-          ['Game OST', 'You', 'Popular', 'You', 'All', 'You', 'All'],
+          ['All', 'Favourites', 'You', 'Game OST', 'Popular', 'Disney'],
+          ['Game OST', 'You', 'Popular', 'You', 'All', 'You', 'All', 'Favourites', 'You', 'Favourites', 'All'],
         ),
         (
           'Ong Log',
           OngLogPage,
-          ['All', 'Piano', 'Loop', 'With video', 'You'],
+          ['All', 'You', 'Piano', 'Loop', 'With video'],
           ['You', 'Piano', 'You', 'All', 'You', 'All'],
         ),
       ]) {
@@ -52,7 +60,7 @@ void main() {
         List<Rect> rects() => [for (final label in labels) tester.getRect(chip(label))];
         final list = find.descendant(of: find.byType(page), matching: find.byType(CustomScrollView));
         final before = rects();
-        // with any chip selected, the list has one place, the same with "You" as with the others
+        // with any chip selected, the list has one place, the same with "You" and the star as with the others
         final listTops = <double>{};
         for (final (i, label) in taps.indexed) {
           await tester.tap(chip(label));
@@ -401,12 +409,12 @@ void main() {
       expect((selected(tester, 'You'), selected(tester, 'All')), (true, false));
       expect(find.text('1 highlight'), findsOneWidget);
 
-      // Ong Log: after "With video", before the separator and the genres, without count
+      // Ong Log: right after "All" too, before the types, without count
       await goToTab(tester, 'Ong Log');
       expect(chipText(tester, 'You'), 'You');
       expect(find.descendant(of: chip('You'), matching: find.byIcon(Icons.person)), findsOneWidget);
-      expect(tester.getRect(chip('You')).left, greaterThan(tester.getRect(chip('With video')).right));
-      expect(tester.getRect(chip('You')).right, lessThan(tester.getRect(find.byType(ChipSeparator)).left));
+      expect(tester.getRect(chip('You')).left, greaterThan(tester.getRect(chip('All')).right));
+      expect(tester.getRect(chip('You')).right, lessThan(tester.getRect(chip('Piano')).left));
       expect(tester.getRect(chip('Popular')).left, greaterThan(tester.getRect(find.byType(ChipSeparator)).right));
       await tapVisible(tester, chip('You'));
       expect(tester.widgetList<PlayRow>(find.byType(PlayRow)).map((r) => r.play.title), [

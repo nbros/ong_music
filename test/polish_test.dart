@@ -5,6 +5,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:ong_music/src/state/settings_state.dart';
 import 'package:ong_music/src/ui/highlights_page.dart';
 import 'package:ong_music/src/ui/ong_log_page.dart';
 import 'package:ong_music/src/ui/sheets.dart';
@@ -111,7 +112,12 @@ void main() {
 
   group('chips', () {
     testWidgets('have the sizes of the design, the first one in line with the search field', (tester) async {
-      await pumpApp(tester);
+      await pumpApp(
+        tester,
+        prefs: {
+          FavouritesNotifier.key: [testCatalogue().highlights.first.key],
+        },
+      );
       await goToTab(tester, 'Ong Log');
       Rect rect(Finder finder) => tester.getRect(finder);
       Finder inChip(String label, Finder finder) => find.descendant(of: chip(label).hitTestable(), matching: finder);
@@ -128,6 +134,16 @@ void main() {
       final label = rect(inChip('Piano', find.text('Piano')));
       expect((icon.left - piano.left, label.left - icon.right, piano.right - label.right), (13, 6, 13));
       expect(icon.size, const Size(16, 16));
+
+      // the star chip: no visible label, the icon and the count where the label and its count would be
+      await goToTab(tester, 'Highlights');
+      final favourites = rect(chip('Favourites').hitTestable());
+      expect(favourites.height, 32);
+      expect(favourites.left - rect(chip('All').hitTestable()).right, 8);
+      final star = rect(inChip('Favourites', find.byIcon(Icons.star)));
+      final count = rect(inChip('Favourites', find.text('1')));
+      expect((star.left - favourites.left, count.left - star.right, favourites.right - count.right), (13, 6, 13));
+      expect(star.size, const Size(16, 16));
     });
 
     testWidgets('a narrow chip takes no more room than it shows, and is 48 px high under the finger', (tester) async {

@@ -47,6 +47,11 @@ class _OngMusicAppState extends ConsumerState<OngMusicApp> {
           .read(catalogueProvider.notifier)
           .setForeground(state == AppLifecycleState.resumed || state == AppLifecycleState.inactive),
     );
+    // already in the background at the start (a browser tab opened behind another): no change will tell
+    final state = WidgetsBinding.instance.lifecycleState;
+    if (state == AppLifecycleState.hidden || state == AppLifecycleState.paused) {
+      ref.read(catalogueProvider.notifier).setForeground(false);
+    }
   }
 
   @override

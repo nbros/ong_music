@@ -24,6 +24,7 @@ As **Ong Music** does not collect any personal data, none is stored by us. The a
 - the downloaded data, so that it does not have to download it again;
 - your theme choice;
 - the Twitch name you can optionally type to highlight your own song requests;
+- the highlights you mark as favourites;
 - small technical settings (for example that you closed the "install" hint of the web version);
 - on Android and Windows, a technical log file of the app's own activity (start, downloads, errors), to help diagnose problems.
 

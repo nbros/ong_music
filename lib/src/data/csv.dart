@@ -37,12 +37,13 @@ List<List<String>> decodeCsv(String text) {
   var row = <String>[];
   // The current field is head + text[anchor, fieldEnd), fieldEnd being i until a closing quote sets it. head holds
   // the text before an escaped quote, and is null when there is none (one substring per field otherwise).
-  String? head;
+  StringBuffer? head;
   var anchor = start, fieldEnd = -1;
 
   String field(int i) {
     final value = text.substring(anchor, fieldEnd < 0 ? i : fieldEnd);
-    return head == null ? value : '$head$value';
+    final before = head;
+    return before == null ? value : (before..write(value)).toString();
   }
 
   void endRow() {
@@ -58,7 +59,7 @@ List<List<String>> decodeCsv(String text) {
   var i = start;
   while (i < end) {
     final unit = text.codeUnitAt(i);
-    if (unit == _quote && i == anchor && fieldEnd < 0 && (head == null || head.isEmpty)) {
+    if (unit == _quote && i == anchor && fieldEnd < 0 && (head?.isEmpty ?? true)) {
       // quoted field: only quotes matter until it ends
       anchor = ++i;
       while (true) {
@@ -69,7 +70,9 @@ List<List<String>> decodeCsv(String text) {
         }
         final next = q + 1 < end ? text.codeUnitAt(q + 1) : -1;
         if (next == _quote) {
-          head = '${head ?? ''}${text.substring(anchor, q)}"';
+          head = (head ?? StringBuffer())
+            ..write(text.substring(anchor, q))
+            ..write('"');
           anchor = i = q + 2;
         } else if (next == -1 || next == _comma || next == _lf || next == _cr) {
           fieldEnd = q;
@@ -93,7 +96,7 @@ List<List<String>> decodeCsv(String text) {
     }
     i++;
   }
-  final last = anchor < end ? field(end) : (head ?? '');
+  final last = anchor < end ? field(end) : (head?.toString() ?? '');
   if (row.isNotEmpty || last.isNotEmpty) {
     row.add(last);
     endRow();
