@@ -78,6 +78,9 @@ flutter_launcher_icons:
   android: "launcher_icon"
   ios: true
   image_path: "assets/ongZoom.png"
+  # adaptive icon (Android 8+): avoids the launcher shrinking the legacy icon into a white circle
+  adaptive_icon_background: "#F3D2C3"
+  adaptive_icon_foreground: "assets/ongZoom.png"
   min_sdk_android: 21
   remove_alpha_ios: true
   web:
