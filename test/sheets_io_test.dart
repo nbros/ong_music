@@ -194,8 +194,14 @@ void main() {
       late List<StreamController<List<int>>> bodies;
       late MockClient client;
 
+      /// The server that sends the pieces, see [pieces]: over when it has sent them all, or when [serverStopped].
+      Future<void>? server;
+      var serverStopped = false;
+
       setUp(() {
         bodies = [];
+        server = null;
+        serverStopped = false;
         client = MockClient.streaming((request, _) async {
           final body = StreamController<List<int>>();
           bodies.add(body);
@@ -203,17 +209,32 @@ void main() {
         });
       });
 
+      // Nothing of a test may go on after it: a piece sent to a closed answer, later, would fail the test "after it
+      // had already completed", and only on a machine slow enough to still be running the file by then.
+      tearDown(() async {
+        serverStopped = true;
+        await server;
+        for (final body in bodies) {
+          if (!body.isClosed) unawaited(body.close());
+        }
+      });
+
       /// [count] pieces of each sheet, [pace] apart, once both answers have started.
-      Future<void> pieces(int count) async {
-        while (bodies.length < 2) {
-          await Future<void>.delayed(Duration.zero);
-        }
-        for (var i = 0; i < count; i++) {
-          for (final body in bodies) {
-            body.add(utf8.encode('é'));
+      Future<void> pieces(int count) {
+        Future<void> send() async {
+          while (bodies.length < 2) {
+            if (serverStopped) return;
+            await Future<void>.delayed(Duration.zero);
           }
-          await Future<void>.delayed(pace);
+          for (var i = 0; i < count && !serverStopped; i++) {
+            for (final body in bodies) {
+              if (!body.isClosed) body.add(utf8.encode('é'));
+            }
+            await Future<void>.delayed(pace);
+          }
         }
+
+        return server = send();
       }
 
       test('arrives, however long it takes, while the server keeps sending', () async {
@@ -243,10 +264,12 @@ void main() {
         unawaited(pieces(20));
         await expectLater(sheets, throwsA(isA<TimeoutException>()));
         expect(watch.elapsed, lessThan(pace * 15));
-        // what a client of its own gets closed for
-        for (final body in bodies) {
-          unawaited(body.close());
-        }
+      });
+
+      test('nothing of these tests goes on after them', () async {
+        // long enough for a piece sent late by one of the tests above to arrive, and fail that test
+        await Future<void>.delayed(pace * 3);
+        expect(server, isNull);
       });
     });
   });
