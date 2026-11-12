@@ -142,39 +142,89 @@ final class CalendarDate implements Comparable<CalendarDate> {
 
   static CalendarDate? _tryCreate(int year, int month, int day) {
     if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+    if (year >= 0 && year <= 9999) {
+      // the dates of the sheets (one per row): integer arithmetic, DateTime goes through a JS Date on the web
+      final leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+      if (day > (month == 2 ? (leap ? 29 : 28) : _monthDays[month - 1])) return null;
+      // days from the civil date (proleptic Gregorian), see http://howardhinnant.github.io/date_algorithms.html
+      final y = month <= 2 ? year - 1 : year;
+      final era = (y >= 0 ? y : y - 399) ~/ 400;
+      final yearOfEra = y - era * 400;
+      final dayOfYear = (153 * (month > 2 ? month - 3 : month + 9) + 2) ~/ 5 + day - 1;
+      final dayOfEra = yearOfEra * 365 + yearOfEra ~/ 4 - yearOfEra ~/ 100 + dayOfYear;
+      return CalendarDate._(era * 146097 + dayOfEra - 719468);
+    }
     final dt = DateTime.utc(year, month, day);
     if (dt.month != month || dt.day != day) return null;
     return CalendarDate._(dt.millisecondsSinceEpoch ~/ Duration.millisecondsPerDay);
   }
 
-  static final _isoLike = RegExp(r'^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:\s+(\d{1,2}):(\d{2}))?');
-  static final _usLike = RegExp(r'^(\d{1,2})/(\d{1,2})/(\d{4})(?:\s+(\d{1,2}):(\d{2}))?');
+  static const _monthDays = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 
   /// Parses a sheet cell: `2024-03-05`, `2024/3/5 21:07`, `3/5/2024 9:07`
   /// (month first), optionally followed by a time. Anything after the time,
   /// such as seconds, is ignored. Returns null when the cell is not a date.
   /// The time, when present, is `HH:MM`.
   static ({CalendarDate date, String time})? parseCell(String cell) {
+    // Scans what `^(\d{4})[-/](\d{1,2})[-/](\d{1,2})` or `^(\d{1,2})/(\d{1,2})/(\d{4})`, then
+    // `(?:\s+(\d{1,2}):(\d{2}))?` match, without regular expressions (one cell per row: they are slow on native
+    // platforms). Every `\d{1,2}` is followed by a separator or by nothing, so taking digits greedily is exact.
     final text = cell.trim();
-    int year, month, day;
-    String? hours, minutes;
-    var m = _isoLike.firstMatch(text);
-    if (m != null) {
-      year = int.parse(m[1]!);
-      month = int.parse(m[2]!);
-      day = int.parse(m[3]!);
+    int year, month, day, end;
+    final yearDigits = _digits(text, 0, 4);
+    final isoMonth = yearDigits == 4 && _isSeparator(text, 4) ? _digits(text, 5, 2) : 0;
+    final isoDay = isoMonth > 0 && _isSeparator(text, 5 + isoMonth) ? _digits(text, 6 + isoMonth, 2) : 0;
+    if (isoDay > 0) {
+      year = _number(text, 0, 4);
+      month = _number(text, 5, isoMonth);
+      day = _number(text, 6 + isoMonth, isoDay);
+      end = 6 + isoMonth + isoDay;
     } else {
-      m = _usLike.firstMatch(text);
-      if (m == null) return null;
-      month = int.parse(m[1]!);
-      day = int.parse(m[2]!);
-      year = int.parse(m[3]!);
+      final m = _digits(text, 0, 2);
+      final d = m > 0 && _hasAt(text, m, 0x2F) ? _digits(text, m + 1, 2) : 0;
+      if (d == 0 || !_hasAt(text, m + 1 + d, 0x2F) || _digits(text, m + d + 2, 4) != 4) return null;
+      month = _number(text, 0, m);
+      day = _number(text, m + 1, d);
+      year = _number(text, m + d + 2, 4);
+      end = m + d + 6;
     }
-    hours = m[4];
-    minutes = m[5];
     final date = _tryCreate(year, month, day);
     if (date == null) return null;
-    return (date: date, time: hours == null ? '' : '${hours.padLeft(2, '0')}:$minutes');
+    var i = end;
+    while (i < text.length && isRegExpSpace(text.codeUnitAt(i))) {
+      i++;
+    }
+    final hours = i > end ? _digits(text, i, 2) : 0;
+    if (hours == 0 || !_hasAt(text, i + hours, 0x3A) || _digits(text, i + hours + 1, 2) != 2) {
+      return (date: date, time: '');
+    }
+    return (date: date, time: '${hours == 1 ? '0' : ''}${text.substring(i, i + hours + 3)}');
+  }
+
+  /// Whether `text[i]` is the code unit [unit].
+  static bool _hasAt(String text, int i, int unit) => i < text.length && text.codeUnitAt(i) == unit;
+
+  /// Whether `text[i]` is `-` or `/`.
+  static bool _isSeparator(String text, int i) => _hasAt(text, i, 0x2D) || _hasAt(text, i, 0x2F);
+
+  /// Number of ASCII digits at `text[i]`, at most [max].
+  static int _digits(String text, int i, int max) {
+    var n = 0;
+    while (n < max && i + n < text.length) {
+      final unit = text.codeUnitAt(i + n);
+      if (unit < 0x30 || unit > 0x39) break;
+      n++;
+    }
+    return n;
+  }
+
+  /// The value of the [length] ASCII digits at `text[i]`.
+  static int _number(String text, int i, int length) {
+    var value = 0;
+    for (var k = i; k < i + length; k++) {
+      value = value * 10 + text.codeUnitAt(k) - 0x30;
+    }
+    return value;
   }
 
   /// The date of a sheet cell, see [parseCell].

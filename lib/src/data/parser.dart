@@ -6,9 +6,8 @@ library;
 
 import 'dart:math' as math;
 
-import 'package:csv/csv.dart';
-
 import 'catalogue.dart';
+import 'csv.dart';
 import 'model.dart';
 import 'text.dart';
 
@@ -75,17 +74,15 @@ final class ColumnResolver {
   int resolve(ColumnSpec spec) => find(spec) ?? spec.fallback;
 }
 
-final _csv = Csv(autoDetect: false, skipEmptyLines: true);
-
-List<List<dynamic>> _decode(String text, String sheet) {
+List<List<String>> _decode(String text, String sheet) {
   final trimmed = text.trimLeft();
   if (trimmed.isEmpty) throw CatalogueFormatException('$sheet: empty payload');
   if (trimmed.startsWith('<')) throw CatalogueFormatException('$sheet: HTML instead of CSV');
   // composeMarks: cells typed with decomposed accents search and display like the others
-  return _csv.decode(composeMarks(text.startsWith('\uFEFF') ? text.substring(1) : text));
+  return decodeCsv(composeMarks(text.startsWith('\uFEFF') ? text.substring(1) : text));
 }
 
-String _cell(List<dynamic> row, int index) => index < row.length ? (row[index]?.toString() ?? '') : '';
+String _cell(List<String> row, int index) => index < row.length ? row[index] : '';
 
 String? _requesterCell(String cell) {
   final x = cell.trim();
@@ -162,7 +159,7 @@ class _PlayDraft {
 class _Builder {
   _Builder(this.hRows, this.hCols, this.sRows, this.sCols);
 
-  final List<List<dynamic>> hRows, sRows;
+  final List<List<String>> hRows, sRows;
   final ColumnResolver hCols, sCols;
 
   // requesters: folded name -> spelling counts, then id assignment on first use

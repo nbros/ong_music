@@ -1,4 +1,8 @@
+import 'dart:math';
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:ong_music/src/data/fold_table.g.dart';
 import 'package:ong_music/src/data/text.dart';
 
 void main() {
@@ -124,9 +128,116 @@ void main() {
     });
   });
 
+  group('fast paths give the results of the general code', () {
+    // Random strings mixing what the fast paths handle (ASCII words, single spaces) with everything that sends them
+    // to the general code: whitespace of every kind (U+0085 is trimmed but is not \s), accents, combining marks,
+    // letters outside Latin, surrogates.
+    const pieces = [
+      'a',
+      'Z',
+      'q',
+      '7',
+      ' ',
+      ' ',
+      '  ',
+      '-',
+      "'",
+      '!',
+      '\t',
+      '\n',
+      '\r',
+      '\u0085',
+      '\u00A0',
+      '\u2028',
+      '\u3000',
+      '\uFEFF',
+      'é',
+      'É',
+      'ß',
+      'Ø',
+      '\u0301',
+      '\u0308',
+      '千',
+      'ツ',
+      'न',
+      '\u093F',
+      '🎹',
+      '=',
+      '\u0338',
+    ];
+    final random = Random(7);
+    final samples = [
+      for (var i = 0; i < 20000; i++)
+        [for (var n = random.nextInt(9); n > 0; n--) pieces[random.nextInt(pieces.length)]].join(),
+    ];
+
+    test('fold', () {
+      for (final s in samples) {
+        expect(fold(s), _foldReference(s), reason: s);
+      }
+    });
+
+    test('songKey', () {
+      for (final s in samples) {
+        expect(songKey(s), _songKeyReference(s), reason: s);
+      }
+    });
+
+    test('collapseSpaces', () {
+      for (final s in samples) {
+        expect(collapseSpaces(s), s.replaceAll(RegExp(r'\s+'), ' ').trim(), reason: s);
+      }
+    });
+
+    test('composeMarks', () {
+      for (final s in [...samples, 'e\u0301\u0302x', 'e\u0301\u0301', '=\u0338\u0338', 'ae\u0301e\u0301']) {
+        expect(composeMarks(s), _composeMarksReference(s), reason: s);
+      }
+    });
+  });
+
   test('splitTitle splits on the first " - "', () {
     expect(splitTitle('Zelda - Song of Storms - Remix'), (artist: 'Zelda', track: 'Song of Storms - Remix'));
     expect(splitTitle('Clair de Lune'), (artist: '', track: 'Clair de Lune'));
     expect(splitTitle('Spider-Man'), (artist: '', track: 'Spider-Man'));
   });
+}
+
+// The implementations before the fast paths, as the reference.
+
+final _foldTable = () {
+  final table = Uint16List(0x10000);
+  for (var i = 0; i < table.length; i++) {
+    table[i] = i;
+  }
+  for (var i = 0; i < foldFrom.length; i++) {
+    table[foldFrom[i]] = foldTo[i];
+  }
+  return table;
+}();
+
+String _foldReference(String text) => String.fromCharCodes(text.codeUnits.map((unit) => _foldTable[unit]));
+
+String _songKeyReference(String title) {
+  final key = _foldReference(
+    title,
+  ).replaceAll(RegExp('[\u0300-\u036F]+'), '').replaceAll(RegExp(r'[^\p{L}\p{N}\p{M}]+', unicode: true), ' ').trim();
+  return RegExp(r'[\p{L}\p{N}]', unicode: true).hasMatch(key) ? key : '';
+}
+
+final _compositions = {for (var i = 0; i < composeFrom.length; i++) composeFrom[i]: composeTo[i]};
+
+String _composeMarksReference(String text) {
+  final units = <int>[];
+  for (final unit in text.codeUnits) {
+    if (units.isNotEmpty && unit >= 0x0300 && unit <= 0x036F) {
+      final composed = _compositions[units.last * 0x10000 + unit];
+      if (composed != null) {
+        units.last = composed;
+        continue;
+      }
+    }
+    units.add(unit);
+  }
+  return String.fromCharCodes(units);
 }

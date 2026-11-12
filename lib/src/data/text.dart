@@ -30,6 +30,18 @@ Uint16List _foldTable() {
 /// one unit (`ß`, `æ`, Hangul syllables, characters outside the BMP) are only
 /// lowercased or kept as they are.
 String fold(String text) {
+  // ASCII (most titles and names): the table only maps A-Z there, as toLowerCase does. Avoids building the string
+  // from a code unit list, which is slow on the web.
+  var upper = false;
+  for (var i = 0; i < text.length; i++) {
+    final unit = text.codeUnitAt(i);
+    if (unit >= 0x80) return _foldTableLookup(text);
+    if (unit >= 0x41 && unit <= 0x5A) upper = true;
+  }
+  return upper ? text.toLowerCase() : text;
+}
+
+String _foldTableLookup(String text) {
   final table = _foldTable();
   final units = Uint16List(text.length);
   var changed = false;
@@ -67,23 +79,33 @@ String composeMarks(String text) {
   }
   if (first < 0) return text;
   final table = _compositionTable();
-  final units = Uint16List(text.length);
-  var n = first;
-  for (var i = 0; i < first; i++) {
-    units[i] = text.codeUnitAt(i);
-  }
+  // Copies the unchanged runs as substrings (building megabytes of text from a code unit list is slow on the web).
+  // text[start, i) is still to be copied, unless [pending] holds the composed form of text[i - 1].
+  final out = StringBuffer();
+  var start = 0;
+  var pending = -1;
   for (var i = first; i < text.length; i++) {
     final unit = text.codeUnitAt(i);
-    if (n > 0 && _isDiacriticalMark(unit)) {
-      final composed = table[units[n - 1] * 0x10000 + unit];
+    if (_isDiacriticalMark(unit)) {
+      final composed = table[(pending >= 0 ? pending : text.codeUnitAt(i - 1)) * 0x10000 + unit];
       if (composed != null) {
-        units[n - 1] = composed;
+        if (pending < 0) out.write(text.substring(start, i - 1));
+        pending = composed;
         continue;
       }
     }
-    units[n++] = unit;
+    if (pending >= 0) {
+      out.writeCharCode(pending);
+      pending = -1;
+      start = i;
+    }
   }
-  return String.fromCharCodes(units, 0, n);
+  if (pending >= 0) {
+    out.writeCharCode(pending);
+  } else {
+    out.write(text.substring(start));
+  }
+  return out.toString();
 }
 
 final _diacriticalMarks = RegExp('[\u0300-\u036F]+');
@@ -99,12 +121,81 @@ final _whitespace = RegExp(r'\s+');
 /// one space: `"Pokémon - Route 1!"` → `pokemon route 1`. Titles in non-Latin
 /// scripts keep their letters. An empty key means "not a song".
 String songKey(String title) {
-  final key = fold(title).replaceAll(_diacriticalMarks, '').replaceAll(_notLetterOrDigit, ' ').trim();
+  final folded = fold(title);
+  return _asciiSongKey(folded) ?? _unicodeSongKey(folded);
+}
+
+String _unicodeSongKey(String folded) {
+  final key = folded.replaceAll(_diacriticalMarks, '').replaceAll(_notLetterOrDigit, ' ').trim();
   return _letterOrDigit.hasMatch(key) ? key : '';
 }
 
+bool _isAsciiLetterOrDigit(int unit) => (unit >= 0x61 && unit <= 0x7A) || (unit >= 0x30 && unit <= 0x39);
+
+/// [songKey] of a folded ASCII string without regular expressions (slow on
+/// native platforms), or null when [folded] is not ASCII. After [fold], the
+/// only ASCII letters and digits are `a-z` and `0-9`.
+String? _asciiSongKey(String folded) {
+  var words = 0;
+  var inWord = false;
+  var clean = true; // words separated by single spaces, nothing else
+  for (var i = 0; i < folded.length; i++) {
+    final unit = folded.codeUnitAt(i);
+    if (unit >= 0x80) return null;
+    if (_isAsciiLetterOrDigit(unit)) {
+      if (!inWord) words++;
+      inWord = true;
+    } else {
+      if (unit != 0x20 || !inWord) clean = false;
+      inWord = false;
+    }
+  }
+  if (words == 0) return '';
+  if (clean && inWord) return folded;
+  final out = StringBuffer();
+  var start = -1;
+  for (var i = 0; i <= folded.length; i++) {
+    if (i < folded.length && _isAsciiLetterOrDigit(folded.codeUnitAt(i))) {
+      if (start < 0) start = i;
+    } else if (start >= 0) {
+      if (out.isNotEmpty) out.write(' ');
+      out.write(folded.substring(start, i));
+      start = -1;
+    }
+  }
+  return out.toString();
+}
+
 /// Collapses runs of whitespace into one space and trims.
-String collapseSpaces(String text) => text.replaceAll(_whitespace, ' ').trim();
+String collapseSpaces(String text) {
+  // Most cells have nothing to collapse: check that without the regular expression (slow on native platforms).
+  for (var i = 0; i < text.length; i++) {
+    final unit = text.codeUnitAt(i);
+    if ((unit <= 0x20 || unit >= 0x85) && _isSpace(unit)) {
+      if (unit != 0x20 || i == 0 || i == text.length - 1 || text.codeUnitAt(i - 1) == 0x20) {
+        return text.replaceAll(_whitespace, ' ').trim();
+      }
+    }
+  }
+  return text;
+}
+
+/// Whether [unit] is whitespace for [String.trim]: [isRegExpSpace] or U+0085.
+bool _isSpace(int unit) => unit == 0x85 || isRegExpSpace(unit);
+
+/// Whether the UTF-16 code unit [unit] matches `\s` in a [RegExp].
+bool isRegExpSpace(int unit) =>
+    (unit >= 0x09 && unit <= 0x0D) ||
+    unit == 0x20 ||
+    unit == 0xA0 ||
+    unit == 0x1680 ||
+    (unit >= 0x2000 && unit <= 0x200A) ||
+    unit == 0x2028 ||
+    unit == 0x2029 ||
+    unit == 0x202F ||
+    unit == 0x205F ||
+    unit == 0x3000 ||
+    unit == 0xFEFF;
 
 /// At most this many tokens of a query are used (a pasted paragraph must not
 /// cost a full scan per word on every keystroke).

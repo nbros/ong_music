@@ -6,6 +6,8 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import 'sheet_prefetch.dart';
+
 /// Tells whether two downloads have the same content, without keeping the
 /// megabytes of text around: lengths and `String.hashCode` of both sheets.
 /// Only comparable within one run of the app.
@@ -88,6 +90,9 @@ final class HttpSheetFetcher implements SheetFetcher {
 
   @override
   Future<RawSheets> fetch() async {
+    // web, first download: the one the page started while the app was loading, if any
+    final prefetched = await takePrefetchedSheets().timeout(timeout);
+    if (prefetched != null) return prefetched;
     final client = _client ?? http.Client();
     try {
       final results = await Future.wait([_get(client, SheetUrls.highlights), _get(client, SheetUrls.songs)]);

@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ong_music/src/data/model.dart';
 import 'package:ong_music/src/data/parser.dart';
@@ -450,4 +452,82 @@ void main() {
     expect(CalendarDate.fromEpochDay(0).toIso(), '1970-01-01');
     expect(() => CalendarDate(2024, 13, 1), throwsArgumentError);
   });
+
+  test('CalendarDate.parseCell gives the results of the regular expressions it replaces', () {
+    const pieces = ['1', '2', '0', '9', '3', '12', '2024', '-', '/', ':', ' ', '  ', '\t', '\u0085', '\u00A0', 'x'];
+    final random = Random(3);
+    final samples = [
+      for (var i = 0; i < 30000; i++)
+        [for (var n = random.nextInt(12); n > 0; n--) pieces[random.nextInt(pieces.length)]].join(),
+      '2024-03-05',
+      '2024/3/5 21:07',
+      '3/5/2024 9:07',
+      '2024-3-5 9:07:33',
+      ' 2024-03-05\t\t1:05 ',
+      '2024-03-05 123:45',
+      '2024-03-051',
+      '12/31/1999 23:59',
+      '2/29/2023',
+      '2024-02-29 24:61',
+      '2024-03-05\u008512:00',
+      '0000-01-01',
+      '9999-12-31',
+    ];
+    for (final s in samples) {
+      expect(CalendarDate.parseCell(s), _parseCellReference(s), reason: s);
+    }
+  });
+
+  test('CalendarDate counts days like DateTime', () {
+    int reference(int y, int m, int d) => DateTime.utc(y, m, d).millisecondsSinceEpoch ~/ Duration.millisecondsPerDay;
+    for (var y = 1890; y <= 2110; y++) {
+      for (var m = 1; m <= 12; m++) {
+        for (var d = 1; d <= 31; d++) {
+          final dt = DateTime.utc(y, m, d);
+          if (dt.month == m) {
+            expect(CalendarDate(y, m, d).epochDay, reference(y, m, d), reason: '$y-$m-$d');
+          } else {
+            expect(() => CalendarDate(y, m, d), throwsArgumentError, reason: '$y-$m-$d');
+          }
+        }
+      }
+    }
+    for (final (y, m, d) in [
+      (0, 1, 1),
+      (0, 2, 29),
+      (1, 3, 1),
+      (100, 2, 28),
+      (400, 2, 29),
+      (1600, 2, 29),
+      (9999, 12, 31),
+    ]) {
+      expect(CalendarDate(y, m, d).epochDay, reference(y, m, d), reason: '$y-$m-$d');
+    }
+    expect(() => CalendarDate(1900, 2, 29), throwsArgumentError);
+    expect(CalendarDate(-1, 3, 1).epochDay, reference(-1, 3, 1), reason: 'outside 0-9999: DateTime');
+    expect(CalendarDate(10000, 1, 1).epochDay, reference(10000, 1, 1));
+  });
+}
+
+/// [CalendarDate.parseCell] before it stopped using regular expressions, as the reference.
+({CalendarDate date, String time})? _parseCellReference(String cell) {
+  final text = cell.trim();
+  int year, month, day;
+  var m = RegExp(r'^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:\s+(\d{1,2}):(\d{2}))?').firstMatch(text);
+  if (m != null) {
+    year = int.parse(m[1]!);
+    month = int.parse(m[2]!);
+    day = int.parse(m[3]!);
+  } else {
+    m = RegExp(r'^(\d{1,2})/(\d{1,2})/(\d{4})(?:\s+(\d{1,2}):(\d{2}))?').firstMatch(text);
+    if (m == null) return null;
+    month = int.parse(m[1]!);
+    day = int.parse(m[2]!);
+    year = int.parse(m[3]!);
+  }
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  final dt = DateTime.utc(year, month, day);
+  if (dt.month != month || dt.day != day) return null;
+  final date = CalendarDate.fromEpochDay(dt.millisecondsSinceEpoch ~/ Duration.millisecondsPerDay);
+  return (date: date, time: m[4] == null ? '' : '${m[4]!.padLeft(2, '0')}:${m[5]}');
 }

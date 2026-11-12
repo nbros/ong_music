@@ -28,6 +28,34 @@
   <link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
   <link rel="manifest" href="manifest.json">
 
+  <script>
+    // First visit or cache older than 6 hours: the app will download the sheets as soon as it runs. Start now,
+    // while the engine and the app load (a second or more); the app takes the responses on its first download
+    // (lib/src/data/sheet_prefetch_web.dart), so nothing is downloaded twice, and nothing when the cache is fresh.
+    // Must match WebSheetCache (cache name, key), SheetUrls and catalogueMaxAge (test/sheet_prefetch_test.dart).
+    (function () {
+      if (!window.fetch || !window.Promise) return;
+      var base = 'https://docs.google.com/spreadsheets/d/14ARzE_zSMNhp0ZQV34ti2741PbA-5wAjsXRAW8EgJ-4/gviz/tq?tqx=out:csv&sheet=';
+      var maxAge = 21600000;
+      function cachedAt() {
+        if (!window.caches) return Promise.resolve(null);
+        return caches.open('ong-music-sheets-v1').then(function (cache) {
+          return cache.match('ong-music-cache/fetched_at.txt');
+        }).then(function (response) { return response ? response.text() : null; });
+      }
+      function get(sheet) {
+        var response = fetch(base + sheet);
+        response.catch(function () {}); // the app reports a failure when it takes the response
+        return response;
+      }
+      window.ongMusicSheetPrefetch = cachedAt().catch(function () { return null; }).then(function (meta) {
+        var age = meta ? Math.abs(Date.now() - Date.parse(meta.trim())) : NaN;
+        if (age < maxAge) return null;
+        return { highlights: get('Youtube%20Catalogue'), songs: get('Songs') };
+      });
+    })();
+  </script>
+
   <style>
     /* --spin: the primary colour of the app theme, that of its own progress indicator */
     :root { --bg: #fff8f4; --fg: #54443a; --brand: #f4721f; --spin: #9a4600; }

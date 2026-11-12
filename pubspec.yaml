@@ -29,11 +29,9 @@ environment:
 # versions available, run `flutter pub outdated`.
 dependencies:
   args: ^2.7.0
-  csv: ^8.0.0
   flutter:
     sdk: flutter
   flutter_riverpod: ^3.1.0
-  flutter_svg: ^2.2.3
   http: ^1.6.0
   logger: ^2.6.2
   material_ui: ^1.11.0
@@ -43,6 +41,7 @@ dependencies:
   shared_preferences: ^2.5.4
   timezone: ^0.11.2
   url_launcher: ^6.3.2
+  vector_graphics: ^1.3.1
   web: ^1.1.1
 
 dev_dependencies:
@@ -55,6 +54,8 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  # compiles the SVG icons at build time (see flutter.assets): the app ships no SVG parser
+  vector_graphics_compiler: ^1.3.6
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -68,6 +69,10 @@ flutter:
   uses-material-design: true
   assets:
     - assets/
+    # SVG icons, compiled to the vector_graphics format at build time: shown with VectorGraphic and AssetBytesLoader
+    - path: assets/icons/
+      transformers:
+        - package: vector_graphics_compiler
     # Web only: with --no-web-resources-cdn, flutter build web bundles Roboto Regular (the engine's default
     # font) but no other weight, so medium text (titles, chips, buttons) rendered as regular.
     # Registered at startup by lib/src/web/web_platform_web.dart. Native apps use the system font.

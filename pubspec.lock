@@ -81,14 +81,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.0.8"
-  csv:
-    dependency: "direct main"
-    description:
-      name: csv
-      sha256: "2e0a52fb729f2faacd19c9c0c954ff450bba37aa8ab999410309e2342e7013a2"
-      url: "https://pub.dev"
-    source: hosted
-    version: "8.0.0"
   cupertino_ui:
     dependency: transitive
     description:
@@ -163,14 +155,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.5.0"
-  flutter_svg:
-    dependency: "direct main"
-    description:
-      name: flutter_svg
-      sha256: bce4a000275c0d0ac42f3fdcf0a6162fb95ac30983ba7ee6cffcf60f6ad33611
-      url: "https://pub.dev"
-    source: hosted
-    version: "2.3.4"
   flutter_test:
     dependency: "direct dev"
     description: flutter
@@ -683,7 +667,7 @@ packages:
     source: hosted
     version: "4.6.0"
   vector_graphics:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: vector_graphics
       sha256: "06081e4f2d8f17c306aa58989520694b463ad411bc7c7b93e76afa3e41ca17ac"
@@ -699,7 +683,7 @@ packages:
     source: hosted
     version: "1.2.0"
   vector_graphics_compiler:
-    dependency: transitive
+    dependency: "direct dev"
     description:
       name: vector_graphics_compiler
       sha256: "7d3d604c1ede26711f865f74e9273c5c5504ac449f3d92faa722878dbac88807"

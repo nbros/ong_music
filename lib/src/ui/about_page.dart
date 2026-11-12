@@ -4,8 +4,8 @@ library;
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:vector_graphics/vector_graphics.dart';
 
 import '../data/catalogue.dart';
 import '../data/schedule.dart';
@@ -32,7 +32,7 @@ final List<(String, String, Widget Function(BuildContext))> aboutLinks = [
   (
     'YouTube',
     'https://www.youtube.com/@JonathanOng/videos',
-    (_) => SvgPicture.asset('assets/youtube.svg', width: 28, height: 28),
+    (_) => const VectorGraphic(loader: AssetBytesLoader('assets/icons/youtube.svg'), width: 28, height: 28),
   ),
   (
     'Albums',
@@ -42,17 +42,17 @@ final List<(String, String, Widget Function(BuildContext))> aboutLinks = [
   (
     'TikTok',
     'https://www.tiktok.com/@jongmusic/',
-    (_) => SvgPicture.asset('assets/tiktok2.svg', width: 28, height: 28),
+    (_) => const VectorGraphic(loader: AssetBytesLoader('assets/icons/tiktok2.svg'), width: 28, height: 28),
   ),
   (
     'Instagram',
     'https://instagram.com/jonathanong77',
-    (_) => SvgPicture.asset('assets/instagram.svg', width: 28, height: 28),
+    (_) => const VectorGraphic(loader: AssetBytesLoader('assets/icons/instagram.svg'), width: 28, height: 28),
   ),
   (
     'Twitter',
     'https://twitter.com/jonathanong77',
-    (_) => SvgPicture.asset('assets/twitter.svg', width: 28, height: 28),
+    (_) => const VectorGraphic(loader: AssetBytesLoader('assets/icons/twitter.svg'), width: 28, height: 28),
   ),
   ('Merch', 'https://jonathanong.threadless.com/', (_) => Image.asset('assets/jacket.png', width: 28, height: 28)),
   (
@@ -287,8 +287,8 @@ class _TwitchSectionState extends ConsumerState<_TwitchSection> {
             padding: const EdgeInsets.fromLTRB(16, 0, 20, 0),
             textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
           ),
-          icon: SvgPicture.asset(
-            'assets/twitch.svg',
+          icon: VectorGraphic(
+            loader: const AssetBytesLoader('assets/icons/twitch.svg'),
             width: 20,
             height: 20,
             // decoration: without this the button is announced as an image
