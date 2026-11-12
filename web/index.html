@@ -1,38 +1,137 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <!--
-    If you are serving your web app in a path other than the root, change the
-    href value below to reflect the base path you are serving from.
-
-    The path provided below has to start and end with a slash "/" in order for
-    it to work correctly.
-
-    For more details:
-    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
-
-    This is a placeholder for base href that will be replaced by the value of
-    the `--base-href` argument provided to `flutter build`.
+    Replaced by the value of `flutter build web --base-href` (/ong_music/app/ on GitHub Pages).
+    Every URL below is relative to it.
   -->
   <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
-  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <!-- viewport-fit=cover: the app draws under the notch and the home indicator and pads itself (SafeArea).
+       The engine replaces this tag at start, keeping viewport-fit. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Ong Music</title>
+  <meta name="description" content="Jonathan Ong's highlights and the Ong Log: every song he played on stream, searchable.">
+  <meta name="color-scheme" content="light dark">
+  <!-- browser bars; the app updates them when the theme is changed in its settings -->
+  <meta name="theme-color" content="#fff8f4" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#15110e" media="(prefers-color-scheme: dark)">
 
-  <!-- iOS meta tags & icons -->
+  <!-- installed web app (iOS: Share → Add to Home Screen) -->
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="ong_music">
-  <link rel="apple-touch-icon" href="icons/Icon-192.png">
-
-  <!-- Favicon -->
-  <link rel="icon" type="image/png" href="favicon.png"/>
-
-  <title>ong_music</title>
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Ong Music">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="format-detection" content="telephone=no">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
   <link rel="manifest" href="manifest.json">
+
+  <style>
+    :root { --bg: #fff8f4; --fg: #54443a; --brand: #f4721f; --track: #f0e1d6; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #15110e; --fg: #cbb9ac; --brand: #ff7a1a; --track: #2e2721; }
+    }
+    /* the theme chosen in the app's settings wins over the system one (set by the script below) */
+    :root[data-theme="light"] { --bg: #fff8f4; --fg: #54443a; --brand: #f4721f; --track: #f0e1d6; }
+    :root[data-theme="dark"] { --bg: #15110e; --fg: #cbb9ac; --brand: #ff7a1a; --track: #2e2721; }
+    html, body { margin: 0; height: 100%; background: var(--bg); }
+    body {
+      overscroll-behavior: none;
+      -webkit-tap-highlight-color: transparent;
+      -webkit-touch-callout: none;
+      -webkit-text-size-adjust: 100%;
+    }
+    #loading {
+      position: fixed; inset: 0; z-index: 10;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px;
+      background: var(--bg); color: var(--fg);
+      font: 500 20px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      transition: opacity 0.2s;
+    }
+    #loading.done { opacity: 0; pointer-events: none; }
+    #loading .spinner {
+      width: 32px; height: 32px; border-radius: 50%;
+      border: 3px solid var(--track); border-top-color: var(--brand);
+      animation: spin 0.9s linear infinite;
+    }
+    #loading .message { display: none; max-width: 280px; text-align: center; font-size: 14px; font-weight: 400; }
+    #loading.slow .message { display: block; }
+    #loading button {
+      margin-top: 12px; padding: 8px 20px; border: 0; border-radius: 20px;
+      background: var(--brand); color: #2b1200; font: inherit; font-weight: 500;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { #loading .spinner { animation-duration: 3s; } }
+  </style>
 </head>
 <body>
-  <script src="flutter_bootstrap.js" async></script>
+  <div id="loading" role="status">
+    <div class="spinner" aria-hidden="true"></div>
+    <div>Ong Music</div>
+    <div class="message">Still loading… Check your connection.<br><button type="button" onclick="location.reload()">Reload</button></div>
+  </div>
+  <script>
+    (function () {
+      // Same colours as the app on the first paint: the theme setting is in shared_preferences (localStorage).
+      try {
+        var theme = JSON.parse(localStorage.getItem('flutter.themeMode') || 'null');
+        if (theme === 'light' || theme === 'dark') {
+          document.documentElement.dataset.theme = theme;
+          // iOS colours the status bar of the installed app from theme-color when it starts
+          var metas = document.querySelectorAll('meta[name="theme-color"]');
+          for (var i = 0; i < metas.length; i++) {
+            metas[i].removeAttribute('media');
+            metas[i].setAttribute('content', theme === 'dark' ? '#15110e' : '#fff8f4');
+          }
+        }
+      } catch (e) {}
+
+      var loading = document.getElementById('loading');
+      var slow = setTimeout(function () { loading.classList.add('slow'); }, 20000);
+      window.addEventListener('flutter-first-frame', function () {
+        clearTimeout(slow);
+        loading.classList.add('done');
+        setTimeout(function () { loading.remove(); }, 300);
+      });
+
+      // flutter_bootstrap.js names the content-hashed main.dart.<hash>.js and assets of its build. GitHub Pages
+      // lets browsers reuse any file for 10 minutes without asking, so a cached bootstrap could point to the
+      // files of a previous deployment. Revalidating it (cheap: 304 when unchanged) keeps the whole app from
+      // the current deployment. Offline or on error: the plain script tag (browser cache).
+      var bootstrapText = null;
+      function run(code) {
+        var s = document.createElement('script');
+        if (code != null) {
+          s.text = code;
+        } else {
+          s.src = 'flutter_bootstrap.js';
+          s.onerror = function () { loading.classList.add('slow'); };
+        }
+        document.body.appendChild(s);
+      }
+      function fetchBootstrap() {
+        return fetch('flutter_bootstrap.js', { cache: 'no-cache' }).then(function (r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.text();
+        });
+      }
+      fetchBootstrap().then(function (code) { bootstrapText = code; run(code); }, function () { run(null); });
+
+      // An installed app can stay in memory for days. When it comes back after an hour or more and a new
+      // version has been deployed meanwhile, reload it (state is lost, but the user was away for an hour).
+      var hiddenAt = 0;
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'hidden') {
+          hiddenAt = Date.now();
+        } else if (hiddenAt && Date.now() - hiddenAt >= 3600000 && bootstrapText != null) {
+          fetchBootstrap().then(function (code) {
+            if (code !== bootstrapText) location.reload();
+          }, function () {});
+        }
+      });
+    })();
+  </script>
 </body>
 </html>

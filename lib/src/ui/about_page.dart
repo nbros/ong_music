@@ -1,0 +1,647 @@
+/// The About tab: Jonathan Ong and his links, then the settings and the data.
+library;
+
+import 'dart:async';
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import 'package:material_ui/material_ui.dart';
+
+import '../data/catalogue.dart';
+import '../data/schedule.dart';
+import '../state/catalogue_state.dart';
+import '../state/settings_state.dart';
+import '../state/twitch_state.dart';
+import 'actions.dart';
+import 'format.dart';
+import 'install_banner.dart';
+import 'list_scaffold.dart';
+import 'theme.dart';
+import 'view_state.dart';
+import 'widgets.dart';
+
+/// The app version, passed by CI with `--dart-define=APP_VERSION=…`.
+const String appVersion = String.fromEnvironment('APP_VERSION');
+
+const twitchUrl = 'https://www.twitch.tv/jonathanong';
+const privacyPolicyUrl = 'https://nbros.github.io/ong_music/privacy-policy';
+const spreadsheetUrl = 'https://docs.google.com/spreadsheets/d/14ARzE_zSMNhp0ZQV34ti2741PbA-5wAjsXRAW8EgJ-4';
+
+/// The link tiles: label, URL, icon.
+final List<(String, String, Widget Function(BuildContext))> aboutLinks = [
+  (
+    'YouTube',
+    'https://www.youtube.com/@JonathanOng/videos',
+    (_) => SvgPicture.asset('assets/youtube.svg', width: 28, height: 28),
+  ),
+  (
+    'Albums',
+    'https://www.theorangejacketbrigade.com/albums',
+    (c) => Icon(Icons.album, size: 28, color: Theme.of(c).colorScheme.onSurface),
+  ),
+  (
+    'TikTok',
+    'https://www.tiktok.com/@jongmusic/',
+    (_) => SvgPicture.asset('assets/tiktok2.svg', width: 28, height: 28),
+  ),
+  (
+    'Instagram',
+    'https://instagram.com/jonathanong77',
+    (_) => SvgPicture.asset('assets/instagram.svg', width: 28, height: 28),
+  ),
+  (
+    'Twitter',
+    'https://twitter.com/jonathanong77',
+    (_) => SvgPicture.asset('assets/twitter.svg', width: 28, height: 28),
+  ),
+  ('Merch', 'https://jonathanong.threadless.com/', (_) => Image.asset('assets/jacket.png', width: 28, height: 28)),
+  (
+    'Stickers',
+    'https://stukem.com/collections/jonathanong',
+    (_) => ClipRRect(
+      borderRadius: BorderRadius.circular(6),
+      child: Image.asset('assets/ongZoom.png', width: 28, height: 28),
+    ),
+  ),
+];
+
+/// The helper text under the Twitch name field.
+String twitchNameHelp(String name, Catalogue? catalogue) {
+  if (name.trim().isEmpty) return 'Your own requests get a “You” badge in every list.';
+  final requester = catalogue?.requesterNamed(name);
+  if (requester == null || requester.requestCount == 0) return 'No request under that name yet.';
+  return 'Found ${plural(requester.requestCount, 'request')} by ${requester.name} — look for the “You” badge.';
+}
+
+/// The About tab.
+class AboutPage extends ConsumerWidget {
+  const AboutPage({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
+    final ong = OngColors.of(context);
+    return Scrollbar(
+      thumbVisibility: alwaysShowScrollbars(context),
+      child: ListView(
+        padding: EdgeInsets.only(top: 20, bottom: MediaQuery.paddingOf(context).bottom),
+        children: [
+          // hero
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+            child: Column(
+              children: [
+                Container(
+                  width: 96,
+                  height: 96,
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(0xFFF3D2C3),
+                    boxShadow: [
+                      BoxShadow(color: ong.brand, spreadRadius: 5),
+                      BoxShadow(color: scheme.surface, spreadRadius: 3),
+                    ],
+                  ),
+                  child: ClipOval(
+                    child: Image.asset(
+                      'assets/ongZoom.png',
+                      fit: BoxFit.cover,
+                      filterQuality: FilterQuality.medium,
+                      excludeFromSemantics: true,
+                    ),
+                  ),
+                ),
+                Text(
+                  'Jonathan Ong',
+                  style: TextStyle(fontSize: 24, height: 32 / 24, fontWeight: FontWeight.w500, color: scheme.onSurface),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(top: 6, bottom: 16),
+                  child: Text(
+                    'Classically trained pianist from Sydney, live on Twitch: multi-instrument loops, '
+                    'virtuosic piano and your requests.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: scheme.onSurfaceVariant, height: 20 / 14),
+                  ),
+                ),
+                const _TwitchSection(),
+              ],
+            ),
+          ),
+          // links
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 18, 16, 4),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final width = constraints.maxWidth / 4;
+                return Wrap(
+                  runSpacing: 14,
+                  children: [
+                    for (final (label, url, icon) in aboutLinks)
+                      SizedBox(
+                        width: width,
+                        child: _LinkTile(label: label, icon: icon(context), onTap: () => openLink(context, ref, url)),
+                      ),
+                  ],
+                );
+              },
+            ),
+          ),
+          const InstallSection(),
+          const _SectionTitle('Appearance'),
+          const _ThemeSelector(),
+          const _SectionTitle('Your Twitch name'),
+          const _TwitchNameField(),
+          const _SectionTitle('Data'),
+          const _DataSection(),
+          const _Footer(),
+        ],
+      ),
+    );
+  }
+}
+
+/// What the Twitch status line says: its text, and its label for screen readers.
+typedef TwitchStatusText = ({String text, String label, bool live});
+
+/// The status line under "Watch on Twitch" at [now], null when nothing is
+/// known. [clock] formats a time of day (local, the device's 12/24-hour
+/// preference).
+TwitchStatusText? twitchStatusText(
+  bool live,
+  ScheduleStatus schedule,
+  DateTime now,
+  String Function(DateTime time) clock,
+) {
+  final current = schedule.current;
+  final next = schedule.next;
+  if (live) {
+    if (current == null) return (text: 'Live now', label: 'Live now', live: true);
+    final since = clock(current.start);
+    return (text: 'Live now · since $since', label: 'Live now, since $since', live: true);
+  }
+  if (current != null) {
+    final start = clock(current.start);
+    final end = clock(current.end);
+    return (text: 'Scheduled now: $start – $end', label: 'Scheduled now, from $start to $end', live: false);
+  }
+  if (next != null) {
+    final text = 'Next stream: ${formatDayFrom(next.start, now)} at ${clock(next.start)}';
+    return (text: text, label: text, live: false);
+  }
+  return null;
+}
+
+/// "Watch on Twitch" and the status line under it.
+///
+/// Tells [TwitchNotifier] when it is on screen: the About tab selected and the
+/// app in the foreground (the About tab is built at startup, hidden).
+class _TwitchSection extends ConsumerStatefulWidget {
+  const _TwitchSection();
+
+  @override
+  ConsumerState<_TwitchSection> createState() => _TwitchSectionState();
+}
+
+class _TwitchSectionState extends ConsumerState<_TwitchSection> {
+  late final TwitchNotifier _notifier;
+  late final AppLifecycleListener _lifecycle;
+
+  /// Rebuilds when the text changes with the time alone (an occurrence starts
+  /// or ends, a day passes, a live result gets old).
+  Timer? _tick;
+
+  @override
+  void initState() {
+    super.initState();
+    _notifier = ref.read(twitchProvider.notifier);
+    _lifecycle = AppLifecycleListener(onStateChange: (_) => _sync(rebuild: true));
+    // after the first frame: never before it, and not while building
+    WidgetsBinding.instance.addPostFrameCallback((_) => _sync());
+  }
+
+  @override
+  void dispose() {
+    _tick?.cancel();
+    _lifecycle.dispose();
+    _notifier.setWatching(false);
+    super.dispose();
+  }
+
+  void _sync({bool rebuild = false}) {
+    if (!mounted) return;
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    final foreground =
+        lifecycle == null || lifecycle == AppLifecycleState.resumed || lifecycle == AppLifecycleState.inactive;
+    _notifier.setWatching(foreground && ref.read(selectedTabProvider) == AppTab.about);
+    if (rebuild && foreground) setState(() {});
+  }
+
+  void _scheduleTick(TwitchState twitch, ScheduleStatus schedule, DateTime now) {
+    _tick?.cancel();
+    final local = now.toLocal();
+    final times = [
+      schedule.current?.end,
+      schedule.next?.start,
+      DateTime(local.year, local.month, local.day + 1),
+      if (twitch.isLiveAt(now)) twitch.liveCheckedAt!.add(liveResultMaxAge),
+    ];
+    var wait = const Duration(hours: 6);
+    for (final time in times) {
+      if (time == null) continue;
+      final until = time.difference(now);
+      if (until < wait) wait = until;
+    }
+    if (wait < const Duration(seconds: 1)) wait = const Duration(seconds: 1);
+    _tick = Timer(wait, () {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    ref.listen(selectedTabProvider, (_, _) => _sync());
+    final twitch = ref.watch(twitchProvider);
+    final now = ref.read(clockProvider)();
+    final schedule = twitch.scheduleAt(now);
+    final live = twitch.isLiveAt(now);
+    _scheduleTick(twitch, schedule, now);
+    final status = twitchStatusText(
+      live,
+      schedule,
+      now,
+      (time) => TimeOfDay.fromDateTime(time.toLocal()).format(context),
+    );
+    final scheme = Theme.of(context).colorScheme;
+    final ong = OngColors.of(context);
+    return Column(
+      children: [
+        FilledButton.icon(
+          onPressed: () => openLink(context, ref, twitchUrl),
+          style: FilledButton.styleFrom(
+            backgroundColor: ong.brand,
+            foregroundColor: ong.onBrand,
+            padding: const EdgeInsets.fromLTRB(16, 0, 20, 0),
+            textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+          ),
+          icon: SvgPicture.asset(
+            'assets/twitch.svg',
+            width: 20,
+            height: 20,
+            // decoration: without this the button is announced as an image
+            excludeFromSemantics: true,
+            colorFilter: ColorFilter.mode(ong.onBrand, BlendMode.srcIn),
+          ),
+          label: Text(live ? 'Watch live on Twitch' : 'Watch on Twitch'),
+        ),
+        // The line keeps its place while nothing is known yet (the answers come a moment after the tab
+        // opens): what is below must not move when it appears.
+        Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: MediaQuery.textScalerOf(context).scale(13) * 18 / 13),
+            child: status == null
+                ? null
+                : Semantics(
+                    container: true,
+                    label: status.label,
+                    excludeSemantics: true,
+                    child: Text.rich(
+                      TextSpan(
+                        children: [
+                          if (status.live)
+                            WidgetSpan(
+                              alignment: PlaceholderAlignment.middle,
+                              child: Container(
+                                key: const ValueKey('live-dot'),
+                                width: 8,
+                                height: 8,
+                                margin: const EdgeInsets.only(right: 6),
+                                decoration: BoxDecoration(color: ong.live, shape: BoxShape.circle),
+                              ),
+                            ),
+                          TextSpan(text: status.text),
+                        ],
+                      ),
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 13,
+                        height: 18 / 13,
+                        color: status.live ? scheme.onSurface : scheme.onSurfaceVariant,
+                        fontWeight: status.live ? FontWeight.w500 : FontWeight.w400,
+                      ),
+                    ),
+                  ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _LinkTile extends StatelessWidget {
+  const _LinkTile({required this.label, required this.icon, required this.onTap});
+
+  final String label;
+  final Widget icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Semantics(
+      link: true,
+      label: label,
+      excludeSemantics: true,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Column(
+            children: [
+              Container(
+                width: 56,
+                height: 56,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(color: scheme.surfaceContainer, borderRadius: BorderRadius.circular(18)),
+                child: icon,
+              ),
+              const SizedBox(height: 6),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SectionTitle extends StatelessWidget {
+  const _SectionTitle(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
+    child: Semantics(
+      header: true,
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 13,
+          height: 18 / 13,
+          fontWeight: FontWeight.w500,
+          color: Theme.of(context).colorScheme.primary,
+        ),
+      ),
+    ),
+  );
+}
+
+class _ThemeSelector extends ConsumerWidget {
+  const _ThemeSelector();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final current = ref.watch(themePreferenceProvider);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: SegmentedButton<ThemePreference>(
+        showSelectedIcon: false,
+        expandedInsets: EdgeInsets.zero,
+        segments: const [
+          ButtonSegment(value: ThemePreference.system, icon: Icon(Icons.contrast, size: 18), label: Text('System')),
+          ButtonSegment(value: ThemePreference.light, icon: Icon(Icons.light_mode, size: 18), label: Text('Light')),
+          ButtonSegment(value: ThemePreference.dark, icon: Icon(Icons.dark_mode, size: 18), label: Text('Dark')),
+        ],
+        selected: {current},
+        onSelectionChanged: (selection) => ref.read(themePreferenceProvider.notifier).set(selection.single),
+      ),
+    );
+  }
+}
+
+class _TwitchNameField extends ConsumerStatefulWidget {
+  const _TwitchNameField();
+
+  @override
+  ConsumerState<_TwitchNameField> createState() => _TwitchNameFieldState();
+}
+
+class _TwitchNameFieldState extends ConsumerState<_TwitchNameField> {
+  late final TextEditingController _controller = TextEditingController(text: ref.read(twitchNameProvider));
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final name = ref.watch(twitchNameProvider);
+    final catalogue = ref.watch(currentCatalogueProvider);
+    final on3 = OngColors.of(context).on3;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            controller: _controller,
+            onChanged: (value) => ref.read(twitchNameProvider.notifier).set(value),
+            autocorrect: false,
+            enableSuggestions: false,
+            textInputAction: TextInputAction.done,
+            style: const TextStyle(fontSize: 16),
+            decoration: InputDecoration(
+              hintText: 'Optional',
+              prefixIcon: Icon(Icons.person, size: 20, color: on3),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 15),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              twitchNameHelp(name, catalogue),
+              style: TextStyle(fontSize: 12, height: 16 / 12, color: on3),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DataSection extends ConsumerStatefulWidget {
+  const _DataSection();
+
+  @override
+  ConsumerState<_DataSection> createState() => _DataSectionState();
+}
+
+class _DataSectionState extends ConsumerState<_DataSection> {
+  /// Moves "Updated 5 minutes ago" along.
+  late final Timer _tick = Timer.periodic(const Duration(minutes: 1), (_) {
+    if (mounted) setState(() {});
+  });
+
+  @override
+  void initState() {
+    super.initState();
+    _tick;
+  }
+
+  @override
+  void dispose() {
+    _tick.cancel();
+    super.dispose();
+  }
+
+  Future<void> _confirmClear() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Clear downloaded data?'),
+        content: const Text('The highlights and the Ong Log will be downloaded again.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Clear')),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await ref.read(catalogueProvider.notifier).clearDownloadedData();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = ref.watch(catalogueProvider);
+    final scheme = Theme.of(context).colorScheme;
+    final on3 = OngColors.of(context).on3;
+    final small = TextStyle(fontSize: 12, height: 16 / 12, color: on3);
+    final fetchedAt = state.fetchedAt;
+    final String title;
+    if (state.isRefreshing) {
+      title = 'Updating…';
+    } else if (fetchedAt == null) {
+      title = 'Not downloaded yet';
+    } else {
+      title = 'Updated ${formatAgo(fetchedAt, ref.read(clockProvider)())}';
+    }
+    final error = state.lastError;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 12, 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(fontSize: 14, height: 20 / 14, color: scheme.onSurface),
+                    ),
+                    if (state.hasData)
+                      Text(
+                        '${plural(state.highlightCount, 'highlight')} · ${plural(state.playCount, 'song')} · '
+                        '${plural(state.streamCount, 'stream')}',
+                        style: small,
+                      ),
+                    if (error != null && !state.isRefreshing)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          'The last refresh failed. ${describeLoadError(error)}',
+                          style: small.copyWith(color: scheme.error),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              FilledButton.tonalIcon(
+                onPressed: state.isRefreshing ? null : () => ref.read(catalogueProvider.notifier).refresh(),
+                icon: state.isRefreshing
+                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.refresh, size: 18),
+                label: const Text('Refresh'),
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Text('Refreshes by itself when the app opens, at most every 6 hours.', style: small),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 4, 0),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text('Clear downloaded data', style: TextStyle(fontSize: 14, color: scheme.onSurface)),
+              ),
+              TextButton(
+                onPressed: state.isRefreshing ? null : _confirmClear,
+                style: TextButton.styleFrom(textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                child: const Text('Clear'),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _Footer extends ConsumerWidget {
+  const _Footer();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final on3 = OngColors.of(context).on3;
+    final style = TextStyle(fontSize: 12, height: 16 / 12, color: on3);
+    Widget link(String label, String url) => Semantics(
+      link: true,
+      child: InkWell(
+        onTap: () => openLink(context, ref, url),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 48),
+          child: Center(
+            widthFactor: 1,
+            child: Text(label, style: style.copyWith(color: Theme.of(context).colorScheme.primary)),
+          ),
+        ),
+      ),
+    );
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+      child: Column(
+        children: [
+          Wrap(
+            alignment: WrapAlignment.center,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Text(appVersion.isEmpty ? 'Ong Music · ' : 'Ong Music $appVersion · ', style: style),
+              link('Privacy policy', privacyPolicyUrl),
+              Text(' · ', style: style),
+              link('Community spreadsheet', spreadsheetUrl),
+            ],
+          ),
+          Text('Fan-made, not affiliated with Jonathan Ong.', textAlign: TextAlign.center, style: style),
+        ],
+      ),
+    );
+  }
+}

@@ -9,6 +9,7 @@ on:
 
 # Flutter version used to build: bump it deliberately (and test locally) instead of
 # following "stable", so that a new Flutter release can't silently break a release build.
+# pages.yml has its own copy: bump both together (pages.yml checks that they match).
 env:
   FLUTTER_VERSION: "3.50.0"
 
@@ -69,11 +70,11 @@ jobs:
       - name: Analyze
         run: flutter analyze
 
-      # - name: Run tests
-      #   run: flutter test
+      - name: Run tests
+        run: flutter test
 
       - name: Build App Bundle
-        run: flutter build appbundle --build-name=${{ steps.version.outputs.majorMinorPatch }}+${{ steps.version.outputs.shortSha }} --build-number=${{ github.run_number }}
+        run: flutter build appbundle --build-name=${{ steps.version.outputs.majorMinorPatch }}+${{ steps.version.outputs.shortSha }} --build-number=${{ github.run_number }} --dart-define=APP_VERSION=${{ steps.version.outputs.majorMinorPatch }}
 
       - name: Upload App Bundle
         uses: actions/upload-artifact@v7
@@ -127,11 +128,8 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      # - name: Run tests
-      #   run: flutter test
-
       - name: Build Windows app
-        run: flutter build windows --release --build-name=${{ steps.version.outputs.majorMinorPatch }} --build-number=${{ github.run_number }}
+        run: flutter build windows --release --build-name=${{ steps.version.outputs.majorMinorPatch }} --build-number=${{ github.run_number }} --dart-define=APP_VERSION=${{ steps.version.outputs.majorMinorPatch }}
 
       - name: Create Windows build zip
         run: |

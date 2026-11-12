@@ -1,23 +1,29 @@
 {
-    "name": "ong_music",
-    "short_name": "ong_music",
-    "start_url": ".",
+    "id": "./",
+    "name": "Ong Music",
+    "short_name": "Ong Music",
+    "description": "Jonathan Ong's highlights and the Ong Log: every song he played on stream, searchable.",
+    "lang": "en",
+    "dir": "ltr",
+    "start_url": "./",
+    "scope": "./",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
-    "orientation": "portrait-primary",
+    "background_color": "#15110e",
+    "theme_color": "#15110e",
+    "categories": ["music", "entertainment"],
     "prefer_related_applications": false,
     "icons": [
         {
             "src": "icons/Icon-192.png",
             "sizes": "192x192",
-            "type": "image/png"
+            "type": "image/png",
+            "purpose": "any"
         },
         {
             "src": "icons/Icon-512.png",
             "sizes": "512x512",
-            "type": "image/png"
+            "type": "image/png",
+            "purpose": "any"
         },
         {
             "src": "icons/Icon-maskable-192.png",

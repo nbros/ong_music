@@ -30,28 +30,24 @@ environment:
 dependencies:
   args: ^2.7.0
   csv: ^8.0.0
-  diacritic: ^0.1.6
   flutter:
     sdk: flutter
   flutter_riverpod: ^3.1.0
   flutter_svg: ^2.2.3
   http: ^1.6.0
   logger: ^2.6.2
-  logging: ^1.3.0
   material_ui: ^1.11.0
   path: ^1.9.1
   path_provider: ^2.1.5
+  share_plus: ^13.3.1
   shared_preferences: ^2.5.4
-  sqflite: ^2.4.2
-  sqflite_common_ffi: ^2.4.0+1
-  # generate WASM lib: dart run sqflite_common_ffi_web:setup
-  sqflite_common_ffi_web: ^1.1.1
+  timezone: ^0.11.2
   url_launcher: ^6.3.2
-  
+  web: ^1.1.1
 
 dev_dependencies:
-  #flutter_test:
-  #  sdk: flutter
+  flutter_test:
+    sdk: flutter
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
@@ -72,6 +68,11 @@ flutter:
   uses-material-design: true
   assets:
     - assets/
+    # Web only: with --no-web-resources-cdn, flutter build web bundles Roboto Regular (the engine's default
+    # font) but no other weight, so medium text (titles, chips, buttons) rendered as regular.
+    # Registered at startup by lib/src/web/web_platform_web.dart. Native apps use the system font.
+    - path: assets/fonts/Roboto-Medium.ttf
+      platforms: [web]
 
 # "dart run flutter_launcher_icons" to regenerate icons
 flutter_launcher_icons:

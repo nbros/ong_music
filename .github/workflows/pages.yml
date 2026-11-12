@@ -1,0 +1,126 @@
+# Builds and deploys the whole GitHub Pages site (https://nbros.github.io/ong_music/):
+# - site root: the Jekyll pages from docs/ (index, privacy policy), built like legacy Pages did;
+# - app/: the Flutter web app (the way to use Ong Music on iPhone/iPad).
+#
+# Requires Settings → Pages → Build and deployment → Source: "GitHub Actions" (see README.md),
+# and the "github-pages" environment must allow tags (Settings → Environments → github-pages).
+#
+# Kept separate from flutter_ci.yml so that a Pages failure never turns the Play Store / Windows release run red.
+name: GitHub Pages
+
+on:
+  push:
+    tags:
+      - "*" # same as flutter_ci.yml: the web app is released together with Android and Windows
+  workflow_dispatch: # deploy a branch by hand (e.g. master, to try it on a real iPhone before tagging)
+
+# Must be the same value as FLUTTER_VERSION in flutter_ci.yml: bump both together
+# (the "Check Flutter version" step below fails the build if they differ).
+env:
+  FLUTTER_VERSION: "3.50.0"
+
+permissions:
+  contents: read
+
+# One deployment at a time. A queued run waits for the running one instead of cancelling it.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: read # configure-pages and the Jekyll build read the Pages site settings
+
+    steps:
+      - name: Checkout from GitHub
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # tags are needed to compute the version
+
+      - name: Check Flutter version
+        run: |
+          ci_version=$(sed -n 's/^ *FLUTTER_VERSION: *"\(.*\)".*/\1/p' .github/workflows/flutter_ci.yml)
+          if [[ "$ci_version" != "$FLUTTER_VERSION" ]]; then
+            echo "::error::FLUTTER_VERSION is '$FLUTTER_VERSION' in pages.yml but '$ci_version' in flutter_ci.yml: bump both together"
+            exit 1
+          fi
+
+      # Same computation as flutter_ci.yml. On a tag: the tag name (e.g. 1.5.0).
+      # Otherwise: last tag with the patch number incremented (e.g. 1.5.1).
+      - name: Compute version
+        id: version
+        run: |
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            version="$GITHUB_REF_NAME"
+          else
+            last_tag=$(git describe --tags --abbrev=0)
+            version="${last_tag%.*}.$(( ${last_tag##*.} + 1 ))"
+          fi
+          echo "majorMinorPatch=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v6
+
+      # jekyll-build-pages is a Docker action running as root: a destination directory it creates is owned
+      # by root, and the runner user then cannot add app/ into it (actions/jekyll-build-pages#101, #18).
+      # Creating it beforehand keeps it owned by the runner user.
+      - name: Create site directory
+        run: mkdir _site
+
+      # Same build as legacy Pages from /docs (github-pages gem, same plugins, default theme),
+      # so index.md and privacy-policy.md render at the same URLs as before.
+      - name: Build Jekyll site
+        uses: actions/jekyll-build-pages@v1
+        with:
+          source: ./docs
+          destination: ./_site
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: "stable"
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      # --no-web-resources-cdn: CanvasKit and the Roboto font served from this site, not from gstatic.com.
+      # --web-content-hash: main.dart.<hash>.js and assets/*.<hash>.*, so that a deployment never mixes with files
+      # of the previous one in browser caches (web/index.html revalidates flutter_bootstrap.js, which names them).
+      - name: Build web app
+        run: >-
+          flutter build web --release
+          --base-href /ong_music/app/
+          --no-web-resources-cdn
+          --web-content-hash
+          --build-name=${{ steps.version.outputs.majorMinorPatch }}
+          --build-number=${{ github.run_number }}
+          --dart-define=APP_VERSION=${{ steps.version.outputs.majorMinorPatch }}
+
+      - name: Add web app to site
+        run: cp -R build/web _site/app
+
+      # Excludes dotfiles (only build/web/.last_build_id, which is not needed).
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write # to deploy to Pages
+      id-token: write # to verify the deployment originates from an appropriate source
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
