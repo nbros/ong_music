@@ -165,16 +165,21 @@ class Tag extends StatelessWidget {
         border: Border.all(color: scheme.outlineVariant),
         borderRadius: BorderRadius.circular(4),
       ),
-      child: Text(
-        label.toUpperCase(),
-        // shown in a WidgetSpan, which already scales it with the text around it
-        textScaler: TextScaler.noScaling,
-        style: TextStyle(
-          fontSize: 10,
-          height: 1.4,
-          fontWeight: FontWeight.w500,
-          letterSpacing: 0.3,
-          color: scheme.onSurfaceVariant,
+      // Capital letters only: nothing hangs under the baseline, for which the line keeps room. Left where the line
+      // puts them, they sit half a pixel above the middle of the box (2.9 px over them, 4 px under).
+      child: Transform.translate(
+        offset: const Offset(0, 0.5),
+        child: Text(
+          label.toUpperCase(),
+          // shown in a WidgetSpan, which already scales it with the text around it
+          textScaler: TextScaler.noScaling,
+          style: TextStyle(
+            fontSize: 10,
+            height: 1.4,
+            fontWeight: FontWeight.w500,
+            letterSpacing: 0.3,
+            color: scheme.onSurfaceVariant,
+          ),
         ),
       ),
     );
