@@ -71,6 +71,7 @@ final class FileSheetCache implements SheetCache {
     try {
       final dir = await directory();
       await dir.create(recursive: true);
+      await _deleteStaleTemporaryFiles(dir);
       final meta = File(p.join(dir.path, _meta));
       if (await meta.exists()) await meta.delete();
       await _writeAtomically(File(p.join(dir.path, _highlights)), sheets.sheets.highlightsCsv);
@@ -78,6 +79,25 @@ final class FileSheetCache implements SheetCache {
       await _writeAtomically(meta, sheets.fetchedAt.toUtc().toIso8601String());
     } catch (e) {
       logger.w('Cannot write the sheet cache: $e');
+    }
+  }
+
+  /// A temporary file older than this belongs to no write still running.
+  static const Duration _temporaryFileMaxAge = Duration(minutes: 10);
+
+  /// Deletes the temporary files of writes that never finished (the app was
+  /// killed in the middle): megabytes each, under a name no later write uses
+  /// again. Recent ones may belong to a write running in another instance.
+  static Future<void> _deleteStaleTemporaryFiles(Directory dir) async {
+    try {
+      final limit = DateTime.now().subtract(_temporaryFileMaxAge);
+      await for (final entry in dir.list()) {
+        if (entry is File && entry.path.endsWith('.tmp') && (await entry.lastModified()).isBefore(limit)) {
+          await entry.delete();
+        }
+      }
+    } catch (_) {
+      // best effort: the next write tries again
     }
   }
 

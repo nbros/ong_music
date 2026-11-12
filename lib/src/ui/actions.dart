@@ -62,11 +62,16 @@ String shortVideoUrl(String youtubeId) => 'https://youtu.be/$youtubeId';
 Future<void> openVideo(BuildContext context, WidgetRef ref, Highlight highlight) =>
     openLink(context, ref, highlight.url);
 
-/// Shares `"<title> — https://youtu.be/<id>"`, or copies it when sharing is
-/// unavailable.
-Future<void> shareHighlight(BuildContext context, WidgetRef ref, Highlight highlight) async {
+/// What "Share" and "Copy" give for [highlight]: `"<title> — https://youtu.be/<id>"`,
+/// or the title alone without video.
+String highlightShareText(Highlight highlight) {
   final id = highlight.youtubeId;
-  final text = id == null ? highlight.title : '${highlight.title} — ${shortVideoUrl(id)}';
+  return id == null ? highlight.title : '${highlight.title} — ${shortVideoUrl(id)}';
+}
+
+/// Shares [highlightShareText], or copies it when sharing is unavailable.
+Future<void> shareHighlight(BuildContext context, WidgetRef ref, Highlight highlight) async {
+  final text = highlightShareText(highlight);
   final shared = await ref.read(textSharerProvider)(text);
   if (shared) return;
   final copied = await copyText(text);
@@ -75,11 +80,11 @@ Future<void> shareHighlight(BuildContext context, WidgetRef ref, Highlight highl
   }
 }
 
-/// Copies the title of [highlight]; false when the clipboard refused (a
-/// browser may). The caller shows the confirmation on the button itself:
-/// Android 13+ already shows its own clipboard preview, so a message would be
-/// a second notification.
-Future<bool> copyTitle(Highlight highlight) => copyText(highlight.title);
+/// Copies what "Share" shares for [highlight] ([highlightShareText]); false
+/// when the clipboard refused (a browser may). The caller shows the
+/// confirmation on the button itself: Android 13+ already shows its own
+/// clipboard preview, so a message would be a second notification.
+Future<bool> copyHighlight(Highlight highlight) => copyText(highlightShareText(highlight));
 
 /// Copies [text]; false when the clipboard refused or is missing.
 Future<bool> copyText(String text) async {

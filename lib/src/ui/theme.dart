@@ -254,6 +254,7 @@ ThemeData buildTheme(Brightness brightness) {
       ),
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
       iconTheme: IconThemeData(size: 16, color: scheme.onSurfaceVariant),
+      // with the 8 px around the label: the 12 px of the design inside its 1 px border
       padding: const EdgeInsets.symmetric(horizontal: 4),
       labelPadding: const EdgeInsets.symmetric(horizontal: 8),
       showCheckmark: false,

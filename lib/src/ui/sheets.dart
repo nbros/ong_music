@@ -222,18 +222,19 @@ class _TonalIcon extends StatelessWidget {
   );
 }
 
-/// Copies the title, then shows a check mark for a moment instead of a
-/// message (and tells screen readers).
-class _CopyTitleButton extends StatefulWidget {
-  const _CopyTitleButton({required this.highlight});
+/// Copies the title and the link of the video, the text "Share" shares, then
+/// shows a check mark for a moment instead of a message (and tells screen
+/// readers).
+class _CopyButton extends StatefulWidget {
+  const _CopyButton({required this.highlight});
 
   final Highlight highlight;
 
   @override
-  State<_CopyTitleButton> createState() => _CopyTitleButtonState();
+  State<_CopyButton> createState() => _CopyButtonState();
 }
 
-class _CopyTitleButtonState extends State<_CopyTitleButton> {
+class _CopyButtonState extends State<_CopyButton> {
   Timer? _reset;
 
   bool get _copied => _reset?.isActive ?? false;
@@ -241,16 +242,16 @@ class _CopyTitleButtonState extends State<_CopyTitleButton> {
   Future<void> _copy() async {
     final view = View.of(context);
     final direction = Directionality.of(context);
-    final copied = await copyTitle(widget.highlight);
+    final copied = await copyHighlight(widget.highlight);
     if (!mounted) return;
-    if (!copied) return showMessage(context, 'Couldn’t copy the title');
+    if (!copied) return showMessage(context, 'Couldn’t copy');
     _reset?.cancel();
     setState(
       () => _reset = Timer(const Duration(seconds: 2), () {
         if (mounted) setState(() {});
       }),
     );
-    SemanticsService.sendAnnouncement(view, 'Title copied', direction);
+    SemanticsService.sendAnnouncement(view, 'Copied', direction);
   }
 
   @override
@@ -265,7 +266,11 @@ class _CopyTitleButtonState extends State<_CopyTitleButton> {
     child: _TonalIcon(
       key: ValueKey(_copied),
       icon: _copied ? Icons.check : Icons.copy,
-      tooltip: _copied ? 'Title copied' : 'Copy title',
+      tooltip: _copied
+          ? 'Copied'
+          : widget.highlight.youtubeId == null
+          ? 'Copy title'
+          : 'Copy title and link',
       onPressed: _copy,
     ),
   );
@@ -300,10 +305,9 @@ class HighlightSheet extends ConsumerWidget {
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
-              child: Semantics(
-                button: true,
-                label: 'Watch on YouTube',
-                excludeSemantics: true,
+              // for the eye and the finger only: screen readers get the "Watch on YouTube" button below,
+              // which does the same
+              child: ExcludeSemantics(
                 child: GestureDetector(
                   onTap: () => openVideo(context, ref, h),
                   child: MouseRegion(
@@ -360,7 +364,7 @@ class HighlightSheet extends ConsumerWidget {
                               ),
                       ),
                       _TonalIcon(icon: Icons.share, tooltip: 'Share', onPressed: () => shareHighlight(context, ref, h)),
-                      _CopyTitleButton(highlight: h),
+                      _CopyButton(highlight: h),
                     ],
                   ),
                 ),

@@ -55,6 +55,23 @@ void main() {
       expect(await cache.read(), isNull);
     });
 
+    test('temporary files of a write that never finished are deleted by a later write', () async {
+      final dir = Directory(p.join(tmp.path, 'sheets'))..createSync();
+      // the app was killed while writing, an hour ago; another instance is writing right now
+      final orphan = File(p.join(dir.path, 'songs.csv.4242-7.tmp'))..writeAsStringSync('half a sheet');
+      orphan.setLastModifiedSync(DateTime.now().subtract(const Duration(hours: 1)));
+      final running = File(p.join(dir.path, 'songs.csv.4343-0.tmp'))..writeAsStringSync('being written');
+      await cache.write(
+        CachedSheets(
+          sheets: const RawSheets(highlightsCsv: 'h1', songsCsv: 's1'),
+          fetchedAt: DateTime.utc(2026),
+        ),
+      );
+      expect(orphan.existsSync(), isFalse);
+      expect(running.existsSync(), isTrue, reason: 'a recent temporary file may belong to a write still running');
+      expect((await cache.read())!.sheets.songsCsv, 's1');
+    });
+
     test('a write that fails half-way reads as no cache, never as sheets of two downloads', () async {
       await cache.write(
         CachedSheets(

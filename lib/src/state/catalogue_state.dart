@@ -17,6 +17,7 @@ import '../data/repository.dart';
 import '../data/sheet_cache.dart';
 import '../data/sheets.dart';
 import '../logger.dart';
+import 'settings_state.dart';
 
 /// A cached catalogue older than this is refreshed in the background.
 const Duration catalogueMaxAge = Duration(hours: 6);
@@ -265,23 +266,23 @@ class CatalogueNotifier extends Notifier<CatalogueState> {
     return wait;
   }
 
-  /// Arms [_timer] for the next automatic check.
+  /// Arms [_timer] for the next automatic check. No timer runs in the
+  /// background: [setForeground] arms it again.
   void _scheduleCheck() {
     _timer?.cancel();
     _timer = null;
-    if (_disposed) return;
+    if (_disposed || !_foreground) return;
     var wait = _untilDue();
     if (wait > _maxTimerWait) wait = _maxTimerWait;
     if (wait < const Duration(seconds: 1)) wait = const Duration(seconds: 1);
     _timer = Timer(wait, _refreshIfDue);
   }
 
-  /// The automatic check: downloads when [_untilDue] says so and the app is in
-  /// the foreground (in the background, [refreshIfStale] does it on resume).
+  /// The automatic check: downloads when [_untilDue] says so.
   void _refreshIfDue() {
     _timer = null;
     if (_disposed || !_started || _refresh != null) return;
-    if (_foreground && _untilDue() <= Duration.zero) {
+    if (_untilDue() <= Duration.zero) {
       unawaited(refresh());
     } else {
       _scheduleCheck();
@@ -289,10 +290,13 @@ class CatalogueNotifier extends Notifier<CatalogueState> {
   }
 
   /// Whether the app is in the foreground (resumed or inactive): only then do
-  /// the automatic refreshes and retries run. True until told otherwise.
+  /// the automatic refreshes and retries run, and their timer. True until told
+  /// otherwise. Back in the foreground, a check that came due meanwhile runs
+  /// within a second, unless [refreshIfStale] was called first.
   void setForeground(bool foreground) {
-    if (_disposed) return;
+    if (_disposed || foreground == _foreground) return;
     _foreground = foreground;
+    if (_started) _scheduleCheck();
   }
 
   /// Refreshes when the data is older than [catalogueMaxAge], or when there is
@@ -344,7 +348,7 @@ class CatalogueNotifier extends Notifier<CatalogueState> {
 @immutable
 final class HighlightFilter {
   /// Creates a filter; the defaults match everything.
-  const HighlightFilter({this.query = '', this.genre});
+  const HighlightFilter({this.query = '', this.genre, this.mine = false});
 
   /// Search text (see `tokenize`).
   final String query;
@@ -352,18 +356,22 @@ final class HighlightFilter {
   /// Only this genre when set.
   final Genre? genre;
 
-  @override
-  bool operator ==(Object other) => other is HighlightFilter && other.query == query && other.genre == genre;
+  /// Only the user's own requests (the "You" chip, see [myRequesterProvider]).
+  final bool mine;
 
   @override
-  int get hashCode => Object.hash(query, genre);
+  bool operator ==(Object other) =>
+      other is HighlightFilter && other.query == query && other.genre == genre && other.mine == mine;
+
+  @override
+  int get hashCode => Object.hash(query, genre, mine);
 }
 
 /// The Ong Log list filters.
 @immutable
 final class PlayFilter {
   /// Creates a filter; the defaults match everything.
-  const PlayFilter({this.query = '', this.type, this.genre, this.withVideo = false});
+  const PlayFilter({this.query = '', this.type, this.genre, this.withVideo = false, this.mine = false});
 
   /// Search text (see `tokenize`).
   final String query;
@@ -377,31 +385,73 @@ final class PlayFilter {
   /// Only plays linked to a highlight.
   final bool withVideo;
 
+  /// Only the user's own requests (the "You" chip, see [myRequesterProvider]).
+  final bool mine;
+
   @override
   bool operator ==(Object other) =>
       other is PlayFilter &&
       other.query == query &&
       other.type == type &&
       other.genre == genre &&
-      other.withVideo == withVideo;
+      other.withVideo == withVideo &&
+      other.mine == mine;
 
   @override
-  int get hashCode => Object.hash(query, type, genre, withVideo);
+  int get hashCode => Object.hash(query, type, genre, withVideo, mine);
 }
 
 /// The catalogue shown, or null (rebuilds only when it is replaced).
 final currentCatalogueProvider = Provider<Catalogue?>((ref) => ref.watch(catalogueProvider.select((s) => s.catalogue)));
 
+/// The requester the Twitch name designates in the current catalogue, the one
+/// whose requests carry the "You" badge (`Catalogue.isRequester`); null
+/// without name, catalogue or request under that name.
+final myRequesterProvider = Provider<Requester?>((ref) {
+  final name = ref.watch(twitchNameProvider);
+  return name.isEmpty ? null : ref.watch(currentCatalogueProvider)?.requesterNamed(name);
+});
+
+/// How many highlights the user requested: the count of the "You" chip of the
+/// Highlights list, which only shows when it is not 0.
+final myHighlightCountProvider = Provider<int>((ref) {
+  final me = ref.watch(myRequesterProvider);
+  return me == null ? 0 : ref.watch(currentCatalogueProvider)!.highlightRequestCount(me);
+});
+
+/// How many plays the user requested; the "You" chip of the Ong Log only shows
+/// when it is not 0.
+final myPlayCountProvider = Provider<int>((ref) => ref.watch(myRequesterProvider)?.requestCount ?? 0);
+
+/// The requester id a "You" filter keeps, given the number of the user's
+/// requests in the list ([myHighlightCountProvider], [myPlayCountProvider]).
+/// Null when [mine] is off, and when the list holds none of them: the chip is
+/// gone then, and so is its filter, even before the filter notifier clears it.
+int? _myRequesterId(Ref ref, bool mine, Provider<int> count) =>
+    mine && ref.watch(count) > 0 ? ref.watch(myRequesterProvider)!.id : null;
+
 /// Highlights matching a filter, newest first; null without catalogue.
 final highlightResultsProvider = Provider.autoDispose.family<HighlightResults?, HighlightFilter>(
-  (ref, filter) => ref.watch(currentCatalogueProvider)?.searchHighlights(query: filter.query, genre: filter.genre),
+  (ref, filter) => ref
+      .watch(currentCatalogueProvider)
+      ?.searchHighlights(
+        query: filter.query,
+        genre: filter.genre,
+        requesterId: _myRequesterId(ref, filter.mine, myHighlightCountProvider),
+      ),
 );
 
 /// Plays matching a filter, newest first; null without catalogue.
 final playResultsProvider = Provider.autoDispose.family<PlayResults?, PlayFilter>(
   (ref, filter) => ref
       .watch(currentCatalogueProvider)
-      ?.searchPlays(query: filter.query, type: filter.type, genre: filter.genre, withVideo: filter.withVideo),
+      ?.searchPlays(
+        query: filter.query,
+        type: filter.type,
+        genre: filter.genre,
+        withVideo: filter.withVideo,
+        requesterId: _myRequesterId(ref, filter.mine, myPlayCountProvider),
+      ),
 );
 
 /// Number of plays matching a query (the "N in the Ong Log" link); 0 without

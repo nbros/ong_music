@@ -79,6 +79,9 @@ class _HighlightsPageState extends ConsumerState<HighlightsPage> {
     final searching = results.tokens.isNotEmpty;
     final inOngLog = searching ? ref.watch(playCountForQueryProvider(filter.query)) : 0;
     final notifier = ref.read(highlightFilterProvider.notifier);
+    final myCount = ref.watch(myHighlightCountProvider);
+    // without own highlight there is no "You" chip, and no filter on it
+    final mine = filter.mine && myCount > 0;
     return Column(
       children: [
         ListSearchField(
@@ -89,7 +92,9 @@ class _HighlightsPageState extends ConsumerState<HighlightsPage> {
         ),
         ChipRow(
           children: [
-            ListChip(label: 'All', selected: filter.genre == null, onTap: () => notifier.toggleGenre(null)),
+            ListChip(label: 'All', selected: filter.genre == null && !mine, onTap: notifier.clearChips),
+            if (myCount > 0)
+              ListChip(label: 'You', icon: Icons.person, count: myCount, selected: mine, onTap: notifier.toggleMine),
             for (final g in catalogue.highlightGenreCounts)
               if (g.genre != Genre.other)
                 ListChip(
@@ -100,7 +105,7 @@ class _HighlightsPageState extends ConsumerState<HighlightsPage> {
                 ),
           ],
         ),
-        if (searching || filter.genre != null)
+        if (searching || filter.genre != null || mine)
           CountLine(
             text: plural(results.length, 'highlight'),
             link: inOngLog > 0 ? '${formatCount(inOngLog)} in the Ong Log' : null,

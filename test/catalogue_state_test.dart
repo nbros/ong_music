@@ -32,6 +32,7 @@ class FakeFetcher implements SheetFetcher {
 void main() {
   final now = DateTime.utc(2026, 11, 12, 12);
   late DateTime clock;
+  void Function()? clockReadHook;
   late FakeFetcher fetcher;
   late MemorySheetCache cache;
   late ProviderContainer container;
@@ -53,7 +54,10 @@ void main() {
           parses++;
           return parseOnCurrentIsolate(sheets);
         }),
-        clockProvider.overrideWithValue(() => clock),
+        clockProvider.overrideWithValue(() {
+          clockReadHook?.call();
+          return clock;
+        }),
       ],
     );
     states = [];
@@ -62,6 +66,7 @@ void main() {
 
   setUp(() {
     clock = now;
+    clockReadHook = null;
     fetcher = FakeFetcher();
   });
 
@@ -466,6 +471,35 @@ void main() {
       expect(fetcher.calls, 1);
       expect(firstTitle(), 'Video new');
       container.dispose();
+    });
+
+    testWidgets('no timer runs in the background, and the check that came due runs back in the foreground', (
+      tester,
+    ) async {
+      startWith(
+        cached: CachedSheets(
+          sheets: sampleSheets(tag: 'old'),
+          fetchedAt: now,
+        ),
+      );
+      fetcher.results.add(sampleSheets(tag: 'new'));
+      await tester.pump(Duration.zero);
+      var clockReads = 0;
+      final time = clock.add(const Duration(hours: 12));
+      notifier().setForeground(false);
+      // the clock is only read by the automatic checks here
+      clockReadHook = () => clockReads++;
+      clock = time;
+      await tester.pump(const Duration(hours: 12));
+      expect(clockReads, 0, reason: 'a check ran in the background');
+      expect(fetcher.calls, 0);
+      clockReadHook = null;
+      notifier().setForeground(true);
+      await tester.pump(const Duration(seconds: 1));
+      expect(fetcher.calls, 1);
+      expect(firstTitle(), 'Video new');
+      // a pending timer at the end of a test is an error: none must be left in the background
+      notifier().setForeground(false);
     });
 
     testWidgets('the clock set back by days does not stop the retries', (tester) async {

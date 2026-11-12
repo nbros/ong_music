@@ -39,13 +39,25 @@ final highlightFilterProvider = NotifierProvider<HighlightFilterNotifier, Highli
 /// Holds the [HighlightFilter] of the Highlights tab.
 class HighlightFilterNotifier extends Notifier<HighlightFilter> {
   @override
-  HighlightFilter build() => const HighlightFilter();
+  HighlightFilter build() {
+    // the "You" chip is gone (Twitch name changed, refresh): its filter goes with it, and does not come back with it
+    ref.listen(myHighlightCountProvider, (_, count) {
+      if (count == 0 && state.mine) state = HighlightFilter(query: state.query, genre: state.genre);
+    });
+    return const HighlightFilter();
+  }
 
-  void setQuery(String query) => state = HighlightFilter(query: query, genre: state.genre);
+  void setQuery(String query) => state = HighlightFilter(query: query, genre: state.genre, mine: state.mine);
+
+  /// Removes every chip filter, keeps the query ("All").
+  void clearChips() => state = HighlightFilter(query: state.query);
 
   /// Selects [genre], or all genres when it is null or already selected.
   void toggleGenre(Genre? genre) =>
-      state = HighlightFilter(query: state.query, genre: genre == state.genre ? null : genre);
+      state = HighlightFilter(query: state.query, genre: genre == state.genre ? null : genre, mine: state.mine);
+
+  /// Shows only the user's own requests, or all of them again ("You").
+  void toggleMine() => state = HighlightFilter(query: state.query, genre: state.genre, mine: !state.mine);
 }
 
 /// Filters of the Ong Log list.
@@ -54,10 +66,23 @@ final playFilterProvider = NotifierProvider<PlayFilterNotifier, PlayFilter>(Play
 /// Holds the [PlayFilter] of the Ong Log tab.
 class PlayFilterNotifier extends Notifier<PlayFilter> {
   @override
-  PlayFilter build() => const PlayFilter();
+  PlayFilter build() {
+    // the "You" chip is gone (Twitch name changed, refresh): its filter goes with it, and does not come back with it
+    ref.listen(myPlayCountProvider, (_, count) {
+      if (count == 0 && state.mine) {
+        state = PlayFilter(query: state.query, type: state.type, genre: state.genre, withVideo: state.withVideo);
+      }
+    });
+    return const PlayFilter();
+  }
 
-  void setQuery(String query) =>
-      state = PlayFilter(query: query, type: state.type, genre: state.genre, withVideo: state.withVideo);
+  void setQuery(String query) => state = PlayFilter(
+    query: query,
+    type: state.type,
+    genre: state.genre,
+    withVideo: state.withVideo,
+    mine: state.mine,
+  );
 
   /// Removes every chip filter, keeps the query ("All").
   void clearChips() => state = PlayFilter(query: state.query);
@@ -68,6 +93,7 @@ class PlayFilterNotifier extends Notifier<PlayFilter> {
     type: type == state.type ? null : type,
     genre: state.genre,
     withVideo: state.withVideo,
+    mine: state.mine,
   );
 
   /// Selects [genre], or none when it is already selected.
@@ -76,10 +102,25 @@ class PlayFilterNotifier extends Notifier<PlayFilter> {
     type: state.type,
     genre: genre == state.genre ? null : genre,
     withVideo: state.withVideo,
+    mine: state.mine,
   );
 
-  void toggleWithVideo() =>
-      state = PlayFilter(query: state.query, type: state.type, genre: state.genre, withVideo: !state.withVideo);
+  void toggleWithVideo() => state = PlayFilter(
+    query: state.query,
+    type: state.type,
+    genre: state.genre,
+    withVideo: !state.withVideo,
+    mine: state.mine,
+  );
+
+  /// Shows only the user's own requests, or all of them again ("You").
+  void toggleMine() => state = PlayFilter(
+    query: state.query,
+    type: state.type,
+    genre: state.genre,
+    withVideo: state.withVideo,
+    mine: !state.mine,
+  );
 
   /// Shows every play matching [query], without chip filter.
   void searchOnly(String query) => state = PlayFilter(query: query);

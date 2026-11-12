@@ -70,7 +70,8 @@ String twitchNameHelp(String name, Catalogue? catalogue) {
   if (name.trim().isEmpty) return 'Your own requests get a “You” badge in every list.';
   final requester = catalogue?.requesterNamed(name);
   if (requester == null || requester.requestCount == 0) return 'No request under that name yet.';
-  return 'Found ${plural(requester.requestCount, 'request')} by ${requester.name} — look for the “You” badge.';
+  return 'Found ${plural(requester.requestCount, 'request')} by ${requester.name} — look for the “You” badge. '
+      'Tap the “You” chip to see only yours.';
 }
 
 /// The About tab.
@@ -585,7 +586,7 @@ class _DataSectionState extends ConsumerState<_DataSection> {
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Text('Refreshes by itself when the app opens, at most every 6 hours.', style: small),
+          child: Text('Refreshes by itself, at most every 6 hours.', style: small),
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 4, 0),

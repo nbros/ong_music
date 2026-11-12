@@ -82,6 +82,10 @@ final class Catalogue {
         '${fold(h.title)}\n${h.requesterId == null ? '' : _requesterFolds[h.requesterId!]}\n${_genreFolds[h.genre.index]}',
     ];
     _highlightGenreCounts = _countGenres(highlights.map((h) => h.genre));
+    _highlightRequests = Int32List(requesters.length);
+    for (final h in highlights) {
+      if (h.requesterId != null) _highlightRequests[h.requesterId!]++;
+    }
     _playGenreCounts = _countGenres(plays.map((p) => p.genre));
   }
 
@@ -109,6 +113,7 @@ final class Catalogue {
   late final List<String> _highlightFields;
   late final List<GenreCount> _highlightGenreCounts;
   late final List<GenreCount> _playGenreCounts;
+  late final Int32List _highlightRequests;
 
   static final List<String> _genreFolds = [for (final g in Genre.values) fold(g.label)];
   static final List<String> _typeFolds = [for (final t in PlayType.values) fold(t.label)];
@@ -187,15 +192,21 @@ final class Catalogue {
   /// no play are left out. [Genre.other] is included.
   List<GenreCount> get playGenreCounts => _playGenreCounts;
 
+  /// Number of highlights [requester] requested (`Requester.requestCount`
+  /// counts their plays).
+  int highlightRequestCount(Requester requester) => _highlightRequests[requester.id];
+
   // ---------------------------------------------------------------- search
 
   /// Highlights matching [query] (every token in the title, requester or genre
-  /// label) and, when given, of [genre]; newest first.
-  HighlightResults searchHighlights({String query = '', Genre? genre}) {
+  /// label) and, when given, of [genre] and requested by requester
+  /// [requesterId]; newest first.
+  HighlightResults searchHighlights({String query = '', Genre? genre, int? requesterId}) {
     final tokens = tokenize(query);
     final ids = <int>[];
     for (var i = highlights.length - 1; i >= 0; i--) {
       if (genre != null && highlights[i].genre != genre) continue;
+      if (requesterId != null && highlights[i].requesterId != requesterId) continue;
       final fields = _highlightFields[i];
       if (tokens.every(fields.contains)) ids.add(i);
     }
@@ -203,9 +214,10 @@ final class Catalogue {
   }
 
   /// Plays matching [query] (every token in the title, requester, genre or
-  /// type label), of [type] and [genre] when given, linked to a highlight when
-  /// [withVideo]; newest first.
-  PlayResults searchPlays({String query = '', PlayType? type, Genre? genre, bool withVideo = false}) {
+  /// type label), of [type] and [genre] and requested by requester
+  /// [requesterId] when given, linked to a highlight when [withVideo]; newest
+  /// first.
+  PlayResults searchPlays({String query = '', PlayType? type, Genre? genre, bool withVideo = false, int? requesterId}) {
     final tokens = tokenize(query);
     final matcher = _PlayMatcher(this, tokens);
     final ids = Int32List(plays.length);
@@ -215,6 +227,7 @@ final class Catalogue {
       if (type != null && p.type != type) continue;
       if (genre != null && p.genre != genre) continue;
       if (withVideo && p.highlightId == null) continue;
+      if (requesterId != null && p.requesterId != requesterId) continue;
       if (!matcher.matches(p)) continue;
       ids[n++] = i;
       // plays of a stream are contiguous, so are matches in reverse order

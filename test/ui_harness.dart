@@ -266,7 +266,8 @@ Future<void> goToTab(WidgetTester tester, String label) async {
 }
 
 /// The search field of the visible tab.
-Finder searchField() => find.descendant(of: find.byType(SearchBar).hitTestable(), matching: find.byType(TextField));
+Finder searchField() =>
+    find.descendant(of: find.byType(ListSearchField).hitTestable(), matching: find.byType(TextField));
 
 /// Lets a short message (2.6 s) go away.
 Future<void> waitForMessage(WidgetTester tester) async {
@@ -284,8 +285,11 @@ Future<void> tapVisible(WidgetTester tester, Finder finder) async {
 
 /// The filter chip whose label starts with [label] (labels may carry a count).
 Finder chip(String label) => find.byWidgetPredicate((w) {
-  if (w is! FilterChip || w.label is! Text) return false;
-  final text = w.label as Text;
+  if (w is! FilterChip) return false;
+  // a chip with an icon has a row for label: the icon, then the text
+  final labelWidget = w.label;
+  final text = labelWidget is Row ? labelWidget.children.last : labelWidget;
+  if (text is! Text) return false;
   final plain = text.data ?? text.textSpan!.toPlainText();
   return plain == label || plain.startsWith('$label  ');
 });

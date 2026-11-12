@@ -1,12 +1,17 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:ong_music/src/data/sheets.dart';
 import 'package:ong_music/src/data/catalogue.dart';
 import 'package:ong_music/src/state/catalogue_state.dart';
+import 'package:ong_music/src/ui/about_page.dart';
+import 'package:ong_music/src/ui/app.dart';
 import 'package:ong_music/src/ui/highlights_page.dart';
 import 'package:ong_music/src/ui/ong_log_page.dart';
 import 'package:ong_music/src/ui/rows.dart';
 import 'package:ong_music/src/ui/sheets.dart';
+import 'package:ong_music/src/ui/view_state.dart';
+import 'package:ong_music/src/ui/widgets.dart';
 
 import 'fixtures.dart';
 import 'ui_harness.dart';
@@ -27,14 +32,35 @@ void main() {
     });
 
     testWidgets('selecting a chip does not move or resize the chips', (tester) async {
-      await pumpApp(tester);
-      const labels = ['All', 'Game OST', 'Popular', 'Disney'];
-      List<Rect> rects() => [for (final label in labels) tester.getRect(chip(label))];
-      final before = rects();
-      for (final label in ['Game OST', 'Popular', 'All']) {
-        await tester.tap(chip(label));
-        await tester.pumpAndSettle();
-        expect(rects(), before, reason: 'after selecting $label');
+      // wide enough for the chips tapped to be on screen (the content keeps 640 px)
+      await pumpApp(tester, prefs: {'twitchName': 'jsbach64'}, size: const Size(700, 892));
+      for (final (tab, page, labels, taps) in [
+        (
+          'Highlights',
+          HighlightsPage,
+          ['All', 'You', 'Game OST', 'Popular', 'Disney'],
+          ['Game OST', 'You', 'Popular', 'You', 'All', 'You', 'All'],
+        ),
+        (
+          'Ong Log',
+          OngLogPage,
+          ['All', 'Piano', 'Loop', 'With video', 'You'],
+          ['You', 'Piano', 'You', 'All', 'You', 'All'],
+        ),
+      ]) {
+        await goToTab(tester, tab);
+        List<Rect> rects() => [for (final label in labels) tester.getRect(chip(label))];
+        final list = find.descendant(of: find.byType(page), matching: find.byType(CustomScrollView));
+        final before = rects();
+        // with any chip selected, the list has one place, the same with "You" as with the others
+        final listTops = <double>{};
+        for (final (i, label) in taps.indexed) {
+          await tester.tap(chip(label));
+          await tester.pumpAndSettle();
+          expect(rects(), before, reason: '$tab: after tap $i on $label');
+          if (label != 'All') listTops.add(tester.getRect(list).top);
+        }
+        expect(listTops, hasLength(1), reason: tab);
       }
     });
 
@@ -245,29 +271,47 @@ void main() {
       expect(find.text('Sharing isn’t available here: link copied'), findsOneWidget);
       await waitForMessage(tester);
 
-      await tester.tap(find.byTooltip('Copy title'));
+      // "Copy" copies what "Share" shares: the title and the link
+      app.effects.clipboard = null;
+      await tester.tap(find.byTooltip('Copy title and link'));
       await tester.pump();
-      expect(app.effects.clipboard, 'Gloria Gaynor - I Will Survive');
+      expect(app.effects.clipboard, 'Gloria Gaynor - I Will Survive — https://youtu.be/bbbbbbbbbbb');
       // confirmed on the button (a check mark), not by a second notification
       expect(find.byIcon(Icons.check), findsOneWidget);
-      expect(find.byTooltip('Title copied'), findsOneWidget);
-      expect(find.text('Title copied'), findsNothing);
+      expect(find.byTooltip('Copied'), findsOneWidget);
+      expect(find.text('Copied'), findsNothing);
       await tester.pump(const Duration(seconds: 3));
       await tester.pumpAndSettle();
       expect(find.byIcon(Icons.copy), findsOneWidget);
 
       // a clipboard that refuses: said so, no check mark
       app.effects.clipboardWorks = false;
-      await tester.tap(find.byTooltip('Copy title'));
+      await tester.tap(find.byTooltip('Copy title and link'));
       await tester.pump();
-      expect(find.text('Couldn’t copy the title'), findsOneWidget);
+      expect(find.text('Couldn’t copy'), findsOneWidget);
       expect(find.byIcon(Icons.check), findsNothing);
       await waitForMessage(tester);
       await tester.tap(find.byTooltip('Share'));
       await tester.pump();
       expect(find.text('Sharing isn’t available here'), findsOneWidget);
-      expect(app.effects.clipboard, 'Gloria Gaynor - I Will Survive');
+      expect(app.effects.clipboard, 'Gloria Gaynor - I Will Survive — https://youtu.be/bbbbbbbbbbb');
       await waitForMessage(tester);
+    });
+
+    testWidgets('highlight without video: "Copy" copies the title alone, as "Share" shares it', (tester) async {
+      final app = await pumpApp(tester);
+      await tester.tap(find.byTooltip('Details').first);
+      await tester.pumpAndSettle();
+      expect(find.text('Video unavailable'), findsOneWidget);
+      await tester.tap(find.byTooltip('Share'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Copy title'));
+      await tester.pump();
+      expect(app.effects.clipboard, isNotNull);
+      expect(app.effects.clipboard, app.effects.shared.single);
+      expect(app.effects.clipboard, isNot(contains('http')));
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pumpAndSettle();
     });
 
     testWidgets('highlight sheet → song sheet → stream sheet, each replacing the last', (tester) async {
@@ -330,6 +374,209 @@ void main() {
     expect(find.descendant(of: find.byType(PlayRow), matching: find.text('YOU')), findsNWidgets(2));
   });
 
+  group('"You" chip', () {
+    bool selected(WidgetTester tester, String label) => tester.widget<FilterChip>(chip(label)).selected;
+    String chipText(WidgetTester tester, String label) {
+      final text = (tester.widget<FilterChip>(chip(label)).label as Row).children.last as Text;
+      return text.data ?? text.textSpan!.toPlainText();
+    }
+
+    Finder twitchNameField() => find.descendant(of: find.byType(AboutPage), matching: find.byType(TextField));
+    ProviderContainer container(WidgetTester tester) =>
+        ProviderScope.containerOf(tester.element(find.byType(OngMusicApp)));
+
+    testWidgets('keeps only the user’s requests, placed and drawn like its neighbours', (tester) async {
+      await pumpApp(tester, prefs: {'twitchName': 'JSBACH64'});
+      // Highlights: after "All", before the genres, with its count
+      expect(chipText(tester, 'You'), 'You  1');
+      expect(find.descendant(of: chip('You'), matching: find.byIcon(Icons.person)), findsOneWidget);
+      expect(tester.getRect(chip('You')).left, greaterThan(tester.getRect(chip('All')).right));
+      expect(tester.getRect(chip('You')).right, lessThan(tester.getRect(chip('Game OST')).left));
+      expect(selected(tester, 'You'), isFalse);
+      await tester.tap(chip('You'));
+      await tester.pumpAndSettle();
+      expect(tester.widgetList<HighlightRow>(find.byType(HighlightRow)).map((r) => r.highlight.track), [
+        'Song of Storms',
+      ]);
+      expect((selected(tester, 'You'), selected(tester, 'All')), (true, false));
+      expect(find.text('1 highlight'), findsOneWidget);
+
+      // Ong Log: after "With video", before the separator and the genres, without count
+      await goToTab(tester, 'Ong Log');
+      expect(chipText(tester, 'You'), 'You');
+      expect(find.descendant(of: chip('You'), matching: find.byIcon(Icons.person)), findsOneWidget);
+      expect(tester.getRect(chip('You')).left, greaterThan(tester.getRect(chip('With video')).right));
+      expect(tester.getRect(chip('You')).right, lessThan(tester.getRect(find.byType(ChipSeparator)).left));
+      expect(tester.getRect(chip('Popular')).left, greaterThan(tester.getRect(find.byType(ChipSeparator)).right));
+      await tapVisible(tester, chip('You'));
+      expect(tester.widgetList<PlayRow>(find.byType(PlayRow)).map((r) => r.play.title), [
+        'Zelda - Song of Storms',
+        'Zelda - Lost Woods',
+      ]);
+      expect((selected(tester, 'You'), selected(tester, 'All')), (true, false));
+      expect(find.text('2 songs · 2 streams'), findsOneWidget);
+    });
+
+    testWidgets('shows only in a list holding requests of the user', (tester) async {
+      await pumpApp(tester);
+      expect(chip('You'), findsNothing);
+      await goToTab(tester, 'Ong Log');
+      expect(chip('You'), findsNothing);
+      // MannyHub requested a play, no highlight
+      await goToTab(tester, 'About');
+      await tester.enterText(twitchNameField(), 'mannyhub');
+      await tester.pump();
+      await goToTab(tester, 'Ong Log');
+      expect(chip('You'), findsOneWidget);
+      await goToTab(tester, 'Highlights');
+      expect(chip('You'), findsNothing);
+      // no request under that name
+      await goToTab(tester, 'About');
+      await tester.enterText(twitchNameField(), 'nobody');
+      await tester.pump();
+      await goToTab(tester, 'Ong Log');
+      expect(chip('You'), findsNothing);
+      await goToTab(tester, 'Highlights');
+      expect(chip('You'), findsNothing);
+    });
+
+    testWidgets('combines with the search and the other chips; "All" clears it', (tester) async {
+      await pumpApp(tester, prefs: {'twitchName': 'jsbach64'});
+      Future<void> tap(String label) => tapVisible(tester, chip(label));
+      Future<void> search(String query) async {
+        await tester.enterText(searchField(), query);
+        await tester.pumpAndSettle();
+      }
+
+      // Highlights: jsbach64 requested "Song of Storms" (Game OST)
+      int highlights() => find.byType(HighlightRow).evaluate().length;
+      await tap('You');
+      await search('zelda');
+      expect(highlights(), 1);
+      await search('');
+      expect(highlights(), 1, reason: 'a query change keeps "You"');
+      await tap('Popular');
+      expect(highlights(), 0, reason: 'genre and "You" together');
+      await tap('Popular');
+      expect(highlights(), 1, reason: 'a genre change keeps "You"');
+      await tap('All');
+      expect(highlights(), 3);
+      expect((selected(tester, 'All'), selected(tester, 'You')), (true, false));
+      expect(find.text('3 highlights'), findsNothing, reason: 'no count line without filter');
+
+      // Ong Log: jsbach64 requested two piano plays, one with a video
+      await goToTab(tester, 'Ong Log');
+      int plays() => find.byType(PlayRow).evaluate().length;
+      await tap('You');
+      expect(plays(), 2);
+      await tap('Loop');
+      expect(plays(), 0, reason: 'type and "You" together');
+      await tap('Loop');
+      expect(plays(), 2);
+      await tap('With video');
+      expect(plays(), 1, reason: 'with video and "You" together');
+      await tap('With video');
+      await tap('Popular');
+      expect(plays(), 0, reason: 'genre and "You" together');
+      await tap('Popular');
+      expect(plays(), 2);
+      await search('z');
+      await search('');
+      expect(plays(), 2, reason: 'a query change keeps "You"');
+      await tap('All');
+      expect(plays(), 4);
+      expect((selected(tester, 'All'), selected(tester, 'You')), (true, false));
+      expect(find.text('4 songs · 2 streams'), findsNothing, reason: 'no count line without filter');
+    });
+
+    testWidgets('leaves no filter behind when it goes away', (tester) async {
+      final app = await pumpApp(tester, prefs: {'twitchName': 'jsbach64'});
+      Future<void> selectBoth() async {
+        await goToTab(tester, 'Highlights');
+        await tapVisible(tester, chip('You'));
+        expect(find.byType(HighlightRow), findsOneWidget);
+        await goToTab(tester, 'Ong Log');
+        await tapVisible(tester, chip('You'));
+        expect(find.byType(PlayRow), findsNWidgets(2));
+      }
+
+      Future<void> expectUnfiltered() async {
+        await goToTab(tester, 'Highlights');
+        expect(chip('You'), findsNothing);
+        expect(find.byType(HighlightRow), findsNWidgets(3));
+        expect(selected(tester, 'All'), isTrue);
+        expect(find.textContaining('highlights'), findsOneWidget, reason: 'the search hint, no count line');
+        await goToTab(tester, 'Ong Log');
+        expect(chip('You'), findsNothing);
+        expect(find.byType(PlayRow), findsNWidgets(4));
+        expect(selected(tester, 'All'), isTrue);
+        expect(container(tester).read(highlightFilterProvider).mine, isFalse);
+        expect(container(tester).read(playFilterProvider).mine, isFalse);
+      }
+
+      Future<void> expectBackUnselected() async {
+        await goToTab(tester, 'Highlights');
+        expect(selected(tester, 'You'), isFalse);
+        expect(find.byType(HighlightRow), findsNWidgets(3));
+        await goToTab(tester, 'Ong Log');
+        expect(selected(tester, 'You'), isFalse);
+        expect(find.byType(PlayRow), findsNWidgets(4));
+      }
+
+      // the name is cleared, then typed again
+      await selectBoth();
+      await goToTab(tester, 'About');
+      await tester.enterText(twitchNameField(), '');
+      await tester.pump();
+      await expectUnfiltered();
+      await goToTab(tester, 'About');
+      await tester.enterText(twitchNameField(), 'jsbach64');
+      await tester.pump();
+      await expectBackUnselected();
+
+      // a refresh brings a catalogue without their requests, then one with them
+      await selectBoth();
+      final state = app.notifier.initial;
+      app.notifier.emit(CatalogueState(catalogue: catalogueOf(), fetchedAt: testNow));
+      await tester.pumpAndSettle();
+      await goToTab(tester, 'Highlights');
+      expect(chip('You'), findsNothing);
+      expect(find.byType(HighlightRow), findsOneWidget, reason: 'the one highlight of the new catalogue');
+      expect(container(tester).read(highlightFilterProvider).mine, isFalse);
+      expect(container(tester).read(playFilterProvider).mine, isFalse);
+      app.notifier.emit(state);
+      await tester.pumpAndSettle();
+      await expectBackUnselected();
+    });
+
+    testWidgets('links to the Ong Log reset it', (tester) async {
+      await pumpApp(tester, prefs: {'twitchName': 'jsbach64'});
+      await goToTab(tester, 'Ong Log');
+      await tapVisible(tester, chip('You'));
+      // "N in the Ong Log →": two plays of "I Will Survive", none requested by jsbach64
+      await goToTab(tester, 'Highlights');
+      await tester.enterText(searchField(), 'survive');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('2 in the Ong Log →'));
+      await tester.pumpAndSettle();
+      expect(find.byType(PlayRow).hitTestable(), findsNWidgets(2));
+      expect(selected(tester, 'You'), isFalse);
+
+      // "Requested by shadowvanta" in a highlight sheet
+      await tapVisible(tester, chip('You'));
+      expect(find.byType(PlayRow).hitTestable(), findsNothing);
+      await goToTab(tester, 'Highlights');
+      await tester.enterText(searchField(), '');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Details').at(1));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Requested by shadowvanta'));
+      await tester.pumpAndSettle();
+      expect(find.byType(PlayRow).hitTestable(), findsOneWidget);
+      expect(selected(tester, 'You'), isFalse);
+    });
+  });
+
   group('About', () {
     testWidgets('theme switch applies and persists', (tester) async {
       final app = await pumpApp(tester, prefs: {'themeMode': 'dark'});
@@ -348,7 +595,10 @@ void main() {
       expect(find.text('Your own requests get a “You” badge in every list.'), findsOneWidget);
       await tester.enterText(field, 'JSBach64 ');
       await tester.pump();
-      expect(find.text('Found 2 requests by jsbach64 — look for the “You” badge.'), findsOneWidget);
+      expect(
+        find.text('Found 2 requests by jsbach64 — look for the “You” badge. Tap the “You” chip to see only yours.'),
+        findsOneWidget,
+      );
       expect(app.prefs.getString('twitchName'), 'JSBach64');
       await tester.enterText(field, 'nobody');
       await tester.pump();
@@ -690,6 +940,35 @@ void main() {
       await tester.tap(chip('Piano'));
       await tester.pumpAndSettle();
       expect(position.pixels, 0);
+    });
+
+    testWidgets('"You" goes back to the top too', (tester) async {
+      // 100 highlights and plays, every other one requested by jsbach64
+      final catalogue = catalogueOf(
+        highlights: [
+          for (var i = 0; i < 100; i++)
+            hRow(order: '${i + 1}', title: 'Video $i', requester: i.isEven ? 'jsbach64' : 'someone'),
+        ],
+        songs: [
+          start('2024-03-01'),
+          for (var i = 0; i < 100; i++)
+            sRow(date: '2024-03-01 20:00:00', title: 'Song $i', requester: i.isEven ? 'jsbach64' : 'someone'),
+        ],
+      );
+      await pumpApp(
+        tester,
+        state: CatalogueState(catalogue: catalogue, fetchedAt: testNow),
+        prefs: {'twitchName': 'jsbach64'},
+      );
+      for (final (tab, page) in [('Highlights', HighlightsPage), ('Ong Log', OngLogPage)]) {
+        await goToTab(tester, tab);
+        final position = positionOf(tester, page);
+        position.jumpTo(1234);
+        await tester.pump();
+        // brings the chip on screen without moving the list
+        await tapVisible(tester, chip('You'));
+        expect(position.pixels, 0, reason: tab);
+      }
     });
   });
 

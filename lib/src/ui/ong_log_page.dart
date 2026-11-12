@@ -103,7 +103,10 @@ class _OngLogPageState extends ConsumerState<OngLogPage> {
     final filter = ref.watch(playFilterProvider);
     final results = ref.watch(playResultsProvider(filter))!;
     final notifier = ref.read(playFilterProvider.notifier);
-    final anyChip = filter.type != null || filter.genre != null || filter.withVideo;
+    final hasMine = ref.watch(myPlayCountProvider) > 0;
+    // without own play there is no "You" chip, and no filter on it
+    final mine = filter.mine && hasMine;
+    final anyChip = filter.type != null || filter.genre != null || filter.withVideo || mine;
     final layout = _layoutOf(results, filter, ListMetrics.of(context));
     return Column(
       children: [
@@ -134,6 +137,7 @@ class _OngLogPageState extends ConsumerState<OngLogPage> {
               selected: filter.withVideo,
               onTap: notifier.toggleWithVideo,
             ),
+            if (hasMine) ListChip(label: 'You', icon: Icons.person, selected: mine, onTap: notifier.toggleMine),
             const ChipSeparator(),
             for (final g in catalogue.playGenreCounts)
               if (g.genre != Genre.other)

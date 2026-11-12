@@ -8,6 +8,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:ong_music/src/ui/highlights_page.dart';
 import 'package:ong_music/src/ui/ong_log_page.dart';
 import 'package:ong_music/src/ui/sheets.dart';
+import 'package:ong_music/src/ui/theme.dart';
 import 'package:ong_music/src/ui/widgets.dart';
 
 import 'ui_harness.dart';
@@ -40,6 +41,26 @@ void main() {
   });
 
   group('Search field', () {
+    testWidgets('has the sizes of the design and leaves the keyboard\'s automatic correction off', (tester) async {
+      await pumpApp(tester);
+      for (final tab in ['Highlights', 'Ong Log']) {
+        await goToTab(tester, tab);
+        final field = find.byType(ListSearchField).hitTestable();
+        Rect rect(Finder finder) => tester.getRect(find.descendant(of: field, matching: finder).first);
+        final pill = rect(find.byType(Material));
+        expect((pill.left, pill.height), (16, 52), reason: tab);
+        expect(rect(find.byIcon(Icons.search)).left - pill.left, 16, reason: tab);
+        expect(rect(find.byType(EditableText)).left - pill.left, 56, reason: tab);
+        // titles, names and user names are not dictionary words
+        expect(editable(tester).widget.autocorrect, isFalse, reason: tab);
+        await tester.enterText(searchField(), 'storms');
+        await tester.pump();
+        expect(pill.right - rect(find.byType(IconButton)).right, 4, reason: tab);
+        await tester.enterText(searchField(), '');
+        await tester.pumpAndSettle();
+      }
+    });
+
     testWidgets('Escape clears it, then leaves it', (tester) async {
       await pumpApp(tester);
       await tester.enterText(searchField(), 'storms');
@@ -88,6 +109,59 @@ void main() {
     });
   });
 
+  group('chips', () {
+    testWidgets('have the sizes of the design, the first one in line with the search field', (tester) async {
+      await pumpApp(tester);
+      await goToTab(tester, 'Ong Log');
+      Rect rect(Finder finder) => tester.getRect(finder);
+      Finder inChip(String label, Finder finder) => find.descendant(of: chip(label).hitTestable(), matching: finder);
+      final all = rect(chip('All').hitTestable());
+      final piano = rect(chip('Piano').hitTestable());
+      final field = find.byType(ListSearchField).hitTestable();
+      expect(all.left, rect(find.descendant(of: field, matching: find.byType(Material)).first).left);
+      expect((all.height, piano.height), (32, 32));
+      expect(piano.left - all.right, 8);
+      final allLabel = rect(inChip('All', find.text('All')));
+      // 12 px inside the 1 px border
+      expect((allLabel.left - all.left, all.right - allLabel.right), (13, 13));
+      final icon = rect(inChip('Piano', find.byType(Icon)));
+      final label = rect(inChip('Piano', find.text('Piano')));
+      expect((icon.left - piano.left, label.left - icon.right, piano.right - label.right), (13, 6, 13));
+      expect(icon.size, const Size(16, 16));
+    });
+
+    testWidgets('a narrow chip takes no more room than it shows, and is 48 px high under the finger', (tester) async {
+      final taps = <String>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildTheme(Brightness.light),
+          home: Scaffold(
+            body: Align(
+              alignment: Alignment.topLeft,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final label in ['A', 'B']) ListChip(label: label, selected: false, onTap: () => taps.add(label)),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      final a = tester.getRect(find.byType(FilterChip).first);
+      final b = tester.getRect(find.byType(FilterChip).last);
+      // 13 px of text and 13 px on each side: a tap target as wide as it is high would add 9 px around it
+      expect(a.width, 39);
+      expect(b.left, a.right);
+      expect(tester.getSize(find.byType(Row).first).height, 48);
+      for (final dy in [-20.0, 0.0, 20.0]) {
+        await tester.tapAt(a.center.translate(0, dy));
+        await tester.tapAt(b.center.translate(0, dy));
+      }
+      expect(taps, ['A', 'B', 'A', 'B', 'A', 'B']);
+    });
+  });
+
   testWidgets('a mouse wheel scrolls the chips sideways', (tester) async {
     await pumpApp(tester, size: const Size(320, 700));
     await goToTab(tester, 'Ong Log');
@@ -107,6 +181,17 @@ void main() {
       tester.state<ScrollableState>(find.descendant(of: list, matching: find.byType(Scrollable))).position.pixels,
       0,
     );
+  });
+
+  testWidgets('a screen reader hears "Watch on YouTube" once in a highlight sheet', (tester) async {
+    final handle = tester.ensureSemantics();
+    await pumpApp(tester);
+    await tester.tap(find.byTooltip('Details').at(1));
+    await tester.pumpAndSettle();
+    expect(find.byType(HighlightSheet), findsOneWidget);
+    // the thumbnail opens the video too, but is not a second button of the same name
+    expect(find.bySemanticsLabel('Watch on YouTube'), findsOneWidget);
+    handle.dispose();
   });
 
   testWidgets('the video thumbnail of a highlight sheet shows the click cursor', (tester) async {

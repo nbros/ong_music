@@ -2,6 +2,7 @@
 library;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
@@ -100,32 +101,29 @@ class AppShell extends ConsumerWidget {
         child: Scaffold(
           body: SafeArea(
             bottom: false,
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: maxContentWidth),
-                child: Column(
-                  children: [
-                    const InstallBanner(),
-                    Expanded(
-                      child: _SearchShortcut(
-                        child: IndexedStack(
-                          index: tab.index,
-                          children: [
-                            for (final t in AppTab.values)
-                              TickerMode(
-                                enabled: t == tab,
-                                child: switch (t) {
-                                  AppTab.highlights => const HighlightsPage(),
-                                  AppTab.ongLog => const OngLogPage(),
-                                  AppTab.about => const AboutPage(),
-                                },
-                              ),
-                          ],
-                        ),
+            child: _ContentColumn(
+              child: Column(
+                children: [
+                  const InstallBanner(),
+                  Expanded(
+                    child: _SearchShortcut(
+                      child: IndexedStack(
+                        index: tab.index,
+                        children: [
+                          for (final t in AppTab.values)
+                            TickerMode(
+                              enabled: t == tab,
+                              child: switch (t) {
+                                AppTab.highlights => const HighlightsPage(),
+                                AppTab.ongLog => const OngLogPage(),
+                                AppTab.about => const AboutPage(),
+                              },
+                            ),
+                        ],
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -154,6 +152,51 @@ class AppShell extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// The content, centred and at most [maxContentWidth] wide.
+///
+/// In a wider window, a mouse wheel turned in the empty space beside the
+/// content scrolls what is at that height in it, as on a web page: without
+/// this, the wheel would do nothing there.
+class _ContentColumn extends StatefulWidget {
+  const _ContentColumn({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_ContentColumn> createState() => _ContentColumnState();
+}
+
+class _ContentColumnState extends State<_ContentColumn> {
+  final _content = GlobalKey();
+
+  void _onPointerSignal(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent) return;
+    final content = _content.currentContext?.findRenderObject();
+    if (content is! RenderBox || !content.hasSize) return;
+    final local = content.globalToLocal(event.position);
+    if (local.dx >= 0 && local.dx < content.size.width) return;
+    // the same event, as if the pointer were in the middle of the content at the same height
+    final position = content.localToGlobal(Offset(content.size.width / 2, local.dy));
+    final result = HitTestResult();
+    WidgetsBinding.instance.hitTestInView(result, position, event.viewId);
+    WidgetsBinding.instance.dispatchEvent((event.original ?? event).copyWith(position: position), result);
+  }
+
+  @override
+  Widget build(BuildContext context) => Listener(
+    // translucent: the listener hears the events of the empty space too
+    behavior: HitTestBehavior.translucent,
+    onPointerSignal: _onPointerSignal,
+    child: Center(
+      child: ConstrainedBox(
+        key: _content,
+        constraints: const BoxConstraints(maxWidth: maxContentWidth),
+        child: widget.child,
+      ),
+    ),
+  );
 }
 
 /// Ctrl+F (⌘F on Apple devices) or `/` puts the cursor in the search field of

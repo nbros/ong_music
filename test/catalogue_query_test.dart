@@ -54,6 +54,18 @@ void main() {
       expect(c.searchHighlights(query: 'route', genre: Genre.classical).ids, isEmpty);
     });
 
+    test('requester filter, with the query and the genre', () {
+      final alinsa = c.requesterNamed('alinsa')!;
+      final elodie = c.requesterNamed('elodie')!;
+      expect(c.searchHighlights(requesterId: alinsa.id).ids, [0]);
+      expect(c.searchHighlights(requesterId: elodie.id).ids, [3]);
+      expect(c.searchHighlights(query: 'zelda', genre: Genre.gameOst, requesterId: alinsa.id).ids, [0]);
+      expect(c.searchHighlights(query: 'pokemon', requesterId: alinsa.id).ids, isEmpty);
+      expect(c.searchHighlights(genre: Genre.anime, requesterId: alinsa.id).ids, isEmpty);
+      expect(c.highlightRequestCount(alinsa), 1);
+      expect(c.highlightRequestCount(c.requesterNamed('bob')!), 1);
+    });
+
     test('genre counts, largest first (ties in Genre order), zero counts omitted', () {
       expect(c.highlightGenreCounts, [
         (genre: Genre.gameOst, count: 2),
@@ -95,6 +107,18 @@ void main() {
       expect(withVideo.ids, [3, 1, 0]);
       expect(withVideo.streamCount, 2);
       expect(c.searchPlays(query: 'zelda', withVideo: true, type: PlayType.piano).ids, [0]);
+    });
+
+    test('requester filter, with the query and the other filters', () {
+      final alinsa = c.requesterNamed('alinsa')!.id;
+      final mine = c.searchPlays(requesterId: alinsa);
+      expect(mine.ids, [2, 0]);
+      expect(mine.streamCount, 2);
+      expect(c.searchPlays(requesterId: c.requesterNamed('bob')!.id).ids, [3]);
+      expect(c.searchPlays(query: 'storms', requesterId: alinsa).ids, [0]);
+      expect(c.searchPlays(type: PlayType.loop, requesterId: alinsa).ids, [2]);
+      expect(c.searchPlays(genre: Genre.classical, requesterId: alinsa).ids, isEmpty);
+      expect(c.searchPlays(withVideo: true, requesterId: alinsa).ids, [0]);
     });
   });
 

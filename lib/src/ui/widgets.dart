@@ -1,7 +1,10 @@
 /// Small building blocks shared by the lists and the sheets.
 library;
 
+import 'dart:ui' show SemanticsInputType;
+
 import 'package:flutter/gestures.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
@@ -351,10 +354,12 @@ class Thumbnail extends ConsumerWidget {
 
 // ------------------------------------------------------------------ list chrome
 
-/// The search field at the top of a list.
+/// The search field at the top of a list: the look of a Material 3 search bar.
 ///
-/// Escape clears it, or leaves it when it is empty.
-class ListSearchField extends StatelessWidget {
+/// Not a [SearchBar]: that one leaves the keyboard's automatic correction on,
+/// which replaces the titles, names and user names typed here with dictionary
+/// words. Escape clears the field, or leaves it when it is empty.
+class ListSearchField extends StatefulWidget {
   const ListSearchField({
     super.key,
     required this.controller,
@@ -368,14 +373,29 @@ class ListSearchField extends StatelessWidget {
   final ValueChanged<String> onChanged;
   final FocusNode? focusNode;
 
+  @override
+  State<ListSearchField> createState() => _ListSearchFieldState();
+}
+
+class _ListSearchFieldState extends State<ListSearchField> {
+  FocusNode? _ownFocusNode;
+  FocusNode get _focusNode => widget.focusNode ?? (_ownFocusNode ??= FocusNode());
+
+  @override
+  void dispose() {
+    _ownFocusNode?.dispose();
+    super.dispose();
+  }
+
   void _clear() {
-    controller.clear();
-    onChanged('');
+    widget.controller.clear();
+    widget.onChanged('');
   }
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final controller = widget.controller;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 6, 16, 2),
       child: CallbackShortcuts(
@@ -383,32 +403,74 @@ class ListSearchField extends StatelessWidget {
           const SingleActivator(LogicalKeyboardKey.escape): () =>
               controller.text.isEmpty ? FocusManager.instance.primaryFocus?.unfocus() : _clear(),
         },
-        child: SearchBar(
-          controller: controller,
-          focusNode: focusNode,
-          hintText: hint,
-          onChanged: onChanged,
-          textInputAction: TextInputAction.search,
-          onSubmitted: (_) => FocusManager.instance.primaryFocus?.unfocus(),
-          elevation: const WidgetStatePropertyAll(0),
-          backgroundColor: WidgetStatePropertyAll(scheme.surfaceContainerHigh),
+        child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 52),
-          padding: const WidgetStatePropertyAll(EdgeInsets.only(left: 16, right: 4)),
-          textStyle: WidgetStatePropertyAll(TextStyle(fontSize: 16, color: scheme.onSurface)),
-          hintStyle: WidgetStatePropertyAll(TextStyle(fontSize: 16, color: scheme.onSurfaceVariant)),
-          leading: Icon(Icons.search, color: scheme.onSurfaceVariant),
-          trailing: [
-            ListenableBuilder(
-              listenable: controller,
-              builder: (context, _) => controller.text.isEmpty
-                  ? const SizedBox.shrink()
-                  : IconButton(
-                      tooltip: 'Clear',
-                      icon: Icon(Icons.close, color: scheme.onSurfaceVariant),
-                      onPressed: _clear,
+          child: Material(
+            color: scheme.surfaceContainerHigh,
+            surfaceTintColor: Colors.transparent,
+            shape: const StadiumBorder(),
+            child: InkWell(
+              // the text field inside is the focus stop and the semantics node
+              canRequestFocus: false,
+              excludeFromSemantics: true,
+              customBorder: const StadiumBorder(),
+              overlayColor: WidgetStateProperty.resolveWith(
+                (states) => switch (states) {
+                  _ when states.contains(WidgetState.pressed) => scheme.onSurface.withValues(alpha: 0.1),
+                  _ when states.contains(WidgetState.hovered) => scheme.onSurface.withValues(alpha: 0.08),
+                  _ => Colors.transparent,
+                },
+              ),
+              onTap: () {
+                if (!_focusNode.hasFocus) _focusNode.requestFocus();
+              },
+              child: Padding(
+                padding: const EdgeInsets.only(left: 16, right: 4),
+                child: Row(
+                  children: [
+                    Icon(Icons.search, color: scheme.onSurfaceVariant),
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.only(left: 16, right: 4),
+                        child: Semantics(
+                          inputType: SemanticsInputType.search,
+                          child: TextField(
+                            controller: controller,
+                            focusNode: _focusNode,
+                            onChanged: widget.onChanged,
+                            onSubmitted: (_) => FocusManager.instance.primaryFocus?.unfocus(),
+                            textInputAction: TextInputAction.search,
+                            autocorrect: false,
+                            style: TextStyle(fontSize: 16, color: scheme.onSurface),
+                            decoration: InputDecoration(
+                              hintText: widget.hint,
+                              hintStyle: TextStyle(fontSize: 16, color: scheme.onSurfaceVariant),
+                              border: InputBorder.none,
+                              enabledBorder: InputBorder.none,
+                              focusedBorder: InputBorder.none,
+                              contentPadding: EdgeInsets.zero,
+                              // lets the text field be lower than 48 px
+                              isDense: true,
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
+                    ListenableBuilder(
+                      listenable: controller,
+                      builder: (context, _) => controller.text.isEmpty
+                          ? const SizedBox.shrink()
+                          : IconButton(
+                              tooltip: 'Clear',
+                              icon: Icon(Icons.close, color: scheme.onSurfaceVariant),
+                              onPressed: _clear,
+                            ),
+                    ),
+                  ],
+                ),
+              ),
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -490,28 +552,69 @@ class ListChip extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final color = selected ? scheme.onSecondaryContainer : scheme.onSurfaceVariant;
     final count = this.count;
-    return FilterChip(
-      // 48 px high everywhere, as on phones: the row keeps the height of the
-      // design on desktop too, where targets would shrink to the chip
-      materialTapTargetSize: MaterialTapTargetSize.padded,
-      selected: selected,
-      onSelected: (_) => onTap(),
-      labelStyle: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: color),
-      labelPadding: EdgeInsets.only(left: icon == null ? 8 : 2, right: 8),
-      avatar: icon == null ? null : Icon(icon, size: 16, color: color),
-      label: count == null
-          ? Text(label)
-          : Text.rich(
-              TextSpan(
-                text: label,
+    final text = count == null
+        ? Text(label)
+        : Text.rich(
+            TextSpan(
+              text: label,
+              children: [
+                TextSpan(
+                  text: '  ${formatCount(count)}',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w400, color: color.withValues(alpha: 0.75)),
+                ),
+              ],
+            ),
+          );
+    // The sizes of the design: 32 px high, 12 px on each side inside the border, the icon 6 px
+    // from the label. The icon is part of the label: as an avatar, the chip
+    // would give it a 32 px box.
+    return _ChipTapTarget(
+      child: FilterChip(
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        // 32 px high with its border, not 34
+        visualDensity: const VisualDensity(vertical: -1),
+        selected: selected,
+        onSelected: (_) => onTap(),
+        labelStyle: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: color),
+        label: icon == null
+            ? text
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                spacing: 6,
                 children: [
-                  TextSpan(
-                    text: '  ${formatCount(count)}',
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w400, color: color.withValues(alpha: 0.75)),
-                  ),
+                  Icon(icon, size: 16, color: color),
+                  text,
                 ],
               ),
-            ),
+      ),
+    );
+  }
+}
+
+/// Gives a chip a tap target 48 px high on every platform, without the 48 px
+/// of minimum width that come with [MaterialTapTargetSize.padded]: a chip
+/// narrower than that ("All") would sit in the middle of them, out of line
+/// with the search field and further from the next chip than the others are.
+///
+/// A tap above or below the chip counts as a tap on it.
+class _ChipTapTarget extends SingleChildRenderObjectWidget {
+  _ChipTapTarget({required Widget child}) : super(child: Center(widthFactor: 1, heightFactor: 1, child: child));
+
+  @override
+  RenderObject createRenderObject(BuildContext context) => _RenderChipTapTarget();
+}
+
+class _RenderChipTapTarget extends RenderConstrainedBox {
+  _RenderChipTapTarget() : super(additionalConstraints: const BoxConstraints(minHeight: kMinInteractiveDimension));
+
+  @override
+  bool hitTest(BoxHitTestResult result, {required Offset position}) {
+    if (!size.contains(position)) return false;
+    final onChip = Offset(position.dx, size.height / 2);
+    return result.addWithRawTransform(
+      transform: MatrixUtils.forceToPoint(onChip),
+      position: position,
+      hitTest: (result, position) => child!.hitTest(result, position: onChip),
     );
   }
 }
