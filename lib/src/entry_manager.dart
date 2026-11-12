@@ -265,7 +265,7 @@ Future<List<List>> fetchCsv(String url) async {
     final mibPerSecond = mib * 1E6 / stopwatch.elapsed.inMicroseconds;
     logger.i('Fetched ${mib.toStringAsFixed(2)} MiB in ${stopwatch.elapsed} (${mibPerSecond.toStringAsFixed(2)} MiB/s)');
 
-    final csv = const CsvToListConverter(eol: '\n').convert(csvString);
+    final csv = Csv().decode(csvString);
     logger.i('Parsed CSV: ${csv.length} rows');
     return csv;
   } else {

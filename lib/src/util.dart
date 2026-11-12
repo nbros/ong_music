@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 void showErrorDialog(BuildContext context, String msg) {
   if (!context.mounted) return;

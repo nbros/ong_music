@@ -1,5 +1,5 @@
 import 'package:diacritic/diacritic.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'entry.dart';
 import 'entry_list.dart';
 
