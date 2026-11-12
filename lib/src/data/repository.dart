@@ -1,6 +1,7 @@
 /// Loading the catalogue from the cache or the network.
 library;
 
+import '../logger.dart';
 import 'catalogue.dart';
 import 'parser.dart';
 import 'sheet_cache.dart';
@@ -45,16 +46,28 @@ final class CatalogueRepository {
     final cached = await cache.read();
     if (cached == null) return null;
     try {
-      return LoadedCatalogue(await parse(cached.sheets), cached.fetchedAt, cached.sheets.fingerprint);
+      return LoadedCatalogue(await _parse(cached.sheets), cached.fetchedAt, cached.sheets.fingerprint);
     } on FormatException {
       await cache.clear();
       return null;
     }
   }
 
+  /// [parse], any failure of which is a [CatalogueFormatException]: the parser
+  /// may fail on a payload it was not written for with another error.
+  Future<Catalogue> _parse(RawSheets sheets) async {
+    try {
+      return await parse(sheets);
+    } on FormatException {
+      rethrow;
+    } catch (e) {
+      throw CatalogueFormatException('Unreadable sheets: $e');
+    }
+  }
+
   /// Downloads and parses both sheets, then caches them. Throws (and caches
   /// nothing) when a download fails or a payload is invalid
-  /// ([CatalogueFormatException]).
+  /// ([CatalogueFormatException]); a failure to cache only loses the cache.
   ///
   /// [current] is the catalogue in use, if any. It makes two things possible:
   /// - when the download is identical to its sheets, its catalogue is returned
@@ -72,13 +85,19 @@ final class CatalogueRepository {
     if (current != null && current.fingerprint == fingerprint) {
       catalogue = current.catalogue;
     } else {
-      catalogue = await parse(sheets);
-      if (current != null && clock().difference(current.fetchedAt) < collapseGuard) {
+      catalogue = await _parse(sheets);
+      // abs: a download time in the future (clock changed) must not keep the guard on for ever
+      if (current != null && clock().difference(current.fetchedAt).abs() < collapseGuard) {
         _checkNotCollapsed(current.catalogue, catalogue);
       }
     }
     final fetchedAt = clock();
-    await cache.write(CachedSheets(sheets: sheets, fetchedAt: fetchedAt));
+    try {
+      await cache.write(CachedSheets(sheets: sheets, fetchedAt: fetchedAt));
+    } catch (e, st) {
+      // SheetCache implementations should not throw; the download stays good anyway
+      logger.w('Cannot cache the sheets', error: e, stackTrace: st);
+    }
     return LoadedCatalogue(catalogue, fetchedAt, fingerprint);
   }
 

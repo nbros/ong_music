@@ -58,6 +58,9 @@
     }
     #loading .message { display: none; max-width: 280px; text-align: center; font-size: 14px; font-weight: 400; }
     #loading.slow .message { display: block; }
+    #loading .failed-text, #loading.failed .slow-text { display: none; }
+    #loading.failed .failed-text { display: inline; }
+    #loading.failed .spinner { visibility: hidden; }
     #loading button {
       margin-top: 12px; padding: 8px 20px; border: 0; border-radius: 20px;
       background: var(--brand); color: #2b1200; font: inherit; font-weight: 500;
@@ -70,7 +73,7 @@
   <div id="loading" role="status">
     <div class="spinner" aria-hidden="true"></div>
     <div>Ong Music</div>
-    <div class="message">Still loading… Check your connection.<br><button type="button" onclick="location.reload()">Reload</button></div>
+    <div class="message"><span class="slow-text">Still loading…</span><span class="failed-text">Couldn’t load the app.</span> Check your connection.<br><button type="button" onclick="location.reload()">Reload</button></div>
   </div>
   <script>
     (function () {
@@ -90,8 +93,24 @@
 
       var loading = document.getElementById('loading');
       var slow = setTimeout(function () { loading.classList.add('slow'); }, 20000);
+      // A file of the app that does not load (offline, a deployment in progress) stops the start for good: say so
+      // at once rather than after the delay above. Called by flutter_bootstrap.js too, when the engine fails.
+      function failed() {
+        clearTimeout(slow);
+        if (!loading.classList.contains('done')) loading.classList.add('slow', 'failed');
+      }
+      window.ongMusicLoadFailed = failed;
+      // error events of <script> elements do not bubble: listen in the capture phase
+      function scriptFailed(e) {
+        if (e.target && e.target.tagName === 'SCRIPT') failed();
+      }
+      window.addEventListener('error', scriptFailed, true);
+      // the loader fetches CanvasKit ahead and leaves a failure of it unhandled, and the engine then waits for ever
+      window.addEventListener('unhandledrejection', failed);
       window.addEventListener('flutter-first-frame', function () {
         clearTimeout(slow);
+        window.removeEventListener('error', scriptFailed, true);
+        window.removeEventListener('unhandledrejection', failed);
         loading.classList.add('done');
         setTimeout(function () { loading.remove(); }, 300);
       });
@@ -107,7 +126,7 @@
           s.text = code;
         } else {
           s.src = 'flutter_bootstrap.js';
-          s.onerror = function () { loading.classList.add('slow'); };
+          s.onerror = failed;
         }
         document.body.appendChild(s);
       }

@@ -114,6 +114,12 @@ class FakeCatalogueNotifier extends CatalogueNotifier {
   @override
   Future<void> refreshIfStale() async => staleChecks++;
 
+  /// The values given to [setForeground].
+  final foreground = <bool>[];
+
+  @override
+  void setForeground(bool foreground) => this.foreground.add(foreground);
+
   /// Replaces the state.
   void emit(CatalogueState value) => state = value;
 }
@@ -161,6 +167,9 @@ class Effects {
   final shared = <String>[];
   String? clipboard;
   bool shareWorks = true;
+
+  /// False: no app can open a link.
+  bool openWorks = true;
 
   /// False: the clipboard refuses, as a browser may.
   bool clipboardWorks = true;
@@ -229,6 +238,7 @@ Future<TestApp> pumpApp(
         installHintProvider.overrideWithValue(installHint),
         thumbnailImageProvider.overrideWithValue((url) => MemoryImage(transparentPng)),
         urlOpenerProvider.overrideWithValue((uri) async {
+          if (!effects.openWorks) return false;
           effects.opened.add(uri);
           return true;
         }),

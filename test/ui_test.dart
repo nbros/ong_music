@@ -422,6 +422,16 @@ void main() {
         'https://stukem.com/collections/jonathanong',
       ]);
     });
+
+    testWidgets('a link that nothing can open: said so', (tester) async {
+      final app = await pumpApp(tester);
+      await goToTab(tester, 'About');
+      app.effects.openWorks = false;
+      await tester.tap(find.text('Stickers'));
+      await tester.pump();
+      expect(find.text('Couldn’t open the link'), findsOneWidget);
+      await waitForMessage(tester);
+    });
   });
 
   group('Loading', () {
@@ -480,6 +490,7 @@ void main() {
         tester.binding.handleAppLifecycleStateChanged(state);
       }
       expect(app.notifier.staleChecks, 1);
+      expect(app.notifier.foreground, [true, false, false, false, true, true]);
     });
   });
 

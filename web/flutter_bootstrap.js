@@ -24,6 +24,22 @@
   window.addEventListener('flutter-first-frame', function () {
     try { localStorage.setItem(key, revision); } catch (e) {}
   });
+  // A failure of the engine start (CanvasKit missing or cut short) goes to the loading screen of index.html, which
+  // offers to reload; the loader would only leave it in the console.
+  function failed(e) {
+    console.error('Ong Music could not start', e);
+    if (window.ongMusicLoadFailed) window.ongMusicLoadFailed();
+  }
+  var config = {};
   // No service worker: Flutter's is deprecated (it now only unregisters itself), and the HTTP cache is enough.
-  ready.then(function () { _flutter.loader.load(); });
+  ready.then(function () {
+    return _flutter.loader.load({
+      config: config,
+      onEntrypointLoaded: function (engineInitializer) {
+        return engineInitializer.initializeEngine(config).then(function (appRunner) {
+          return appRunner.runApp();
+        }).catch(failed);
+      },
+    });
+  }).catch(failed);
 })();

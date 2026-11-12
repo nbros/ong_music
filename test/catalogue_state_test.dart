@@ -364,6 +364,193 @@ void main() {
     expect(fetcher.calls, 1);
   });
 
+  group('automatic refresh', () {
+    // fake time (testWidgets); the container is created inside the fake zone and disposed at the end, with its timer
+
+    testWidgets('no network at the first launch: tried again by itself, less and less often', (tester) async {
+      startWith();
+      fetcher.results.addAll([
+        const SocketException('offline'),
+        const SocketException('offline'),
+        const SocketException('offline'),
+        sampleSheets(),
+      ]);
+      await tester.pump(Duration.zero);
+      expect(fetcher.calls, 1);
+      expect(state().isFailed, isTrue);
+      Future<void> wait(Duration d) async {
+        clock = clock.add(d);
+        await tester.pump(d);
+      }
+
+      await wait(const Duration(seconds: 14));
+      expect(fetcher.calls, 1);
+      await wait(const Duration(seconds: 1));
+      expect(fetcher.calls, 2, reason: 'first retry after 15 seconds');
+      await wait(const Duration(seconds: 59));
+      expect(fetcher.calls, 2);
+      await wait(const Duration(seconds: 1));
+      expect(fetcher.calls, 3, reason: 'then after a minute');
+      await wait(const Duration(minutes: 5));
+      expect(fetcher.calls, 4, reason: 'then after 5 minutes');
+      expect(firstTitle(), 'Video v1');
+      expect(state().lastError, isNull);
+      await wait(const Duration(hours: 5));
+      expect(fetcher.calls, 4, reason: 'fresh data: nothing more until it is 6 hours old');
+      container.dispose();
+    });
+
+    testWidgets('an app left open refreshes every 6 hours without any lifecycle event', (tester) async {
+      startWith(
+        cached: CachedSheets(
+          sheets: sampleSheets(tag: 'old'),
+          fetchedAt: now,
+        ),
+      );
+      fetcher.results.addAll([sampleSheets(tag: 'new'), sampleSheets(tag: 'newer')]);
+      await tester.pump(Duration.zero);
+      expect(firstTitle(), 'Video old');
+      for (var hour = 1; hour <= 6; hour++) {
+        clock = now.add(Duration(hours: hour));
+        await tester.pump(const Duration(hours: 1));
+      }
+      expect(fetcher.calls, 1);
+      expect(firstTitle(), 'Video new');
+      clock = clock.add(const Duration(hours: 6));
+      await tester.pump(const Duration(hours: 6));
+      expect(fetcher.calls, 2);
+      expect(firstTitle(), 'Video newer');
+      container.dispose();
+    });
+
+    testWidgets('a failed refresh of stale data is tried again; fresh data after a failed refresh is not', (
+      tester,
+    ) async {
+      startWith(
+        cached: CachedSheets(
+          sheets: sampleSheets(tag: 'old'),
+          fetchedAt: now.subtract(const Duration(hours: 7)),
+        ),
+      );
+      fetcher.results.addAll([const SocketException('offline'), sampleSheets(tag: 'new'), const SocketException('x')]);
+      await tester.pump(Duration.zero);
+      expect(state().lastError, isA<SocketException>());
+      clock = clock.add(const Duration(seconds: 15));
+      await tester.pump(const Duration(seconds: 15));
+      expect(fetcher.calls, 2);
+      expect(firstTitle(), 'Video new');
+      // a manual refresh of fresh data fails: no automatic retry, the data is fresh
+      await notifier().refresh();
+      expect(fetcher.calls, 3);
+      clock = clock.add(const Duration(hours: 1));
+      await tester.pump(const Duration(hours: 1));
+      expect(fetcher.calls, 3);
+      container.dispose();
+    });
+
+    testWidgets('nothing automatic in the background; resuming refreshes at once', (tester) async {
+      startWith(
+        cached: CachedSheets(
+          sheets: sampleSheets(tag: 'old'),
+          fetchedAt: now,
+        ),
+      );
+      fetcher.results.add(sampleSheets(tag: 'new'));
+      await tester.pump(Duration.zero);
+      notifier().setForeground(false);
+      clock = clock.add(const Duration(hours: 12));
+      await tester.pump(const Duration(hours: 12));
+      expect(fetcher.calls, 0);
+      notifier().setForeground(true);
+      await notifier().refreshIfStale();
+      expect(fetcher.calls, 1);
+      expect(firstTitle(), 'Video new');
+      container.dispose();
+    });
+
+    testWidgets('the clock set back by days does not stop the retries', (tester) async {
+      startWith();
+      fetcher.results.addAll([const SocketException('offline'), sampleSheets()]);
+      await tester.pump(Duration.zero);
+      expect(fetcher.calls, 1);
+      clock = clock.subtract(const Duration(days: 3));
+      await tester.pump(const Duration(seconds: 15));
+      expect(fetcher.calls, 2);
+      expect(state().hasData, isTrue);
+      container.dispose();
+    });
+  });
+
+  group('faults of the cache and the payload', () {
+    test('a cache that cannot be written: the download is still used', () async {
+      container = ProviderContainer.test(
+        overrides: [
+          sheetFetcherProvider.overrideWithValue(fetcher),
+          sheetCacheProvider.overrideWithValue(_ThrowingCache()),
+          catalogueParserProvider.overrideWithValue(parseOnCurrentIsolate),
+          clockProvider.overrideWithValue(() => clock),
+        ],
+      );
+      fetcher.results.add(sampleSheets());
+      container.read(catalogueProvider);
+      await notifier().idle;
+      expect(state().hasData, isTrue);
+      expect(state().lastError, isNull);
+    });
+
+    test('a cache the parser chokes on with an error that is not a FormatException is deleted', () async {
+      startWith(
+        cached: CachedSheets(
+          sheets: RawSheets(highlightsCsv: '"', songsCsv: sampleSheets().songsCsv),
+          fetchedAt: now,
+        ),
+      );
+      fetcher.results.add(sampleSheets(tag: 'downloaded'));
+      await notifier().idle;
+      expect(cache.clears, 1);
+      expect(firstTitle(), 'Video downloaded');
+    });
+
+    test('a download the parser chokes on is reported as an unexpected format', () async {
+      startWith();
+      fetcher.results.add(RawSheets(highlightsCsv: '"', songsCsv: sampleSheets().songsCsv));
+      await notifier().idle;
+      expect(state().isFailed, isTrue);
+      expect(state().lastError, isA<CatalogueFormatException>());
+      expect(cache.writes, 0);
+    });
+
+    test('clear downloaded data offline: the cache is gone, the data in memory stays with the error', () async {
+      startWith(
+        cached: CachedSheets(
+          sheets: sampleSheets(tag: 'old'),
+          fetchedAt: now,
+        ),
+      );
+      await notifier().idle;
+      fetcher.results.add(const SocketException('offline'));
+      await notifier().clearDownloadedData();
+      expect(cache.value, isNull);
+      expect(firstTitle(), 'Video old');
+      expect(state().lastError, isA<SocketException>());
+      expect(state().isRefreshing, isFalse);
+    });
+
+    test('a cache dated in the future (clock changed) does not keep a smaller sheet out', () async {
+      startWith(
+        cached: CachedSheets(
+          sheets: sampleSheets(tag: 'old', extraPlays: 4),
+          fetchedAt: now.add(const Duration(days: 30)),
+        ),
+      );
+      fetcher.results.add(sampleSheets(tag: 'archived'));
+      await notifier().idle;
+      expect(fetcher.calls, 1, reason: 'a download time far from now is stale');
+      expect(firstTitle(), 'Video archived');
+      expect(state().lastError, isNull);
+    });
+  });
+
   test('query providers follow the catalogue', () async {
     startWith(
       cached: CachedSheets(sheets: sampleSheets(extraPlays: 2), fetchedAt: now),
@@ -374,4 +561,16 @@ void main() {
     expect(container.read(highlightResultsProvider(const HighlightFilter(query: 'video')))!.length, 1);
     expect(container.read(playCountForQueryProvider('song')), 1);
   });
+}
+
+/// A cache whose writes throw (a broken [SheetCache] implementation).
+class _ThrowingCache implements SheetCache {
+  @override
+  Future<CachedSheets?> read() async => null;
+
+  @override
+  Future<void> write(CachedSheets sheets) async => throw const FileSystemException('No space left on device');
+
+  @override
+  Future<void> clear() async {}
 }

@@ -39,7 +39,13 @@ class _OngMusicAppState extends ConsumerState<OngMusicApp> {
   @override
   void initState() {
     super.initState();
-    _lifecycle = AppLifecycleListener(onResume: () => ref.read(catalogueProvider.notifier).refreshIfStale());
+    _lifecycle = AppLifecycleListener(
+      onResume: () => ref.read(catalogueProvider.notifier).refreshIfStale(),
+      // the automatic refreshes of an app left open (desktop window, browser tab) stop in the background
+      onStateChange: (state) => ref
+          .read(catalogueProvider.notifier)
+          .setForeground(state == AppLifecycleState.resumed || state == AppLifecycleState.inactive),
+    );
   }
 
   @override

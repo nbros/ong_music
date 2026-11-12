@@ -5,6 +5,7 @@
 library;
 
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -19,6 +20,21 @@ import '../logger.dart';
 
 /// A cached catalogue older than this is refreshed in the background.
 const Duration catalogueMaxAge = Duration(hours: 6);
+
+/// After a failed download, the automatic attempts wait this long: the first
+/// delay after one failure, the second after two, and so on; the last one
+/// repeats.
+const List<Duration> catalogueRetryDelays = [
+  Duration(seconds: 15),
+  Duration(minutes: 1),
+  Duration(minutes: 5),
+  Duration(minutes: 15),
+  Duration(minutes: 30),
+];
+
+/// The automatic refresh checks again at least this often (the clock may have
+/// been changed meanwhile).
+const Duration _maxTimerWait = Duration(hours: 1);
 
 // ------------------------------------------------------------ dependencies
 // Overridden in tests.
@@ -103,7 +119,12 @@ final catalogueProvider = NotifierProvider<CatalogueNotifier, CatalogueState>(Ca
 /// Refresh policy:
 /// - on start, the cached catalogue is shown at once; without cache the
 ///   sheets are downloaded (loading, then data or failure);
-/// - a cache older than [catalogueMaxAge] is refreshed in the background;
+/// - a cache older than [catalogueMaxAge] is refreshed in the background, at
+///   start, when the app resumes ([refreshIfStale]) and while it stays in the
+///   foreground ([setForeground]);
+/// - a failed download (no data, or data older than [catalogueMaxAge]) is
+///   tried again by itself after [catalogueRetryDelays], while the app is in
+///   the foreground;
 /// - a refresh never blanks the UI: the current catalogue stays until a new
 ///   one downloaded and parsed successfully replaces it at once; on failure it
 ///   stays and [CatalogueState.lastError] is set;
@@ -117,6 +138,14 @@ class CatalogueNotifier extends Notifier<CatalogueState> {
   Future<void>? _refresh;
   bool _started = false;
   LoadedCatalogue? _loaded;
+
+  /// The next automatic check ([_refreshIfDue]).
+  Timer? _timer;
+  bool _foreground = true;
+
+  /// Failed downloads in a row, and when the last download started.
+  int _failures = 0;
+  DateTime? _attemptAt;
 
   // The notifier object survives `ref.invalidate` and `ref` then designates the
   // new build, so `ref.mounted` cannot tell an asynchronous operation that the
@@ -134,10 +163,16 @@ class CatalogueNotifier extends Notifier<CatalogueState> {
     _started = false;
     _refresh = null;
     _loaded = null;
+    _timer?.cancel();
+    _timer = null;
+    _failures = 0;
+    _attemptAt = null;
     ref.onDispose(() {
       if (_generation == generation) {
         _generation++;
         _disposed = true;
+        _timer?.cancel();
+        _timer = null;
       }
     });
     _start = Future(() => _load(generation));
@@ -163,7 +198,11 @@ class CatalogueNotifier extends Notifier<CatalogueState> {
         isRefreshing: state.isRefreshing,
       );
     }
-    if (cached == null || _isStale(cached.fetchedAt)) unawaited(refresh());
+    if (cached == null || _isStale(cached.fetchedAt)) {
+      unawaited(refresh());
+    } else {
+      _scheduleCheck();
+    }
   }
 
   bool _isStale(DateTime? fetchedAt) =>
@@ -187,6 +226,7 @@ class CatalogueNotifier extends Notifier<CatalogueState> {
 
   Future<void> _download(int generation, {bool compareWithCurrent = true}) async {
     state = state._refreshing();
+    _attemptAt = ref.read(clockProvider)();
     try {
       final loaded = await _repo.fetch(current: compareWithCurrent ? _loaded : null);
       if (generation != _generation) return;
@@ -197,12 +237,62 @@ class CatalogueNotifier extends Notifier<CatalogueState> {
             : 'Catalogue downloaded: ${loaded.catalogue.highlightCount} highlights, ${loaded.catalogue.playCount} plays',
       );
       _loaded = loaded;
+      _failures = 0;
       state = CatalogueState(catalogue: loaded.catalogue, fetchedAt: loaded.fetchedAt);
     } catch (e, st) {
       logger.w('Catalogue download failed', error: e, stackTrace: st);
       if (generation != _generation) return;
+      _failures++;
       state = state._failed(e);
     }
+    _scheduleCheck();
+  }
+
+  /// How long until the next automatic download: zero when the data is missing
+  /// or stale, unless the last download failed less than its retry delay ago.
+  Duration _untilDue() {
+    final now = ref.read(clockProvider)();
+    final fetchedAt = state.fetchedAt;
+    var wait = state.catalogue == null || _isStale(fetchedAt)
+        ? Duration.zero
+        : catalogueMaxAge - now.difference(fetchedAt!);
+    final attemptAt = _attemptAt;
+    if (_failures > 0 && attemptAt != null) {
+      final delay = catalogueRetryDelays[math.min(_failures, catalogueRetryDelays.length) - 1];
+      final retryWait = delay - now.difference(attemptAt).abs();
+      if (retryWait > wait) wait = retryWait;
+    }
+    return wait;
+  }
+
+  /// Arms [_timer] for the next automatic check.
+  void _scheduleCheck() {
+    _timer?.cancel();
+    _timer = null;
+    if (_disposed) return;
+    var wait = _untilDue();
+    if (wait > _maxTimerWait) wait = _maxTimerWait;
+    if (wait < const Duration(seconds: 1)) wait = const Duration(seconds: 1);
+    _timer = Timer(wait, _refreshIfDue);
+  }
+
+  /// The automatic check: downloads when [_untilDue] says so and the app is in
+  /// the foreground (in the background, [refreshIfStale] does it on resume).
+  void _refreshIfDue() {
+    _timer = null;
+    if (_disposed || !_started || _refresh != null) return;
+    if (_foreground && _untilDue() <= Duration.zero) {
+      unawaited(refresh());
+    } else {
+      _scheduleCheck();
+    }
+  }
+
+  /// Whether the app is in the foreground (resumed or inactive): only then do
+  /// the automatic refreshes and retries run. True until told otherwise.
+  void setForeground(bool foreground) {
+    if (_disposed) return;
+    _foreground = foreground;
   }
 
   /// Refreshes when the data is older than [catalogueMaxAge], or when there is

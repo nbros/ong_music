@@ -55,6 +55,64 @@ void main() {
       expect(await cache.read(), isNull);
     });
 
+    test('a write that fails half-way reads as no cache, never as sheets of two downloads', () async {
+      await cache.write(
+        CachedSheets(
+          sheets: const RawSheets(highlightsCsv: 'h1', songsCsv: 's1'),
+          fetchedAt: DateTime.utc(2026),
+        ),
+      );
+      // songs.csv cannot be replaced (disk full, file locked...): the write stops after highlights.csv
+      final songs = p.join(tmp.path, 'sheets', 'songs.csv');
+      File(songs).deleteSync();
+      Directory(songs).createSync();
+      File(p.join(songs, 'locked')).createSync();
+      await cache.write(
+        CachedSheets(
+          sheets: const RawSheets(highlightsCsv: 'h2', songsCsv: 's2'),
+          fetchedAt: DateTime.utc(2026, 2),
+        ),
+      );
+      expect(File(p.join(tmp.path, 'sheets', 'highlights.csv')).readAsStringSync(), 'h2');
+      expect(await cache.read(), isNull);
+      expect(
+        Directory(
+          p.join(tmp.path, 'sheets'),
+        ).listSync().map((e) => p.basename(e.path)).where((n) => n.endsWith('.tmp')),
+        isEmpty,
+        reason: 'no temporary file left behind',
+      );
+    });
+
+    test('a write running at the same time (the app started twice) does not mix into the files', () async {
+      final dir = Directory(p.join(tmp.path, 'sheets'))..createSync();
+      // the other instance has started writing its highlights to a temporary file, and goes on after ours
+      final other = await File(p.join(dir.path, 'highlights.csv.tmp')).open(mode: FileMode.write);
+      await other.writeString('OTHER-FIRST-HALF');
+      await cache.write(
+        CachedSheets(
+          sheets: const RawSheets(highlightsCsv: 'highlights of this instance', songsCsv: 'songs'),
+          fetchedAt: DateTime.utc(2026),
+        ),
+      );
+      await other.writeString('OTHER-SECOND-HALF');
+      await other.close();
+      final read = (await cache.read())!;
+      expect(read.sheets.highlightsCsv, 'highlights of this instance');
+    });
+
+    test('no application directory (path_provider failing): no cache, and nothing throws', () async {
+      final broken = FileSheetCache(() async => throw const FileSystemException('No application support directory'));
+      await broken.write(
+        CachedSheets(
+          sheets: const RawSheets(highlightsCsv: 'h', songsCsv: 's'),
+          fetchedAt: DateTime.utc(2026),
+        ),
+      );
+      expect(await broken.read(), isNull);
+      await broken.clear();
+    });
+
     test('deleteLegacyDatabase removes the old SQLite files only', () async {
       final support = Directory(p.join(tmp.path, 'files'))..createSync();
       final databases = Directory(p.join(tmp.path, 'databases'))..createSync();

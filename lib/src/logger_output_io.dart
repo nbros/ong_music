@@ -20,12 +20,18 @@ Future<LogOutput> createLogOutput() async {
 /// [file], emptied first when it has grown beyond [maxLogFileBytes]: the app
 /// appends a few lines at each start and never reads them back, so the file
 /// would otherwise grow for as long as the app is installed.
+///
+/// Throws a [FileSystemException] when the file cannot be opened for writing:
+/// `FileOutput` would only fail later, with an uncaught error, and lose every
+/// line.
 Future<File> openLogFile(File file) async {
   try {
     if (await file.exists() && await file.length() > maxLogFileBytes) await file.delete();
   } on FileSystemException {
     // keep appending
   }
+  await file.parent.create(recursive: true);
+  await (await file.open(mode: FileMode.append)).close();
   return file;
 }
 

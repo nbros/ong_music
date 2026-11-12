@@ -81,10 +81,25 @@ final class FileSheetCache implements SheetCache {
     }
   }
 
+  /// Makes the temporary file names unique within the process.
+  static int _tmpCount = 0;
+
+  /// Writes to a temporary file of this write only, then renames it: another
+  /// write running at the same time (the app started twice, or a download of
+  /// an earlier build still finishing) never writes into the same file.
   static Future<void> _writeAtomically(File file, String text) async {
-    final tmp = File('${file.path}.tmp');
-    await tmp.writeAsString(text, flush: true);
-    await tmp.rename(file.path);
+    final tmp = File('${file.path}.$pid-${_tmpCount++}.tmp');
+    try {
+      await tmp.writeAsString(text, flush: true);
+      await tmp.rename(file.path);
+    } catch (_) {
+      try {
+        await tmp.delete();
+      } catch (_) {
+        // already gone
+      }
+      rethrow;
+    }
   }
 
   @override

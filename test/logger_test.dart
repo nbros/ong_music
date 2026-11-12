@@ -21,15 +21,31 @@ void main() {
     final dir = await Directory.systemTemp.createTemp('ong_music_log_test');
     addTearDown(() => dir.delete(recursive: true));
     final file = File('${dir.path}/ong_music.log');
-    // missing: left alone
-    expect((await openLogFile(file)).existsSync(), isFalse);
+    // missing: created (which proves it can be written)
+    expect((await openLogFile(file)).lengthSync(), 0);
     // small: kept
     file.writeAsStringSync('a few lines');
     await openLogFile(file);
     expect(file.readAsStringSync(), 'a few lines');
-    // too large: removed, the logger creates it again
+    // too large: emptied
     file.writeAsBytesSync(List.filled(maxLogFileBytes + 1, 0x61));
     await openLogFile(file);
-    expect(file.existsSync(), isFalse);
+    expect(file.lengthSync(), 0);
+  });
+
+  test('a log file that cannot be written throws at once, instead of failing later uncaught', () async {
+    final dir = await Directory.systemTemp.createTemp('ong_music_log_test');
+    addTearDown(() => dir.delete(recursive: true));
+    // the file's place is taken by a directory: it cannot be opened for writing
+    final file = File('${dir.path}/ong_music.log');
+    Directory(file.path).createSync();
+    await expectLater(openLogFile(file), throwsA(isA<FileSystemException>()));
+  });
+
+  test('a missing directory of the log file is created', () async {
+    final dir = await Directory.systemTemp.createTemp('ong_music_log_test');
+    addTearDown(() => dir.delete(recursive: true));
+    final file = File('${dir.path}/nbros/ong_music/ong_music.log');
+    expect((await openLogFile(file)).existsSync(), isTrue);
   });
 }

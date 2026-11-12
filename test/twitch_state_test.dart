@@ -133,12 +133,34 @@ void main() {
   test('results of a build gone (invalidate) are dropped', () async {
     api.gate = Completer();
     notifier().setWatching(true);
+    // no longer watched: the new build asks nothing, only the old answers could arrive
+    notifier().setWatching(false);
     container.invalidate(twitchProvider);
     expect(state().schedule, isNull);
     api.gate!.complete();
     await pumpEventQueue();
     expect(state().schedule, isNull);
     expect(state().liveCheckedAt, isNull);
+  });
+
+  testWidgets('invalidated while watched: asks again at once, and keeps polling', (tester) async {
+    final fake = FakeTwitchApi(schedule: schedule);
+    var now = start;
+    final c = ProviderContainer.test(
+      overrides: [twitchApiProvider.overrideWithValue(fake), clockProvider.overrideWithValue(() => now)],
+    );
+    c.read(twitchProvider.notifier).setWatching(true);
+    await tester.pump();
+    expect((fake.scheduleCalls, fake.liveCalls), (1, 1));
+    c.invalidate(twitchProvider);
+    expect(c.read(twitchProvider).schedule, isNull);
+    await tester.pump();
+    expect((fake.scheduleCalls, fake.liveCalls), (2, 2));
+    expect(c.read(twitchProvider).schedule, same(schedule));
+    now = now.add(const Duration(minutes: 5));
+    await tester.pump(const Duration(minutes: 5));
+    expect(fake.liveCalls, 3);
+    c.dispose();
   });
 
   testWidgets('every 5 minutes while watched, not when hidden', (tester) async {

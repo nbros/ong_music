@@ -105,6 +105,9 @@ class TwitchNotifier extends Notifier<TwitchState> {
   @override
   TwitchState build() {
     final generation = ++_generation;
+    // Watching is the screen's business and survives `ref.invalidate`: the
+    // status stays on screen, so the new build asks again at once and polls.
+    final watching = _watching;
     _disposed = false;
     _watching = false;
     _timer?.cancel();
@@ -120,6 +123,7 @@ class TwitchNotifier extends Notifier<TwitchState> {
       _timer?.cancel();
       _timer = null;
     });
+    if (watching) Future.microtask(() => setWatching(true));
     return const TwitchState();
   }
 
