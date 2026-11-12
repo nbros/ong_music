@@ -242,6 +242,75 @@ void main() {
         await (FontLoader('Roboto')..addFont(font)).load();
       });
 
+      /// A requester line of [width] ending with the user's own [name].
+      Future<void> pumpLine(
+        WidgetTester tester,
+        String name, {
+        required double width,
+        int? maxLines = 1,
+        List<String> fonts = const ['Roboto'],
+      }) => tester.pumpWidget(
+        MaterialApp(
+          theme: buildTheme(Brightness.dark),
+          home: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: width,
+              child: Builder(
+                builder: (context) => RequesterText(
+                  TextSpan(
+                    children: [
+                      const TextSpan(text: 'Donna Summer and more · '),
+                      ...requesterSpans(context, name, const [], own: true),
+                    ],
+                  ),
+                  maxLines: maxLines,
+                  style: TextStyle(
+                    fontFamily: fonts.first,
+                    fontFamilyFallback: fonts.sublist(1),
+                    fontSize: 13,
+                    height: 18 / 13,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      testWidgets('a name in another font than its padding: one box, not one per font', (tester) async {
+        // The test font has Latin letters only: the rest falls back on Roboto, whose boxes have another height, as
+        // a Japanese name falls back on another font than Roboto on a phone.
+        for (final name in ['Дмитрий', 'jsДмитрий64', 'Дм jsbach']) {
+          await pumpLine(tester, name, width: 800, fonts: const ['FlutterTest', 'Roboto']);
+          final line = find.byType(RequesterText);
+          final paragraph = _paragraph(tester, line);
+          final start = paragraph.text.toPlainText(includeSemanticsLabels: false).indexOf('\u00A0');
+          final runs = paragraph.getBoxesForSelection(
+            TextSelection(baseOffset: start, extentOffset: start + name.length + 2),
+          );
+          expect(runs.map((b) => (b.top, b.bottom)).toSet().length, greaterThan(1), reason: '$name: several heights');
+          final (box, _) = _boxes(tester, line).single;
+          expect(
+            box.outerRect,
+            rectMoreOrLessEquals(runs.map((b) => b.toRect()).reduce((a, b) => a.expandToInclude(b))),
+            reason: name,
+          );
+        }
+      });
+
+      testWidgets('a name over two lines: one box per line', (tester) async {
+        // no-break spaces around it, but a break inside it
+        const name = 'two words';
+        await pumpLine(tester, name, width: 196, maxLines: null);
+        final line = find.byType(RequesterText);
+        final paragraph = _paragraph(tester, line);
+        expect(paragraph.size.height, 36);
+        final boxes = _boxes(tester, line);
+        expect(boxes, hasLength(2));
+        expect(boxes[0].$1.bottom, lessThanOrEqualTo(boxes[1].$1.top + 0.01));
+      });
+
       for (final scale in [1.0, 1.3, 2.0]) {
         testWidgets('cut by the ellipsis on a 320 px screen at text scale $scale', (tester) async {
           // as long as a Twitch name can be

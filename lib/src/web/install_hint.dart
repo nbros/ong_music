@@ -40,10 +40,23 @@ enum InstallHintKind {
   playStore,
 }
 
+/// Where Safari keeps "Share", the way to "Add to Home Screen".
+enum SafariShare {
+  /// A Share button in Safari's own bar: before Safari 26.
+  inBar,
+
+  /// Behind the More button (three dots) next to the address: Safari 26.
+  behindMore,
+
+  /// Behind the menu button (three lines) next to the address: Safari 27 and
+  /// later.
+  behindMenu,
+}
+
 /// The install advice for one device.
 @immutable
 class InstallHint {
-  const InstallHint(this.kind, {this.device = 'iPhone', this.shareInMenu = true});
+  const InstallHint(this.kind, {this.device = 'iPhone', this.share = SafariShare.behindMenu});
 
   /// Nothing to show.
   static const none = InstallHint(InstallHintKind.none);
@@ -53,24 +66,22 @@ class InstallHint {
   /// "iPhone" or "iPad", for the text ("Android" for [InstallHintKind.playStore]).
   final String device;
 
-  /// For [InstallHintKind.addToHomeScreen]: whether Safari keeps "Share" behind
-  /// the menu button next to the address, as it does since Safari 26. False
-  /// for the Safari versions before, whose own bar has the Share button. True
-  /// when the version cannot be told (another browser).
-  final bool shareInMenu;
+  /// For [InstallHintKind.addToHomeScreen]: where the Safari of the device
+  /// keeps "Share". The latest known place when the version cannot be told.
+  final SafariShare share;
 
   /// Whether there is something to show.
   bool get isVisible => kind != InstallHintKind.none;
 
   @override
   bool operator ==(Object other) =>
-      other is InstallHint && other.kind == kind && other.device == device && other.shareInMenu == shareInMenu;
+      other is InstallHint && other.kind == kind && other.device == device && other.share == share;
 
   @override
-  int get hashCode => Object.hash(kind, device, shareInMenu);
+  int get hashCode => Object.hash(kind, device, share);
 
   @override
-  String toString() => 'InstallHint($kind, $device${shareInMenu ? '' : ', Share button in the bar'})';
+  String toString() => 'InstallHint($kind, $device, ${share.name})';
 }
 
 /// User agent tokens of in-app browsers that are known to be web views
@@ -120,9 +131,31 @@ InstallHint installHintFor(BrowserEnvironment? browser) {
   }
   final inApp = !ua.contains('Safari/') || inAppBrowserTokens.any(ua.contains);
   if (inApp) return InstallHint(InstallHintKind.openInSafari, device: device);
-  // Safari says its version in "Version/26.0" (the system version next to it no longer moves)
+  return InstallHint(InstallHintKind.addToHomeScreen, device: device, share: _safariShare(ua));
+}
+
+/// Where the Safari of the device whose browser sends [ua] keeps "Share".
+///
+/// Safari says its version in `Version/26.0`. Other browsers (Chrome, Firefox)
+/// only give the system version, in `OS 18_5`: it tells an older Safari apart
+/// up to 18.5 only, as Safari 26 and later all say `OS 18_6`, and so may these
+/// browsers.
+SafariShare _safariShare(String ua) {
   final safari = int.tryParse(_safariVersion.firstMatch(ua)?[1] ?? '');
-  return InstallHint(InstallHintKind.addToHomeScreen, device: device, shareInMenu: safari == null || safari >= 26);
+  if (safari != null) {
+    if (safari < 26) return SafariShare.inBar;
+    return safari == 26 ? SafariShare.behindMore : SafariShare.behindMenu;
+  }
+  final system = _systemVersion.firstMatch(ua);
+  if (system != null) {
+    final major = int.parse(system[1]!), minor = int.parse(system[2]!);
+    if (major < 18 || (major == 18 && minor < 6)) return SafariShare.inBar;
+    if (major == 26) return SafariShare.behindMore;
+  }
+  return SafariShare.behindMenu;
 }
 
 final _safariVersion = RegExp(r'Version/(\d+)');
+
+// "CPU iPhone OS 18_5" or "CPU OS 17_7" (iPad); not the "Mac OS X 10_15_7" of an iPad asking for desktop sites
+final _systemVersion = RegExp(r'OS (\d{1,3})_(\d{1,3})');

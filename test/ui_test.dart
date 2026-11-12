@@ -177,7 +177,7 @@ void main() {
       expect(find.text('The song may still be in the Ong Log.'), findsOneWidget);
       await tester.enterText(searchField(), 'nothing like this');
       await tester.pumpAndSettle();
-      expect(find.text('Try fewer words, or another genre.'), findsOneWidget);
+      expect(find.text('Try fewer words.'), findsOneWidget);
       // the clear button empties the field
       await tester.tap(find.byTooltip('Clear').hitTestable());
       await tester.pumpAndSettle();
@@ -838,7 +838,7 @@ void main() {
       await tester.tap(find.text('Privacy policy'));
       await tester.tap(find.text('Community spreadsheet'));
       expect(app.effects.opened.map((u) => u.toString()), [
-        'https://nbros.github.io/ong_music/privacy-policy',
+        'https://ongmusic.nbros.dev/privacy-policy',
         'https://docs.google.com/spreadsheets/d/14ARzE_zSMNhp0ZQV34ti2741PbA-5wAjsXRAW8EgJ-4',
       ]);
     });
@@ -864,6 +864,23 @@ void main() {
         find.textContaining('The last refresh failed. Google Sheets answered with an error (HTTP 503).'),
         findsOneWidget,
       );
+    });
+
+    testWidgets('the footer opens the licences of the software the app is made with', (tester) async {
+      await pumpApp(tester);
+      await goToTab(tester, 'About');
+      await tester.scrollUntilVisible(find.text('Licences'), 200, scrollable: aboutScrollable());
+      await tester.tap(find.text('Licences'));
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<LicensePage>(find.byType(LicensePage)).applicationName,
+        'Ong Music',
+        reason: 'not the name of the package',
+      );
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byType(LicensePage), findsNothing);
+      expect(tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex, 2);
     });
 
     testWidgets('link tiles open their sites', (tester) async {

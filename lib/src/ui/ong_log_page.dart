@@ -108,6 +108,8 @@ class _OngLogPageState extends ConsumerState<OngLogPage> {
     final mine = filter.mine && hasMine;
     final anyChip = filter.type != null || filter.genre != null || filter.withVideo || mine;
     final layout = _layoutOf(results, filter, ListMetrics.of(context));
+    final typing = TypingInLowWindow.of(context);
+    final searching = results.tokens.isNotEmpty;
     return Column(
       children: [
         ListSearchField(
@@ -116,40 +118,45 @@ class _OngLogPageState extends ConsumerState<OngLogPage> {
           hint: 'Search ${formatCount(catalogue.playCount)} songs played live',
           onChanged: notifier.setQuery,
         ),
-        ChipRow(
-          children: [
-            ListChip(label: 'All', selected: !anyChip, onTap: notifier.clearChips),
-            // right after "All", near where the Highlights list has it: in sight on a phone without scrolling the row
-            if (hasMine) ListChip(label: 'You', icon: Icons.person, selected: mine, onTap: notifier.toggleMine),
-            ListChip(
-              label: 'Piano',
-              icon: Icons.piano,
-              selected: filter.type == PlayType.piano,
-              onTap: () => notifier.toggleType(PlayType.piano),
-            ),
-            ListChip(
-              label: 'Loop',
-              icon: Icons.repeat,
-              selected: filter.type == PlayType.loop,
-              onTap: () => notifier.toggleType(PlayType.loop),
-            ),
-            ListChip(
-              label: 'With video',
-              icon: Icons.play_arrow,
-              selected: filter.withVideo,
-              onTap: notifier.toggleWithVideo,
-            ),
-            const ChipSeparator(),
-            for (final g in catalogue.playGenreCounts)
-              if (g.genre != Genre.other)
-                ListChip(
-                  label: g.genre.label,
-                  selected: filter.genre == g.genre,
-                  onTap: () => notifier.toggleGenre(g.genre),
-                ),
-          ],
+        // kept, with its scroll position, while it is out of the way
+        Visibility(
+          visible: !typing,
+          maintainState: true,
+          child: ChipRow(
+            children: [
+              ListChip(label: 'All', selected: !anyChip, onTap: notifier.clearChips),
+              // right after "All", near where the Highlights list has it: in sight on a phone without scrolling the row
+              if (hasMine) ListChip(label: 'You', icon: Icons.person, selected: mine, onTap: notifier.toggleMine),
+              ListChip(
+                label: 'Piano',
+                icon: Icons.piano,
+                selected: filter.type == PlayType.piano,
+                onTap: () => notifier.toggleType(PlayType.piano),
+              ),
+              ListChip(
+                label: 'Loop',
+                icon: Icons.repeat,
+                selected: filter.type == PlayType.loop,
+                onTap: () => notifier.toggleType(PlayType.loop),
+              ),
+              ListChip(
+                label: 'With video',
+                icon: Icons.play_arrow,
+                selected: filter.withVideo,
+                onTap: notifier.toggleWithVideo,
+              ),
+              const ChipSeparator(),
+              for (final g in catalogue.playGenreCounts)
+                if (g.genre != Genre.other)
+                  ListChip(
+                    label: g.genre.label,
+                    selected: filter.genre == g.genre,
+                    onTap: () => notifier.toggleGenre(g.genre),
+                  ),
+            ],
+          ),
         ),
-        if (results.tokens.isNotEmpty || anyChip)
+        if (!typing && (searching || anyChip))
           CountLine(text: '${plural(results.length, 'song')} · ${plural(results.streamCount, 'stream')}')
         else
           const SizedBox(height: 4),
@@ -161,8 +168,13 @@ class _OngLogPageState extends ConsumerState<OngLogPage> {
                 : _PinnedHeader(controller: _scroll, layout: layout, catalogue: catalogue, results: results),
             slivers: [
               if (results.isEmpty)
-                const SliverToBoxAdapter(
-                  child: EmptyMessage(title: 'Never played… yet', text: 'Check the spelling, or request it on stream.'),
+                SliverToBoxAdapter(
+                  child: searching
+                      ? const EmptyMessage(
+                          title: 'Never played… yet',
+                          text: 'Check the spelling, or request it on stream.',
+                        )
+                      : const EmptyMessage(title: 'No song matches', text: 'Try fewer filters.'),
                 )
               else
                 _PlayList(catalogue: catalogue, results: results, layout: layout),

@@ -133,9 +133,20 @@ final class _BrowserFullscreen implements PageFullscreen {
 /// Registers Roboto Medium (a web-only asset) in the `Roboto` family, next to
 /// the Roboto Regular that `flutter build web --no-web-resources-cdn`
 /// bundles: without it, every medium (500) text renders as regular.
+///
+/// The app starts after it, to draw its first frame with the right font, but
+/// does not wait for more than a few seconds on a network that stalls.
+///
+/// Also adds the licence of Roboto, which only the web app distributes, to
+/// the licences page.
 Future<void> loadWebFonts() async {
+  LicenseRegistry.addLicense(() async* {
+    yield LicenseEntryWithLineBreaks(['Roboto'], await rootBundle.loadString('assets/fonts/Roboto-LICENSE.txt'));
+  });
   try {
-    await (FontLoader('Roboto')..addFont(rootBundle.load('assets/fonts/Roboto-Medium.ttf'))).load();
+    await (FontLoader(
+      'Roboto',
+    )..addFont(rootBundle.load('assets/fonts/Roboto-Medium.ttf'))).load().timeout(const Duration(seconds: 5));
   } catch (e) {
     logger.w('Cannot load Roboto Medium', error: e);
   }

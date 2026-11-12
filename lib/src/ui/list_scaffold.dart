@@ -19,6 +19,8 @@ import 'widgets.dart';
 String describeLoadError(Object? error) => switch (error) {
   SheetHttpException(:final statusCode) =>
     'Google Sheets answered with an error (HTTP $statusCode). Try again in a while.',
+  SheetNotCsvException() =>
+    'Got a web page instead of the songs. If this network asks you to sign in, do that and try again.',
   CatalogueFormatException() => 'The spreadsheets came back in an unexpected format. Try again in a while.',
   TimeoutException() => 'The download took too long. Check your connection and try again.',
   _ => 'Couldn’t reach Google Sheets. Check your connection and try again.',
@@ -118,7 +120,7 @@ class _ListFrameState extends ConsumerState<ListFrame> {
     if (!mounted) return;
     setState(() => _pulling = false);
     final error = ref.read(catalogueProvider).lastError;
-    if (error != null) showMessage(context, 'Couldn’t refresh. ${describeLoadError(error)}');
+    if (error != null) showMessage(context, 'Refresh failed. ${describeLoadError(error)}');
   }
 
   @override

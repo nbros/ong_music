@@ -6,7 +6,9 @@
 library;
 
 import 'dart:async';
+import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -28,18 +30,31 @@ Future<void> showDetailSheet(BuildContext context, WidgetBuilder builder) {
   final navigator = Navigator.of(context);
   if (ModalRoute.of(context) is ModalBottomSheetRoute) navigator.pop();
   final host = navigator.context;
-  final size = MediaQuery.sizeOf(host);
+  // On a phone, the search field may have the focus with its keyboard closed, to read the list: the focus, given
+  // back when the sheet closes, would bring the keyboard up over the list after every sheet.
+  if (_hasScreenKeyboard) FocusManager.instance.primaryFocus?.unfocus();
   return showModalBottomSheet<void>(
     context: host,
     isScrollControlled: true,
     showDragHandle: true,
     useSafeArea: true,
-    constraints: BoxConstraints(maxWidth: 640, maxHeight: size.height * 0.9),
+    constraints: const BoxConstraints(maxWidth: 640),
     // no slide when the system asks for less motion
     sheetAnimationStyle: MediaQuery.disableAnimationsOf(host) ? AnimationStyle.noAnimation : null,
-    builder: builder,
+    // At most nine tenths of the window, drag handle included: read at each layout, not once on opening, for a
+    // window that is turned or resized under the sheet.
+    builder: (context) => ConstrainedBox(
+      constraints: BoxConstraints(
+        maxHeight: math.max(0, MediaQuery.sizeOf(context).height * 0.9 - kMinInteractiveDimension),
+      ),
+      child: builder(context),
+    ),
   );
 }
+
+/// Phones and tablets, in the apps and in their browsers.
+bool get _hasScreenKeyboard =>
+    defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS;
 
 /// Shows the sheet of [highlight].
 Future<void> showHighlightSheet(BuildContext context, Catalogue catalogue, Highlight highlight) =>
@@ -57,6 +72,15 @@ Future<void> showStreamSheet(BuildContext context, Catalogue catalogue, LiveStre
 void _showRequester(BuildContext context, WidgetRef ref, Requester requester) {
   Navigator.of(context).pop();
   showRequesterInOngLog(ref, requester.name);
+}
+
+/// Opens the video of [highlight], or its sheet when it has none.
+void _openVideoOrSheet(BuildContext context, WidgetRef ref, Catalogue catalogue, Highlight highlight) {
+  if (highlight.youtubeId == null) {
+    showHighlightSheet(context, catalogue, highlight);
+  } else {
+    openVideo(context, ref, highlight);
+  }
 }
 
 // ------------------------------------------------------------------ layout
@@ -346,7 +370,14 @@ class HighlightSheet extends ConsumerWidget {
                       builder: (context, constraints) => Stack(
                         alignment: Alignment.center,
                         children: [
-                          Thumbnail(youtubeId: h.youtubeId, width: constraints.maxWidth, big: true, radius: 16),
+                          Thumbnail(
+                            youtubeId: h.youtubeId,
+                            // As wide as the sheet, unless that makes it higher than two fifths of the window: on a
+                            // phone held sideways it would fill the sheet, the title and the buttons out of sight.
+                            width: math.min(constraints.maxWidth, MediaQuery.sizeOf(context).height * 0.4 * 16 / 9),
+                            big: true,
+                            radius: 16,
+                          ),
                           Container(
                             width: 56,
                             height: 56,
@@ -559,12 +590,12 @@ class SongSheet extends ConsumerWidget {
                     Semantics(
                       button: true,
                       label: 'Video of ${formatShortDate(v.date, currentYear: year)}',
+                      // the ink well's own action goes with its semantics
+                      onTap: () => _openVideoOrSheet(context, ref, catalogue, v),
                       excludeSemantics: true,
                       child: InkWell(
                         borderRadius: BorderRadius.circular(10),
-                        onTap: () => v.youtubeId == null
-                            ? showHighlightSheet(context, catalogue, v)
-                            : openVideo(context, ref, v),
+                        onTap: () => _openVideoOrSheet(context, ref, catalogue, v),
                         child: SizedBox(
                           width: 150,
                           child: Column(

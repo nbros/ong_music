@@ -30,7 +30,10 @@ class FullscreenButton extends StatelessWidget {
     }
     // called right away: the browser grants full screen only within the tap
     fullscreen.enter().then((accepted) {
-      if (!accepted && context.mounted) showMessage(context, 'Couldn’t go full screen');
+      // not when the page is full screen all the same: a second tap while the browser was still granting the first
+      if (!accepted && !fullscreen.isFullscreen.value && context.mounted) {
+        showMessage(context, 'Couldn’t go full screen');
+      }
     });
   }
 

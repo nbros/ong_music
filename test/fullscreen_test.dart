@@ -1,4 +1,6 @@
 // The full screen button of the web app, beside the search fields.
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
@@ -146,6 +148,20 @@ void main() {
     expect(find.text('Couldn’t go full screen'), findsOneWidget);
     await waitForMessage(tester);
     expect(find.text('Couldn’t go full screen'), findsNothing);
+  });
+
+  testWidgets('a refusal while the page is full screen all the same (a second tap) shows no message', (tester) async {
+    final answer = Completer<bool>();
+    final fullscreen = FakeFullscreen()..pending = answer;
+    await pumpApp(tester, fullscreen: fullscreen);
+    await tester.tap(fullscreenButton());
+    // the browser grants an earlier request, then refuses this one
+    fullscreen.browserState = true;
+    answer.complete(false);
+    await tester.pump();
+    expect(fullscreen.enters, 1);
+    expect(find.text('Couldn’t go full screen'), findsNothing);
+    expect(find.descendant(of: fullscreenButton(), matching: find.byIcon(Icons.fullscreen_exit)), findsOneWidget);
   });
 
   testWidgets('screen readers: a "Full screen" switch, on or off', (tester) async {

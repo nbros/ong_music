@@ -170,7 +170,7 @@ class PlayRow extends StatelessWidget {
     final requester = catalogue.requester(p.requesterId);
     final video = catalogue.highlightOf(p);
     final subtitle = <InlineSpan>[
-      ...markedSpans(artist, tokens, ong.mark),
+      ...markedSpans(artist, tokens, ong.mark, scheme.onSurface),
       if (artist.isNotEmpty && requester != null) const TextSpan(text: ' · '),
       if (requester != null) ...[
         personIcon(scheme.onSurfaceVariant),
@@ -255,6 +255,8 @@ class StreamHeader extends StatelessWidget {
         button: true,
         label: 'Stream of $date, $size',
         hint: 'Shows the setlist',
+        // the ink well's own action goes with its semantics
+        onTap: onTap,
         excludeSemantics: true,
         child: InkWell(
           onTap: onTap,

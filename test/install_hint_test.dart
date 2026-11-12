@@ -12,6 +12,20 @@ const iPhoneSafari26 =
 const macSafari26 =
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) '
     'Version/26.1 Safari/605.1.15';
+// Written after the format of Safari 26, not captured on a device.
+const iPhoneSafari27 =
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) '
+    'Version/27.2 Mobile/15E148 Safari/604.1';
+const macSafari27 =
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) '
+    'Version/27.0 Safari/605.1.15';
+// Chrome on a system whose user agent stopped at 18_6: Safari 18.6, 26 or 27. Written, not captured.
+const iPhoneChromeFrozen =
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) '
+    'CriOS/141.0.7390.41 Mobile/15E148 Safari/604.1';
+const iPadChrome17 =
+    'Mozilla/5.0 (iPad; CPU OS 17_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) '
+    'CriOS/138.0.7204.119 Mobile/15E148 Safari/604.1';
 const iPhoneChrome =
     'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) '
     'CriOS/138.0.7204.119 Mobile/15E148 Safari/604.1';
@@ -106,16 +120,29 @@ void main() {
     }
   });
 
-  test('Safari 26 and later keep Share behind the menu button; before, the Share button is in the bar', () {
-    expect(hintFor(iPhoneSafari26), const InstallHint(InstallHintKind.addToHomeScreen));
-    expect(hintFor(macSafari26), const InstallHint(InstallHintKind.addToHomeScreen, device: 'iPad'));
-    expect(hintFor(iPhoneSafari), const InstallHint(InstallHintKind.addToHomeScreen, shareInMenu: false));
-    expect(hintFor(iPadSafari), const InstallHint(InstallHintKind.addToHomeScreen, device: 'iPad', shareInMenu: false));
-    expect(hintFor(macSafari), const InstallHint(InstallHintKind.addToHomeScreen, device: 'iPad', shareInMenu: false));
-    // another browser does not say which Safari the system has: the current one
-    for (final ua in [iPhoneChrome, iPhoneFirefox]) {
-      expect(hintFor(ua).shareInMenu, isTrue, reason: ua);
+  test('where Safari keeps Share: in its bar before 26, behind More in 26, behind the menu button since 27', () {
+    const inBar = SafariShare.inBar, behindMore = SafariShare.behindMore;
+    expect(hintFor(iPhoneSafari), const InstallHint(InstallHintKind.addToHomeScreen, share: inBar));
+    expect(hintFor(iPadSafari), const InstallHint(InstallHintKind.addToHomeScreen, device: 'iPad', share: inBar));
+    expect(hintFor(macSafari), const InstallHint(InstallHintKind.addToHomeScreen, device: 'iPad', share: inBar));
+    expect(hintFor(iPhoneSafari26), const InstallHint(InstallHintKind.addToHomeScreen, share: behindMore));
+    expect(hintFor(macSafari26), const InstallHint(InstallHintKind.addToHomeScreen, device: 'iPad', share: behindMore));
+    expect(hintFor(iPhoneSafari27), const InstallHint(InstallHintKind.addToHomeScreen));
+    expect(hintFor(macSafari27), const InstallHint(InstallHintKind.addToHomeScreen, device: 'iPad'));
+    expect(const InstallHint(InstallHintKind.addToHomeScreen).share, SafariShare.behindMenu);
+  });
+
+  test('another browser only tells the system: an older Safari up to 18.5, the latest known place after', () {
+    // no "Version/": the system version, which no longer moves from 18_6 on
+    for (final ua in [iPhoneChrome, iPhoneFirefox, iPadChrome17]) {
+      expect(hintFor(ua).share, SafariShare.inBar, reason: ua);
     }
+    expect(hintFor(iPhoneChromeFrozen).share, SafariShare.behindMenu);
+    // should a browser give the real system version
+    expect(hintFor(iPhoneChromeFrozen.replaceFirst('OS 18_6', 'OS 26_1')).share, SafariShare.behindMore);
+    expect(hintFor(iPhoneChromeFrozen.replaceFirst('OS 18_6', 'OS 27_0')).share, SafariShare.behindMenu);
+    // an iPad asking for desktop sites in another browser: "Mac OS X 10_15_7" is not a system version of iOS
+    expect(hintFor(macSafari.replaceFirst('Version/18.5 ', 'CriOS/138.0.7204.119 ')).share, SafariShare.behindMenu);
   });
 
   test('a Mac (no touch) gets nothing', () {

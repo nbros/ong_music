@@ -90,8 +90,10 @@ final class ListMetrics {
 
 // ------------------------------------------------------------------ text
 
-/// The spans of [text] with the hits of [tokens] (see `matchRanges`) marked.
-List<InlineSpan> markedSpans(String text, List<String> tokens, Color mark) {
+/// The spans of [text] with the hits of [tokens] (see `matchRanges`) marked:
+/// on [mark], in [onMark], which the greys of the secondary texts are not
+/// readable on.
+List<InlineSpan> markedSpans(String text, List<String> tokens, Color mark, Color onMark) {
   final ranges = matchRanges(text, tokens);
   if (ranges.isEmpty) return [TextSpan(text: text)];
   final spans = <InlineSpan>[];
@@ -101,7 +103,7 @@ List<InlineSpan> markedSpans(String text, List<String> tokens, Color mark) {
     spans.add(
       TextSpan(
         text: text.substring(r.start, r.end),
-        style: TextStyle(backgroundColor: mark),
+        style: TextStyle(backgroundColor: mark, color: onMark),
       ),
     );
     at = r.end;
@@ -122,7 +124,7 @@ class MarkedText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Text.rich(
-    TextSpan(children: markedSpans(text, tokens, OngColors.of(context).mark)),
+    TextSpan(children: markedSpans(text, tokens, OngColors.of(context).mark, Theme.of(context).colorScheme.onSurface)),
     style: style,
     maxLines: maxLines,
     overflow: TextOverflow.ellipsis,
@@ -214,7 +216,7 @@ class _BoxedSpan extends TextSpan {
 /// highlight. Screen readers hear "name, you".
 List<InlineSpan> requesterSpans(BuildContext context, String name, List<String> tokens, {required bool own}) {
   final ong = OngColors.of(context);
-  if (!own) return markedSpans(name, tokens, ong.mark);
+  if (!own) return markedSpans(name, tokens, ong.mark, Theme.of(context).colorScheme.onSurface);
   final ranges = matchRanges(name, tokens);
   final parts = <InlineSpan>[];
   var at = 0;
@@ -290,8 +292,8 @@ class RequesterText extends StatelessWidget {
 /// A range of a text and the colour of the box behind it.
 typedef _Box = ({int start, int end, Color color});
 
-/// Paints rounded boxes behind ranges of the text of its child, one per line,
-/// in order.
+/// Paints rounded boxes behind ranges of the text of its child, one per line
+/// of text, in order.
 class _TextBoxes extends SingleChildRenderObjectWidget {
   const _TextBoxes({required this.boxes, required super.child});
 
@@ -329,11 +331,11 @@ class _RenderTextBoxes extends RenderProxyBox {
       final transform = paragraph.getTransformTo(this);
       for (final box in _boxes) {
         final paint = Paint()..color = box.color;
-        // one text box per line, the runs of a line merged: on a line cut by
-        // the ellipsis, the last one takes the ellipsis in
+        // On a line cut by the ellipsis, the last text box takes the ellipsis in. Cut right after its padding, the
+        // user's name is a box around the ellipsis alone: still the sign that the request is theirs.
         final selection = TextSelection(baseOffset: box.start, extentOffset: box.end);
-        for (final textBox in paragraph.getBoxesForSelection(selection)) {
-          final rect = MatrixUtils.transformRect(transform, textBox.toRect());
+        for (final line in _lines(paragraph.getBoxesForSelection(selection))) {
+          final rect = MatrixUtils.transformRect(transform, line);
           context.canvas.drawRRect(
             RRect.fromRectAndRadius(rect.shift(offset), Radius.circular(rect.height / 4)),
             paint,
@@ -343,6 +345,27 @@ class _RenderTextBoxes extends RenderProxyBox {
     }
     super.paint(context, offset);
   }
+
+  /// One rectangle per line of text for [boxes], which come one per run of
+  /// one font: a name written in a font other than its padding (Japanese,
+  /// emoji) comes in several, of other heights.
+  static List<Rect> _lines(List<TextBox> boxes) {
+    final lines = <Rect>[];
+    for (final box in boxes) {
+      final rect = box.toRect();
+      final index = lines.indexWhere((line) => _onOneLine(line, rect));
+      if (index < 0) {
+        lines.add(rect);
+      } else {
+        lines[index] = lines[index].expandToInclude(rect);
+      }
+    }
+    return lines;
+  }
+
+  /// Whether [a] and [b] share more than half the height of the lower one.
+  static bool _onOneLine(Rect a, Rect b) =>
+      math.min(a.bottom, b.bottom) - math.max(a.top, b.top) > math.min(a.height, b.height) / 2;
 }
 
 /// The icon of a play type (piano, loop, improvisation), or null.
@@ -378,9 +401,12 @@ class VideoPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    // a node of its own, with its own action: merged into its row, a screen reader would say it and open the row
     return Semantics(
+      container: true,
       button: true,
       label: 'Watch the video',
+      onTap: onPressed,
       excludeSemantics: true,
       child: Tooltip(
         message: 'Watch the video',
@@ -712,6 +738,23 @@ class ChipRow extends StatelessWidget {
   );
 }
 
+/// Whether the user is typing in a window too low for the filters and the list
+/// together: a phone held sideways with its keyboard up, which leaves little
+/// more than the height of the search field. The list tabs then show the
+/// search field and the list alone, until the keyboard goes.
+class TypingInLowWindow extends InheritedWidget {
+  const TypingInLowWindow({super.key, required this.value, required super.child});
+
+  final bool value;
+
+  /// False without one above [context].
+  static bool of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<TypingInLowWindow>()?.value ?? false;
+
+  @override
+  bool updateShouldNotify(TypingInLowWindow oldWidget) => oldWidget.value != value;
+}
+
 /// A filter chip of the design: label, optional icon and count.
 ///
 /// Without [showLabel] it shows its [icon] (required then) and its count
@@ -786,15 +829,18 @@ class ListChip extends StatelessWidget {
     // The sizes of the design: 32 px high, 12 px on each side inside the border, the icon 6 px
     // from the label. The icon is part of the label: as an avatar, the chip
     // would give it a 32 px box.
-    return _ChipTapTarget(
-      child: FilterChip(
-        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        // 32 px high with its border, not 34
-        visualDensity: const VisualDensity(vertical: -1),
-        selected: selected,
-        onSelected: (_) => onTap(),
-        labelStyle: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: color),
-        label: icon == null ? text! : (showLabel ? withIcon : Semantics(label: label, child: withIcon)),
+    // merged: one node as high as the tap target, not as the chip
+    return MergeSemantics(
+      child: _ChipTapTarget(
+        child: FilterChip(
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          // 32 px high with its border, not 34
+          visualDensity: const VisualDensity(vertical: -1),
+          selected: selected,
+          onSelected: (_) => onTap(),
+          labelStyle: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: color),
+          label: icon == null ? text! : (showLabel ? withIcon : Semantics(label: label, child: withIcon)),
+        ),
       ),
     );
   }

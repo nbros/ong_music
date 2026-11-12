@@ -24,7 +24,7 @@ import 'widgets.dart';
 const String appVersion = String.fromEnvironment('APP_VERSION');
 
 const twitchUrl = 'https://www.twitch.tv/jonathanong';
-const privacyPolicyUrl = 'https://nbros.github.io/ong_music/privacy-policy';
+const privacyPolicyUrl = 'https://ongmusic.nbros.dev/privacy-policy';
 const spreadsheetUrl = 'https://docs.google.com/spreadsheets/d/14ARzE_zSMNhp0ZQV34ti2741PbA-5wAjsXRAW8EgJ-4';
 
 /// The link tiles: label, URL, icon.
@@ -122,8 +122,8 @@ class AboutPage extends ConsumerWidget {
                 Padding(
                   padding: const EdgeInsets.only(top: 6, bottom: 16),
                   child: Text(
-                    'Classically trained pianist from Sydney, live on Twitch: multi-instrument loops, '
-                    'virtuosic piano and your requests.',
+                    'Classically trained pianist from Sydney who streams on Twitch, known for his '
+                    'multi-instrumental loops and virtuosic piano playing.',
                     textAlign: TextAlign.center,
                     style: TextStyle(color: scheme.onSurfaceVariant, height: 20 / 14),
                   ),
@@ -356,6 +356,8 @@ class _LinkTile extends StatelessWidget {
     return Semantics(
       link: true,
       label: label,
+      // the ink well's own action goes with its semantics
+      onTap: onTap,
       excludeSemantics: true,
       child: InkWell(
         borderRadius: BorderRadius.circular(18),
@@ -458,17 +460,21 @@ class _TwitchNameFieldState extends ConsumerState<_TwitchNameField> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          TextField(
-            controller: _controller,
-            onChanged: (value) => ref.read(twitchNameProvider.notifier).set(value),
-            autocorrect: false,
-            enableSuggestions: false,
-            textInputAction: TextInputAction.done,
-            style: const TextStyle(fontSize: 16),
-            decoration: InputDecoration(
-              hintText: 'Optional',
-              prefixIcon: Icon(Icons.person, size: 20, color: on3),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 15),
+          Semantics(
+            // the hint alone ("Optional") does not say what the field is
+            label: 'Your Twitch name',
+            child: TextField(
+              controller: _controller,
+              onChanged: (value) => ref.read(twitchNameProvider.notifier).set(value),
+              autocorrect: false,
+              enableSuggestions: false,
+              textInputAction: TextInputAction.done,
+              style: const TextStyle(fontSize: 16),
+              decoration: InputDecoration(
+                hintText: 'Optional',
+                prefixIcon: Icon(Icons.person, size: 20, color: on3),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 15),
+              ),
             ),
           ),
           Padding(
@@ -513,6 +519,8 @@ class _DataSectionState extends ConsumerState<_DataSection> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
+        // with large text in a low window, the buttons stay in reach
+        scrollable: true,
         title: const Text('Clear downloaded data?'),
         content: const Text('The highlights and the Ong Log will be downloaded again.'),
         actions: [
@@ -615,10 +623,10 @@ class _Footer extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final on3 = OngColors.of(context).on3;
     final style = TextStyle(fontSize: 12, height: 16 / 12, color: on3);
-    Widget link(String label, String url) => Semantics(
+    Widget link(String label, VoidCallback onTap) => Semantics(
       link: true,
       child: InkWell(
-        onTap: () => openLink(context, ref, url),
+        onTap: onTap,
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 48),
           child: Center(
@@ -632,14 +640,25 @@ class _Footer extends ConsumerWidget {
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
       child: Column(
         children: [
+          Text(appVersion.isEmpty ? 'Ong Music' : 'Ong Music $appVersion', textAlign: TextAlign.center, style: style),
+          // the three links on one line down to a phone 360 px wide
           Wrap(
             alignment: WrapAlignment.center,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Text(appVersion.isEmpty ? 'Ong Music · ' : 'Ong Music $appVersion · ', style: style),
-              link('Privacy policy', privacyPolicyUrl),
+              link('Privacy policy', () => openLink(context, ref, privacyPolicyUrl)),
               Text(' · ', style: style),
-              link('Community spreadsheet', spreadsheetUrl),
+              link('Community spreadsheet', () => openLink(context, ref, spreadsheetUrl)),
+              Text(' · ', style: style),
+              // the open source software the app is made with, and its licences
+              link(
+                'Licences',
+                () => showLicensePage(
+                  context: context,
+                  applicationName: 'Ong Music',
+                  applicationVersion: appVersion.isEmpty ? null : appVersion,
+                ),
+              ),
             ],
           ),
           Text('Fan-made, not affiliated with Jonathan Ong.', textAlign: TextAlign.center, style: style),

@@ -112,7 +112,15 @@ class FakeCatalogueNotifier extends CatalogueNotifier {
   CatalogueState build() => initial;
 
   @override
-  Future<void> refresh() async => refreshes++;
+  Future<void> refresh() async {
+    refreshes++;
+    if (refreshError case final error?) {
+      state = CatalogueState(catalogue: state.catalogue, fetchedAt: state.fetchedAt, lastError: error);
+    }
+  }
+
+  /// When set, [refresh] fails with it.
+  Object? refreshError;
 
   @override
   Future<void> clearDownloadedData() async => clears++;
@@ -342,9 +350,14 @@ class FakeFullscreen implements PageFullscreen {
   /// What the browser does by itself: Escape, its own gesture.
   set browserState(bool value) => _state.value = value;
 
+  /// When set, [enter] answers only when this completes: a browser that
+  /// takes its time.
+  Completer<bool>? pending;
+
   @override
   Future<bool> enter() async {
     enters++;
+    if (pending case final pending?) return pending.future;
     if (refuses) return false;
     _state.value = true;
     return true;

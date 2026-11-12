@@ -16,6 +16,7 @@ import 'install_banner.dart';
 import 'ong_log_page.dart';
 import 'theme.dart';
 import 'view_state.dart';
+import 'widgets.dart';
 
 /// Content wider than this is centred (desktop window, browser, tablet).
 const double maxContentWidth = 640;
@@ -109,52 +110,58 @@ class AppShell extends ConsumerWidget {
         // on web, the engine turns statusBarColor into the page's theme-color (Safari's bars, the iOS
         // status bar of the installed app): the app background there, transparent (edge to edge) elsewhere
         value: kIsWeb ? systemBarsStyle(theme).copyWith(statusBarColor: surface) : systemBarsStyle(theme),
-        child: Scaffold(
-          body: SafeArea(
-            bottom: false,
-            child: _ContentColumn(
-              child: Column(
-                children: [
-                  const InstallBanner(),
-                  Expanded(
-                    child: _SearchShortcut(
-                      child: IndexedStack(
-                        index: tab.index,
-                        children: [
-                          for (final t in AppTab.values)
-                            TickerMode(
-                              enabled: t == tab,
-                              child: switch (t) {
-                                AppTab.highlights => const HighlightsPage(),
-                                AppTab.ongLog => const OngLogPage(),
-                                AppTab.about => const AboutPage(),
-                              },
-                            ),
-                        ],
+        child: TypingInLowWindow(
+          // read here: under the scaffold, the keyboard is no longer in the media query
+          value:
+              MediaQuery.viewInsetsOf(context).bottom > 0 &&
+              MediaQuery.sizeOf(context).height < InstallBanner.minHeight,
+          child: Scaffold(
+            body: SafeArea(
+              bottom: false,
+              child: _ContentColumn(
+                child: Column(
+                  children: [
+                    const InstallBanner(),
+                    Expanded(
+                      child: _SearchShortcut(
+                        child: IndexedStack(
+                          index: tab.index,
+                          children: [
+                            for (final t in AppTab.values)
+                              TickerMode(
+                                enabled: t == tab,
+                                child: switch (t) {
+                                  AppTab.highlights => const HighlightsPage(),
+                                  AppTab.ongLog => const OngLogPage(),
+                                  AppTab.about => const AboutPage(),
+                                },
+                              ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
-          bottomNavigationBar: ColoredBox(
-            color: theme.colorScheme.surfaceContainer,
-            child: Center(
-              heightFactor: 1,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: maxContentWidth),
-                child: NavigationBar(
-                  selectedIndex: tab.index,
-                  onDestinationSelected: (i) {
-                    FocusManager.instance.primaryFocus?.unfocus();
-                    ref.read(selectedTabProvider.notifier).select(AppTab.values[i]);
-                  },
-                  destinations: const [
-                    NavigationDestination(icon: Icon(Icons.video_library), label: 'Highlights'),
-                    NavigationDestination(icon: Icon(Icons.queue_music), label: 'Ong Log'),
-                    NavigationDestination(icon: Icon(Icons.person), label: 'About'),
-                  ],
+            bottomNavigationBar: ColoredBox(
+              color: theme.colorScheme.surfaceContainer,
+              child: Center(
+                heightFactor: 1,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: maxContentWidth),
+                  child: NavigationBar(
+                    selectedIndex: tab.index,
+                    onDestinationSelected: (i) {
+                      FocusManager.instance.primaryFocus?.unfocus();
+                      ref.read(selectedTabProvider.notifier).select(AppTab.values[i]);
+                    },
+                    destinations: const [
+                      NavigationDestination(icon: Icon(Icons.video_library), label: 'Highlights'),
+                      NavigationDestination(icon: Icon(Icons.queue_music), label: 'Ong Log'),
+                      NavigationDestination(icon: Icon(Icons.person), label: 'About'),
+                    ],
+                  ),
                 ),
               ),
             ),

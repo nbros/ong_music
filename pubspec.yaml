@@ -78,6 +78,9 @@ flutter:
     # Registered at startup by lib/src/web/web_platform_web.dart. Native apps use the system font.
     - path: assets/fonts/Roboto-Medium.ttf
       platforms: [web]
+    # the licence of Roboto, for the licences page of the web app, which serves two weights of it
+    - path: assets/fonts/Roboto-LICENSE.txt
+      platforms: [web]
 
 # "dart run flutter_launcher_icons" to regenerate icons
 flutter_launcher_icons:

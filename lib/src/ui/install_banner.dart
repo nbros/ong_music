@@ -49,19 +49,22 @@ String installHintTitle(InstallHint hint) => switch (hint.kind) {
   _ => 'Install Ong Music on your ${hint.device}',
 };
 
-/// In the advice texts, stand for the symbols of two buttons of Safari (see
-/// [symbolSpans]): its menu button, and its Share button.
-const menuSymbol = '{menu}', shareSymbol = '{share}';
+/// In the advice texts, stand for the symbols of three buttons of Safari (see
+/// [symbolSpans]): its menu button, its More button, and its Share button.
+const menuSymbol = '{menu}', moreSymbol = '{more}', shareSymbol = '{share}';
 
 /// The advice in one or two lines, for the banner.
 String installHintShortText(InstallHint hint) => switch (hint.kind) {
   InstallHintKind.openInSafari => 'This app’s browser can’t add it to your Home Screen: open the page in Safari.',
   InstallHintKind.playStore => playStoreAdvice,
-  _ =>
-    hint.shareInMenu
-        ? 'In Safari, tap the menu button $menuSymbol next to the address, then Share, View More and '
-              '“Add to Home Screen”.'
-        : 'In Safari, tap the Share button $shareSymbol, then “Add to Home Screen”.',
+  _ => switch (hint.share) {
+    SafariShare.inBar => 'In Safari, tap the Share button $shareSymbol, then “Add to Home Screen”.',
+    SafariShare.behindMore =>
+      'In Safari, tap the More button $moreSymbol next to the address, then Share and “Add to Home Screen”.',
+    SafariShare.behindMenu =>
+      'In Safari, tap the menu button $menuSymbol next to the address, then Share, View More and '
+          '“Add to Home Screen”.',
+  },
 };
 
 /// The full advice, for the About tab.
@@ -77,10 +80,12 @@ String installHintText(InstallHint hint) => switch (hint.kind) {
         'Not in the menu? Open this page in Safari first.',
 };
 
-final _symbol = RegExp(r'\{(menu|share)\}');
+final _symbol = RegExp(r'\{(menu|more|share)\}');
 
-/// [text] with a drawing in place of [menuSymbol] and of [shareSymbol], [size]
-/// high: three lines, the last one shorter, and the box with an arrow.
+/// [text] with a drawing in place of [menuSymbol], [moreSymbol] and
+/// [shareSymbol]: three lines, the last one shorter; three dots; the box with
+/// an arrow. [size] is their height at text scale 1: like every widget in a
+/// text, they grow with the text.
 ///
 /// Drawn after the look of Safari's buttons, with icons this app has, not
 /// with Apple's own artwork. They come after the name of the button, never
@@ -93,7 +98,15 @@ List<InlineSpan> symbolSpans(String text, {required Color color, required double
     spans.add(
       WidgetSpan(
         alignment: PlaceholderAlignment.middle,
-        child: Icon(match[1] == 'menu' ? Icons.notes : Icons.ios_share, size: size, color: color),
+        child: Icon(
+          switch (match[1]) {
+            'menu' => Icons.notes,
+            'more' => Icons.more_horiz,
+            _ => Icons.ios_share,
+          },
+          size: size,
+          color: color,
+        ),
       ),
     );
     start = match.end;
@@ -220,11 +233,7 @@ class _HintBody extends ConsumerWidget {
         const SizedBox(height: 4),
         Text.rich(
           TextSpan(
-            children: symbolSpans(
-              short ? installHintShortText(hint) : installHintText(hint),
-              color: color,
-              size: MediaQuery.textScalerOf(context).scale(16),
-            ),
+            children: symbolSpans(short ? installHintShortText(hint) : installHintText(hint), color: color, size: 16),
           ),
           style: TextStyle(fontSize: 13, height: 18 / 13, color: color.withValues(alpha: 0.85)),
         ),

@@ -76,7 +76,8 @@ Future<void> shareHighlight(BuildContext context, WidgetRef ref, Highlight highl
   if (shared) return;
   final copied = await copyText(text);
   if (context.mounted) {
-    showMessage(context, copied ? 'Sharing isn’t available here: link copied' : 'Sharing isn’t available here');
+    final what = highlight.youtubeId == null ? 'title' : 'link';
+    showMessage(context, copied ? 'Sharing isn’t available here: $what copied' : 'Sharing isn’t available here');
   }
 }
 
@@ -160,11 +161,13 @@ class _MessageState extends State<_Message> with SingleTickerProviderStateMixin 
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final padding = MediaQuery.paddingOf(context);
+    final keyboard = MediaQuery.viewInsetsOf(context).bottom;
     final rise = MediaQuery.disableAnimationsOf(context) ? 0.0 : 8.0;
     return Positioned(
       left: 16,
       right: 16,
-      bottom: padding.bottom + 96,
+      // above the navigation bar, or above the keyboard that covers it
+      bottom: keyboard > 0 ? keyboard + 16 : padding.bottom + 96,
       child: IgnorePointer(
         child: Center(
           child: ConstrainedBox(

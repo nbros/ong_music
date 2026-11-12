@@ -89,6 +89,8 @@ class _HighlightsPageState extends ConsumerState<HighlightsPage> {
     final mine = filter.mine && myCount > 0;
     final favourites = filter.favourites && favouriteCount > 0;
     final counts = results.counts;
+    final typing = TypingInLowWindow.of(context);
+    final anyChip = filter.genre != null || mine || favourites;
     return Column(
       children: [
         ListSearchField(
@@ -97,42 +99,47 @@ class _HighlightsPageState extends ConsumerState<HighlightsPage> {
           hint: 'Search ${formatCount(catalogue.highlightCount)} highlights',
           onChanged: notifier.setQuery,
         ),
-        ChipRow(
-          children: [
-            ListChip(label: 'All', selected: filter.genre == null && !mine && !favourites, onTap: notifier.clearChips),
-            // each count is what the list would show with that chip selected, the rest unchanged; each chip keeps
-            // the width of its count over the whole catalogue, the largest it can show
-            if (favouriteCount > 0)
-              ListChip(
-                label: 'Favourites',
-                showLabel: false,
-                icon: Icons.star,
-                count: counts.keys,
-                maxCount: favouriteCount,
-                selected: favourites,
-                onTap: notifier.toggleFavourites,
-              ),
-            if (myCount > 0)
-              ListChip(
-                label: 'You',
-                icon: Icons.person,
-                count: counts.requester,
-                maxCount: myCount,
-                selected: mine,
-                onTap: notifier.toggleMine,
-              ),
-            for (final g in catalogue.highlightGenreCounts)
-              if (g.genre != Genre.other)
+        // kept, with its scroll position, while it is out of the way
+        Visibility(
+          visible: !typing,
+          maintainState: true,
+          child: ChipRow(
+            children: [
+              ListChip(label: 'All', selected: !anyChip, onTap: notifier.clearChips),
+              // each count is what the list would show with that chip selected, the rest unchanged; each chip keeps
+              // the width of its count over the whole catalogue, the largest it can show
+              if (favouriteCount > 0)
                 ListChip(
-                  label: g.genre.label,
-                  count: counts.genre(g.genre),
-                  maxCount: g.count,
-                  selected: filter.genre == g.genre,
-                  onTap: () => notifier.toggleGenre(g.genre),
+                  label: 'Favourites',
+                  showLabel: false,
+                  icon: Icons.star,
+                  count: counts.keys,
+                  maxCount: favouriteCount,
+                  selected: favourites,
+                  onTap: notifier.toggleFavourites,
                 ),
-          ],
+              if (myCount > 0)
+                ListChip(
+                  label: 'You',
+                  icon: Icons.person,
+                  count: counts.requester,
+                  maxCount: myCount,
+                  selected: mine,
+                  onTap: notifier.toggleMine,
+                ),
+              for (final g in catalogue.highlightGenreCounts)
+                if (g.genre != Genre.other)
+                  ListChip(
+                    label: g.genre.label,
+                    count: counts.genre(g.genre),
+                    maxCount: g.count,
+                    selected: filter.genre == g.genre,
+                    onTap: () => notifier.toggleGenre(g.genre),
+                  ),
+            ],
+          ),
         ),
-        if (searching || filter.genre != null || mine || favourites)
+        if (!typing && (searching || anyChip))
           CountLine(
             text: plural(results.length, 'highlight'),
             link: inOngLog > 0 ? '${formatCount(inOngLog)} in the Ong Log' : null,
@@ -148,7 +155,11 @@ class _HighlightsPageState extends ConsumerState<HighlightsPage> {
                 SliverToBoxAdapter(
                   child: EmptyMessage(
                     title: 'No highlight matches',
-                    text: inOngLog > 0 ? 'The song may still be in the Ong Log.' : 'Try fewer words, or another genre.',
+                    text: inOngLog > 0
+                        ? 'The song may still be in the Ong Log.'
+                        : (searching
+                              ? (anyChip ? 'Try fewer words, or fewer filters.' : 'Try fewer words.')
+                              : 'Try fewer filters.'),
                   ),
                 )
               else

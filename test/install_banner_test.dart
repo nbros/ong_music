@@ -62,23 +62,51 @@ void main() {
 
   testWidgets('the advice shows the symbol of the Safari button after its name', (tester) async {
     Finder inBannerIcon(IconData icon) => find.descendant(of: find.byType(InstallBanner), matching: find.byIcon(icon));
-    // Safari 26 and later: the menu button next to the address
+    // Safari 27 and later: the menu button next to the address
     await pumpApp(tester, installHint: addToHomeScreen);
-    expect(find.textContaining('tap the menu button \uFFFC next to the address, then Share'), findsOneWidget);
+    expect(
+      find.textContaining('tap the menu button \uFFFC next to the address, then Share, View More and'),
+      findsOneWidget,
+    );
     expect(inBannerIcon(Icons.notes), findsOneWidget);
+    expect(inBannerIcon(Icons.more_horiz), findsNothing);
     expect(inBannerIcon(Icons.ios_share), findsOneWidget, reason: 'the icon of the banner only');
     await goToTab(tester, 'About');
     await scrollToSection(tester);
     expect(find.descendant(of: find.byType(InstallSection), matching: find.byIcon(Icons.notes)), findsOneWidget);
 
+    // Safari 26: the More button next to the address, and no "View More"
+    await tester.pumpWidget(const SizedBox());
+    await pumpApp(
+      tester,
+      installHint: const InstallHint(InstallHintKind.addToHomeScreen, share: SafariShare.behindMore),
+    );
+    expect(
+      find.textContaining('tap the More button \uFFFC next to the address, then Share and “Add to Home Screen”.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('menu button'), findsNothing);
+    expect(inBannerIcon(Icons.more_horiz), findsOneWidget);
+    expect(inBannerIcon(Icons.notes), findsNothing);
+
     // before: the Share button of Safari's own bar
     await tester.pumpWidget(const SizedBox());
-    await pumpApp(tester, installHint: const InstallHint(InstallHintKind.addToHomeScreen, shareInMenu: false));
+    await pumpApp(tester, installHint: const InstallHint(InstallHintKind.addToHomeScreen, share: SafariShare.inBar));
     expect(find.textContaining('tap the Share button \uFFFC, then “Add to Home Screen”.'), findsOneWidget);
     expect(find.textContaining('menu button'), findsNothing);
     expect(inBannerIcon(Icons.notes), findsNothing);
+    expect(inBannerIcon(Icons.more_horiz), findsNothing);
     expect(inBannerIcon(Icons.ios_share), findsNWidgets(2));
   });
+
+  for (final scale in [1.0, 1.3, 2.0]) {
+    testWidgets('the symbol grows with the text, once: text scale $scale', (tester) async {
+      await pumpApp(tester, installHint: addToHomeScreen, textScale: scale);
+      final symbol = find.descendant(of: find.byType(InstallBanner), matching: find.byIcon(Icons.notes));
+      // 16 px in a text of 13 px with lines of 18 px: lower than its line at every scale
+      expect(tester.getRect(symbol).size, within<Size>(distance: 0.01, from: const Size(16, 16) * scale));
+    });
+  }
 
   testWidgets('a dismissal is remembered', (tester) async {
     await pumpApp(tester, installHint: addToHomeScreen, prefs: {InstallBannerDismissedNotifier.key: true});
