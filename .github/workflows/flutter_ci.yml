@@ -90,7 +90,7 @@ jobs:
           serviceAccountJsonPlainText: ${{ secrets.SERVICE_ACCOUNT_JSON }}
           packageName: nbros.ong_music
           releaseFiles: build/app/outputs/bundle/release/app-release.aab
-          track: "alpha" # internal, alpha, beta, production
+          tracks: "alpha" # internal, alpha, beta, production (comma-separated list)
           status: completed # draft, or completed(default) to release directly
 
   build-windows:
@@ -145,10 +145,11 @@ jobs:
           name: "${{ steps.version.outputs.zipBasename }}.zip"
           path: "${{ steps.version.outputs.zipBasename }}.zip"
 
+      # for-each-ref takes the full ref ("git tag -l refs/tags/x" matches nothing, as tag -l patterns apply to short names)
       - name: Read tag message
         if: startsWith(github.ref, 'refs/tags/')
-        run: |
-          git tag -l --format='%(contents)' ${{ github.ref }} > tag-message.txt
+        shell: bash
+        run: git for-each-ref --format='%(contents)' "$GITHUB_REF" > tag-message.txt
 
       - name: Create GitHub Release and Upload Asset
         uses: softprops/action-gh-release@v3
