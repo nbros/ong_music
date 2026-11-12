@@ -169,5 +169,85 @@ void main() {
         throwsA(isA<TimeoutException>()),
       );
     });
+
+    test('a web page instead of CSV (Wi-Fi sign-in, private sheet) is not a format error of the sheets', () async {
+      for (final page in ['<!DOCTYPE html><html><body>Sign in</body></html>', '\uFEFF \n<html>']) {
+        final client = MockClient((request) async {
+          final songs = request.url.queryParameters['sheet'] == 'Songs';
+          return http.Response.bytes(utf8.encode(songs ? page : '"Title"\n"a < b"'), 200);
+        });
+        await expectLater(
+          HttpSheetFetcher(client: client).fetch(),
+          throwsA(
+            isA<SheetNotCsvException>()
+                .having((e) => e.uri, 'uri', SheetUrls.songs)
+                .having((e) => e, 'not a FormatException', isNot(isA<FormatException>())),
+          ),
+        );
+      }
+    });
+
+    group('a slow download', () {
+      // Real time, with wide margins: the limit on silence is 1 s, the pieces come every 200 ms.
+      const silence = Duration(seconds: 1);
+      const pace = Duration(milliseconds: 200);
+      late List<StreamController<List<int>>> bodies;
+      late MockClient client;
+
+      setUp(() {
+        bodies = [];
+        client = MockClient.streaming((request, _) async {
+          final body = StreamController<List<int>>();
+          bodies.add(body);
+          return http.StreamedResponse(body.stream, 200);
+        });
+      });
+
+      /// [count] pieces of each sheet, [pace] apart, once both answers have started.
+      Future<void> pieces(int count) async {
+        while (bodies.length < 2) {
+          await Future<void>.delayed(Duration.zero);
+        }
+        for (var i = 0; i < count; i++) {
+          for (final body in bodies) {
+            body.add(utf8.encode('é'));
+          }
+          await Future<void>.delayed(pace);
+        }
+      }
+
+      test('arrives, however long it takes, while the server keeps sending', () async {
+        final sheets = HttpSheetFetcher(client: client, timeout: silence).fetch();
+        // more than twice the limit on silence
+        await pieces(12);
+        for (final body in bodies) {
+          unawaited(body.close());
+        }
+        expect((await sheets).songsCsv, 'é' * 12);
+        expect((await sheets).highlightsCsv, 'é' * 12);
+      });
+
+      test('is given up after a silence of the server', () async {
+        final watch = Stopwatch()..start();
+        final sheets = HttpSheetFetcher(client: client, timeout: silence).fetch();
+        unawaited(pieces(3));
+        await expectLater(sheets, throwsA(isA<TimeoutException>()));
+        // after the last piece, not after the start
+        expect(watch.elapsed, greaterThan(pace * 2 + silence));
+        expect(bodies.every((body) => !body.hasListener), isTrue, reason: 'the downloads are cancelled');
+      });
+
+      test('is given up after the longest time allowed', () async {
+        final watch = Stopwatch()..start();
+        final sheets = HttpSheetFetcher(client: client, timeout: silence, maxDuration: pace * 3).fetch();
+        unawaited(pieces(20));
+        await expectLater(sheets, throwsA(isA<TimeoutException>()));
+        expect(watch.elapsed, lessThan(pace * 15));
+        // what a client of its own gets closed for
+        for (final body in bodies) {
+          unawaited(body.close());
+        }
+      });
+    });
   });
 }

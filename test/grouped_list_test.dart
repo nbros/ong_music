@@ -150,7 +150,8 @@ void main() {
         'per frame at the end of ${layout.itemCount} items: SliverGroupedList ${(grouped / 1000).toStringAsFixed(2)} ms, '
         'SliverVariedExtentList ${(varied / 1000).toStringAsFixed(2)} ms',
       );
-      expect(grouped * 5, lessThan(varied));
+      // Measured 17 times faster. A wide margin: two timings taken one after the other on a shared build machine.
+      expect(grouped * 2, lessThan(varied));
     });
   });
 }

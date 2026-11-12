@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <!--
-    Replaced by the value of `flutter build web --base-href` (/ong_music/app/ on GitHub Pages).
+    Replaced by the value of `flutter build web --base-href` (/ on the site, ongmusic.nbros.dev).
     Every URL below is relative to it.
   -->
   <base href="$FLUTTER_BASE_HREF">
@@ -35,7 +35,7 @@
     // Must match WebSheetCache (cache name, key), SheetUrls and catalogueMaxAge (test/sheet_prefetch_test.dart).
     (function () {
       if (!window.fetch || !window.Promise) return;
-      var base = 'https://docs.google.com/spreadsheets/d/14ARzE_zSMNhp0ZQV34ti2741PbA-5wAjsXRAW8EgJ-4/gviz/tq?tqx=out:csv&sheet=';
+      var base = 'https://docs.google.com/spreadsheets/d/14ARzE_zSMNhp0ZQV34ti2741PbA-5wAjsXRAW8EgJ-4/gviz/tq?tqx=out:csv&headers=1&sheet=';
       var maxAge = 21600000;
       function cachedAt() {
         if (!window.caches) return Promise.resolve(null);
@@ -109,6 +109,11 @@
     <div class="spinner" aria-hidden="true"></div>
     <div>Ong Music</div>
     <div class="message"><span class="slow-text">Still loading…</span><span class="failed-text">Couldn’t load the app.</span> Check your connection.<br><button type="button" onclick="location.reload()">Reload</button></div>
+    <!-- without JavaScript nothing ever loads: say so, in place of a spinner that would turn for ever -->
+    <noscript>
+      <style>#loading .spinner { display: none; }</style>
+      <div style="max-width: 280px; text-align: center; font-size: 14px; font-weight: 400;">Ong Music needs JavaScript to run. Turn it on in your browser’s settings, then reload this page.</div>
+    </noscript>
   </div>
   <script>
     (function () {

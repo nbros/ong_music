@@ -505,12 +505,32 @@ void main() {
       notifier().setForeground(false);
     });
 
+    testWidgets('a web page instead of the sheets (Wi-Fi sign-in) is tried again like a network failure', (
+      tester,
+    ) async {
+      startWith();
+      final page = SheetNotCsvException(SheetUrls.songs);
+      fetcher.results.addAll([page, page, sampleSheets()]);
+      await tester.pump(Duration.zero);
+      expect(fetcher.calls, 1);
+      expect(state().lastError, isA<SheetNotCsvException>());
+      expect(state().isFailed, isTrue);
+      // signed in to the network meanwhile or not: after 15 seconds, and at each return to the app
+      clock = clock.add(const Duration(seconds: 15));
+      await tester.pump(const Duration(seconds: 15));
+      expect(fetcher.calls, 2);
+      await notifier().refreshIfStale();
+      expect(fetcher.calls, 3);
+      expect(state().hasData, isTrue);
+      container.dispose();
+    });
+
     testWidgets('a download refused for its content waits for the next refresh, not for the retry delays', (
       tester,
     ) async {
       startWith();
-      // a page of HTML instead of the sheet, twice, then the sheet
-      const html = RawSheets(highlightsCsv: '<html>', songsCsv: '<html>');
+      // sheets that are no longer what the app reads, twice, then the sheets
+      const html = RawSheets(highlightsCsv: '"Recipe","Minutes"\n"Soup","20"', songsCsv: '"Recipe"\n"Soup"');
       fetcher.results.addAll([html, html, sampleSheets()]);
       await tester.pump(Duration.zero);
       expect(fetcher.calls, 1);

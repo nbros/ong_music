@@ -137,7 +137,9 @@ Catalogue parseCatalogueRecord(({String highlightsCsv, String songsCsv}) sheets)
 
 class _StreamDraft {
   _StreamDraft(this.date, this.start);
-  CalendarDate date;
+
+  /// Null until known: the date of its "Stream Start" row could not be read.
+  CalendarDate? date;
   final int start;
   int count = 0;
   int minutes = 0;
@@ -231,27 +233,36 @@ class _Builder {
     final drafts = <_PlayDraft>[];
     final streamDrafts = <_StreamDraft>[];
     _StreamDraft? current;
+    // The date of the last row of the current stream that has one. Some rows of songs were typed without their date:
+    // they are of that day, at an unknown time.
+    CalendarDate? lastDate;
     for (var i = 1; i < sRows.length; i++) {
       final row = sRows[i];
       final when = CalendarDate.parseCell(_cell(row, sDate));
-      if (when == null) continue;
       if (_cell(row, sOrder).trim() == '0') {
-        current = _StreamDraft(when.date, drafts.length);
+        // a "Stream Start" row starts a stream even when its date is missing or mistyped: without it, its songs
+        // would go to the stream before
+        current = _StreamDraft(when?.date, drafts.length);
         streamDrafts.add(current);
+        lastDate = when?.date;
         continue;
       }
       final title = collapseSpaces(_cell(row, sTitle));
       if (title.isEmpty || title == '-' || title == '~~') continue;
+      final date = when?.date ?? lastDate;
+      // no date, and none yet in its stream to give it
+      if (date == null) continue;
+      lastDate = date;
       if (current == null) {
-        current = _StreamDraft(when.date, drafts.length);
+        current = _StreamDraft(date, drafts.length);
         streamDrafts.add(current);
       }
       current.count++;
       current.minutes = math.max(current.minutes, _uptimeMinutes(_cell(row, sUptime)));
       drafts.add(
         _PlayDraft(
-          when.time,
-          when.date,
+          when?.time ?? '',
+          date,
           _title(title),
           Genre.parse(_cell(row, sGenre)),
           PlayType.parse(_cell(row, sType)),
@@ -262,10 +273,11 @@ class _Builder {
       );
     }
     final kept = streamDrafts.where((s) => s.count > 0).toList();
-    // a few "Stream Start" rows carry a mistyped date: trust the first song
+    // a few "Stream Start" rows carry no date, or a mistyped one: trust the first song
     for (final s in kept) {
       final first = drafts[s.start].date;
-      if (s.date.daysUntil(first).abs() > 1) s.date = first;
+      final date = s.date;
+      if (date == null || date.daysUntil(first).abs() > 1) s.date = first;
     }
     final streamIndex = <_StreamDraft, int>{for (var i = 0; i < kept.length; i++) kept[i]: i};
 
@@ -355,7 +367,7 @@ class _Builder {
       for (var i = 0; i < kept.length; i++)
         LiveStream(
           id: i,
-          date: kept[i].date,
+          date: kept[i].date!,
           firstPlayId: kept[i].start,
           playCount: kept[i].count,
           durationMinutes: kept[i].minutes,

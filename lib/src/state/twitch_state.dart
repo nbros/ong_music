@@ -173,6 +173,7 @@ class TwitchNotifier extends Notifier<TwitchState> {
       final schedule = await ref.read(twitchApiProvider).fetchSchedule();
       if (generation != _generation) return;
       _scheduleFailed = false;
+      _scheduleFailure = null;
       logger.i('Twitch schedule downloaded: $schedule');
       state = TwitchState(
         schedule: schedule,
@@ -180,19 +181,26 @@ class TwitchNotifier extends Notifier<TwitchState> {
         live: state.live,
         liveCheckedAt: state.liveCheckedAt,
       );
-    } catch (e, st) {
-      logger.w('Twitch schedule download failed', error: e, stackTrace: st);
+    } catch (e) {
+      // Once per kind of failure, without its stack: with the About tab left open offline, the same lines every few
+      // minutes would fill the log file.
+      if ('$e' != _scheduleFailure) logger.w('Twitch schedule download failed: $e');
+      _scheduleFailure = '$e';
       if (generation != _generation) return;
       _scheduleFailed = true;
     }
   }
 
+  /// The last failure of the schedule download logged, null after a success.
+  String? _scheduleFailure;
+
   Future<void> _checkLive(int generation) async {
     var live = false;
     try {
       live = await ref.read(twitchApiProvider).isLive();
-    } catch (e, st) {
-      logger.w('Live check failed', error: e, stackTrace: st);
+    } catch (e) {
+      // the API reports its own failures as "not live": only what it lets through comes here
+      logger.w('Live check failed: $e');
     }
     if (generation != _generation) return;
     state = TwitchState(

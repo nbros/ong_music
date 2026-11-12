@@ -236,12 +236,11 @@ void main() {
   });
 
   group('plays and streams', () {
-    test('order 0 starts a stream; rows without date or with an empty / - / ~~ title are skipped', () {
+    test('order 0 starts a stream; rows with an empty / - / ~~ title are skipped', () {
       final c = catalogueOf(
         songs: [
           start('2024-01-01'),
           sRow(date: '2024-01-01\u00a023:27:55', title: 'One'),
-          sRow(date: '', title: 'no date'),
           sRow(date: '2024-01-01', title: '-'),
           sRow(date: '2024-01-01', title: '~~'),
           sRow(date: '2024-01-01', title: '  '),
@@ -257,6 +256,53 @@ void main() {
       expect(c.streamOf(c.plays[1]).date, CalendarDate(2024, 1, 1));
       expect(c.streams.map((s) => (s.firstPlayId, s.playCount)), [(0, 2), (2, 1)]);
       expect(c.playsOf(c.streams[0]).map((p) => p.title), ['One', 'Two']);
+    });
+
+    test('a song typed without its date is of the day of the row before it in its stream, at no time', () {
+      final c = catalogueOf(
+        songs: [
+          sRow(date: '', title: 'before any date: skipped'),
+          start('2024-01-01'),
+          sRow(date: '', title: 'After the start'),
+          sRow(date: 'soon', title: 'Not a date'),
+          sRow(date: '2024-01-02 0:10:00', title: 'After midnight'),
+          sRow(date: '', title: 'Later'),
+          start('2024-01-05'),
+          sRow(date: '2024-01-05 20:00', title: 'Next stream'),
+        ],
+      );
+      expect(c.plays.map((p) => (p.title, p.rowDate.toIso(), p.time, p.streamId)), [
+        ('After the start', '2024-01-01', '', 0),
+        ('Not a date', '2024-01-01', '', 0),
+        ('After midnight', '2024-01-02', '00:10', 0),
+        ('Later', '2024-01-02', '', 0),
+        ('Next stream', '2024-01-05', '20:00', 1),
+      ]);
+      expect(c.streams.map((s) => (s.date.toIso(), s.playCount)), [('2024-01-01', 4), ('2024-01-05', 1)]);
+    });
+
+    test('a stream start without a readable date still starts a stream, dated by its first dated song', () {
+      final c = catalogueOf(
+        songs: [
+          start('2024-01-01'),
+          sRow(date: '2024-01-01 20:00', title: 'One'),
+          start(''),
+          // not of the day of the stream before: no date to give it
+          sRow(date: '', title: 'Undated, skipped'),
+          sRow(date: '2024-01-03 21:00', title: 'Two'),
+          sRow(date: '', title: 'Three'),
+          start('not a date'),
+          sRow(date: '', title: 'A whole stream without any date: skipped'),
+          start('2024-01-09'),
+          sRow(date: '2024-01-09 20:00', title: 'Four'),
+        ],
+      );
+      expect(c.plays.map((p) => (p.title, p.streamId)), [('One', 0), ('Two', 1), ('Three', 1), ('Four', 2)]);
+      expect(c.streams.map((s) => (s.date.toIso(), s.playCount)), [
+        ('2024-01-01', 1),
+        ('2024-01-03', 2),
+        ('2024-01-09', 1),
+      ]);
     });
 
     test('streams without plays are dropped; plays before any stream start get one', () {
@@ -275,7 +321,7 @@ void main() {
     test('a stream start date more than one day off its first play is corrected', () {
       final c = catalogueOf(
         songs: [
-          start('2019-02-30'), // invalid: not a date, the row is skipped
+          start('2019-02-30'), // invalid: not a date; a stream without songs, dropped
           start('2021-06-10'), // typo for 2020
           sRow(date: '2020-06-10 20:00:00', title: 'a'),
           start('2020-06-12'), // the first song is after midnight: kept

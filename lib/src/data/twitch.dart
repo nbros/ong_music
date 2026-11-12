@@ -124,10 +124,16 @@ Future<bool> isLiveByPreview(http.Client client, {Uri? uri, Duration timeout = t
       final type = streamed.headers['content-type']?.toLowerCase() ?? '';
       if (!type.startsWith('image/')) return false;
       final response = await http.Response.fromStream(streamed);
+      _liveCheckFailure = null;
       return response.bodyBytes.length >= minLivePreviewBytes;
     }().timeout(timeout);
   } catch (e) {
-    logger.w('Live check failed: $e');
+    // once per kind of failure: the check runs every few minutes, and offline they would fill the log file
+    if ('$e' != _liveCheckFailure) logger.w('Live check failed: $e');
+    _liveCheckFailure = '$e';
     return false;
   }
 }
+
+/// The last failure of the live check logged, null after an answer.
+String? _liveCheckFailure;

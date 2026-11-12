@@ -10,8 +10,9 @@ import 'sheet_prefetch_stub.dart' if (dart.library.js_interop) 'sheet_prefetch_w
 /// The sheets downloaded by the page, or null when it started no download
 /// (cache fresh, not on the web) or when they were already taken: only the first
 /// call can return them. Throws like [HttpSheetFetcher.fetch] when that download
-/// failed.
-Future<RawSheets?> takePrefetchedSheets() => platform.takePrefetchedSheets();
+/// failed, or when an answer has not started after [timeout].
+Future<RawSheets?> takePrefetchedSheets({Duration timeout = const Duration(seconds: 45)}) =>
+    platform.takePrefetchedSheets(timeout: timeout);
 
 /// Forgets the sheets downloaded by the page, if any. To call when the app
 /// starts on a cache it finds fresh after all (another tab wrote it while this

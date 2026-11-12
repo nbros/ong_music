@@ -155,9 +155,10 @@ class FavouritesNotifier extends Notifier<Set<String>> {
   /// Adds [highlight] to the favourites, or removes it, and persists the list.
   ///
   /// The star changes at once. The list is then read again from the storage
-  /// before the change is written to it: another window of the app (a browser
-  /// tab, a second instance on Windows) may have added favourites since this
-  /// one read them, which writing this window's own list would erase.
+  /// before the change is written to it: another tab of the browser may have
+  /// added favourites since this one read them, which writing this tab's own
+  /// list would erase. Not so on Windows, where the plugin never reads its
+  /// file again: two instances of the app overwrite each other's settings.
   Future<void> toggle(Highlight highlight) {
     final k = highlight.key;
     final add = !state.contains(k);
@@ -168,7 +169,8 @@ class FavouritesNotifier extends Notifier<Set<String>> {
       try {
         await prefs.reload();
         final merged = add ? {..._stored(prefs), k} : ({..._stored(prefs)}..remove(k));
-        await prefs.setStringList(key, merged.toList());
+        // false, not an exception, when the platform could not write
+        if (!await prefs.setStringList(key, merged.toList())) logger.w('The favourites were not stored');
         // what the other windows added shows here too, once no later change of this one waits
         if (--_pending == 0 && ref.mounted) state = Set.unmodifiable(merged);
       } catch (e, st) {

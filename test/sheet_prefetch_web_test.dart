@@ -74,6 +74,14 @@ void main() {
     );
   });
 
+  test('a web page instead of CSV (Wi-Fi sign-in) is a SheetNotCsvException', () async {
+    prefetch(resolved(response('"ok"')), resolved(response('<!DOCTYPE html><html>')));
+    await expectLater(
+      takePrefetchedSheets(),
+      throwsA(isA<SheetNotCsvException>().having((e) => e.uri, 'uri', SheetUrls.songs)),
+    );
+  });
+
   test('a network error is a ClientException', () async {
     prefetch(rejected(), resolved(response('ok')));
     await expectLater(takePrefetchedSheets(), throwsA(isA<http.ClientException>()));
