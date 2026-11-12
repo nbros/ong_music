@@ -1,6 +1,7 @@
-# Builds and deploys the whole GitHub Pages site (https://nbros.github.io/ong_music/):
-# - site root: the Jekyll pages from docs/ (index, privacy policy), built like legacy Pages did;
-# - app/: the Flutter web app (the way to use Ong Music on iPhone/iPad).
+# Builds and deploys the whole GitHub Pages site, served at https://ongmusic.nbros.dev/ (a custom domain, see
+# README.md):
+# - at the root: the Flutter web app (the way to use Ong Music on iPhone/iPad);
+# - beside it: the Jekyll pages from docs/, built like legacy Pages did (/privacy-policy, /download).
 #
 # Requires Settings → Pages → Build and deployment → Source: "GitHub Actions" (see README.md),
 # and the "github-pages" environment must allow tags (Settings → Environments → github-pages).
@@ -70,8 +71,9 @@ jobs:
       - name: Create site directory
         run: mkdir _site
 
-      # Same build as legacy Pages from /docs (github-pages gem, same plugins, default theme),
-      # so index.md and privacy-policy.md render at the same URLs as before.
+      # Same build as legacy Pages from /docs (github-pages gem, same plugins, default theme), so that
+      # privacy-policy.md renders at /privacy-policy as before. docs/ must have no index.md (nor README.md, which
+      # the gem would turn into one): the index of the site is the web app.
       - name: Build Jekyll site
         uses: actions/jekyll-build-pages@v1
         with:
@@ -88,21 +90,39 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      # The same checks as flutter_ci.yml: a commit that fails them must not go online here either.
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Run tests
+        run: flutter test
+
       # --no-web-resources-cdn: CanvasKit and the Roboto font served from this site, not from gstatic.com.
       # --web-content-hash: main.dart.<hash>.js and assets/*.<hash>.*, so that a deployment never mixes with files
       # of the previous one in browser caches (web/index.html revalidates flutter_bootstrap.js, which names them).
       - name: Build web app
         run: >-
           flutter build web --release
-          --base-href /ong_music/app/
+          --base-href /
           --no-web-resources-cdn
           --web-content-hash
           --build-name=${{ steps.version.outputs.majorMinorPatch }}
           --build-number=${{ github.run_number }}
           --dart-define=APP_VERSION=${{ steps.version.outputs.majorMinorPatch }}
 
+      # At the root of the site, next to the Jekyll pages. The two only share the assets/ directory, where Jekyll
+      # writes assets/css/ and Flutter everything else.
       - name: Add web app to site
-        run: cp -R build/web _site/app
+        run: |
+          if [[ -e _site/index.html ]]; then
+            echo "::error::docs/ produced an index.html: it would be replaced by the web app's, which is the site's"
+            exit 1
+          fi
+          cp -R build/web/. _site/
+          # what the site must have: the app, and the privacy policy the Play Store listing links to
+          test -f _site/index.html
+          test -f _site/flutter_bootstrap.js
+          test -f _site/privacy-policy.html || test -f _site/privacy-policy/index.html
 
       # Excludes dotfiles (only build/web/.last_build_id, which is not needed).
       - name: Upload Pages artifact
