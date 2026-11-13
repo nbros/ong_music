@@ -1,11 +1,11 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 
 import 'package:http/http.dart' as http;
 import 'package:web/web.dart' as web;
 
+import 'page_thread.dart';
 import 'sheets.dart';
 
 /// The global set by the script of `web/index.html`: a promise of null (no
@@ -30,7 +30,7 @@ Future<RawSheets?> takePrefetchedSheets({required Duration timeout}) async {
   return RawSheets(highlightsCsv: texts[0], songsCsv: texts[1]);
 }
 
-/// The body of a response as [HttpSheetFetcher] reads it (UTF-8 from the bytes),
+/// The body of a response as [HttpSheetFetcher] reads it (UTF-8 from the bytes, [decodeUtf8]),
 /// with its errors: [SheetHttpException], [SheetNotCsvException],
 /// [http.ClientException], and a [TimeoutException] when the answer has not
 /// started after [timeout].
@@ -46,5 +46,5 @@ Future<String> _text(JSPromise<web.Response> pending, Uri uri, Duration timeout)
     throw http.ClientException('$e', uri);
   }
   if (response.status != 200) throw SheetHttpException(uri, response.status);
-  return sheetCsv(utf8.decode(body.toDart.asUint8List(), allowMalformed: true), uri);
+  return sheetCsv(decodeUtf8(body.toDart.asUint8List()), uri);
 }

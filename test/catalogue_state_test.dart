@@ -53,7 +53,7 @@ void main() {
         if (prefs != null) sharedPreferencesProvider.overrideWithValue(prefs),
         sheetFetcherProvider.overrideWithValue(fetcher),
         sheetCacheProvider.overrideWithValue(cache),
-        catalogueParserProvider.overrideWithValue((sheets) {
+        catalogueParserProvider.overrideWithValue((sheets, {isAbandoned, background = false}) {
           parses++;
           return parseOnCurrentIsolate(sheets);
         }),
@@ -623,7 +623,8 @@ void main() {
             sheetCacheProvider.overrideWithValue(cache),
             // the cache, then the first download: both unreadable
             catalogueParserProvider.overrideWithValue(
-              (sheets) => ++parses <= 2 ? throw error : parseOnCurrentIsolate(sheets),
+              (sheets, {isAbandoned, background = false}) =>
+                  ++parses <= 2 ? throw error : parseOnCurrentIsolate(sheets),
             ),
             clockProvider.overrideWithValue(() => clock),
           ],
@@ -680,7 +681,8 @@ void main() {
           sheetFetcherProvider.overrideWithValue(fetcher),
           sheetCacheProvider.overrideWithValue(cache),
           catalogueParserProvider.overrideWithValue(
-            (sheets) => ++parses == 1 ? throw Exception('Unable to spawn isolate') : parseOnCurrentIsolate(sheets),
+            (sheets, {isAbandoned, background = false}) =>
+                ++parses == 1 ? throw Exception('Unable to spawn isolate') : parseOnCurrentIsolate(sheets),
           ),
           clockProvider.overrideWithValue(() => clock),
         ],

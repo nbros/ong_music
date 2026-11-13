@@ -70,42 +70,81 @@ bool _isDiacriticalMark(int unit) => unit >= 0x0300 && unit <= 0x036F;
 /// the sheets when they are parsed and to queries in [tokenize]. A mark with no
 /// precomposed form is kept. Text without such marks is returned unchanged.
 String composeMarks(String text) {
-  var first = -1;
-  for (var i = 1; i < text.length; i++) {
-    if (_isDiacriticalMark(text.codeUnitAt(i))) {
-      first = i;
-      break;
+  final composer = MarkComposer(text);
+  while (composer.compose(text.length + 1)) {}
+  return composer.result;
+}
+
+/// [composeMarks] in steps: each call of [compose] goes on where the last one stopped, so that megabytes of text can
+/// be composed a piece at a time, between which the thread does something else (the web, see `runInSlices`). The
+/// [result] is that of [composeMarks], however the text is cut.
+final class MarkComposer {
+  /// A composer of [text], nothing looked at yet.
+  MarkComposer(this._text);
+
+  final String _text;
+
+  // text[_start, _i) is still to be copied to _out, unless _pending holds the composed form of text[_i - 1]. _out is
+  // null until a first mark is found (from text[1]: a mark at the start has no letter to go with).
+  int _i = 1, _start = 0, _pending = -1;
+  StringBuffer? _out;
+  String? _result;
+
+  /// [composeMarks] of the text, once [compose] returned false.
+  String get result => _result ?? (throw StateError('The text is not composed yet'));
+
+  /// Looks at [units] (at least 1) more code units of the text, or what is left of it. Returns whether there is more
+  /// to look at.
+  bool compose(int units) {
+    assert(units > 0, 'a step of nothing would never end');
+    if (_result != null) return false;
+    final text = _text;
+    var i = _i;
+    final stop = units >= text.length - i ? text.length : i + units;
+    var out = _out;
+    if (out == null) {
+      while (i < stop && !_isDiacriticalMark(text.codeUnitAt(i))) {
+        i++;
+      }
+      if (i >= stop) {
+        _i = i;
+        if (stop < text.length) return true;
+        _result = text;
+        return false;
+      }
+      // Copies the unchanged runs as substrings (building megabytes of text from a code unit list is slow on the web).
+      out = _out = StringBuffer();
     }
-  }
-  if (first < 0) return text;
-  final table = _compositionTable();
-  // Copies the unchanged runs as substrings (building megabytes of text from a code unit list is slow on the web).
-  // text[start, i) is still to be copied, unless [pending] holds the composed form of text[i - 1].
-  final out = StringBuffer();
-  var start = 0;
-  var pending = -1;
-  for (var i = first; i < text.length; i++) {
-    final unit = text.codeUnitAt(i);
-    if (_isDiacriticalMark(unit)) {
-      final composed = table[(pending >= 0 ? pending : text.codeUnitAt(i - 1)) * 0x10000 + unit];
-      if (composed != null) {
-        if (pending < 0) out.write(text.substring(start, i - 1));
-        pending = composed;
-        continue;
+    final table = _compositionTable();
+    var start = _start, pending = _pending;
+    for (; i < stop; i++) {
+      final unit = text.codeUnitAt(i);
+      if (_isDiacriticalMark(unit)) {
+        final composed = table[(pending >= 0 ? pending : text.codeUnitAt(i - 1)) * 0x10000 + unit];
+        if (composed != null) {
+          if (pending < 0) out.write(text.substring(start, i - 1));
+          pending = composed;
+          continue;
+        }
+      }
+      if (pending >= 0) {
+        out.writeCharCode(pending);
+        pending = -1;
+        start = i;
       }
     }
+    _i = i;
+    _start = start;
+    _pending = pending;
+    if (i < text.length) return true;
     if (pending >= 0) {
       out.writeCharCode(pending);
-      pending = -1;
-      start = i;
+    } else {
+      out.write(text.substring(start));
     }
+    _result = out.toString();
+    return false;
   }
-  if (pending >= 0) {
-    out.writeCharCode(pending);
-  } else {
-    out.write(text.substring(start));
-  }
-  return out.toString();
 }
 
 final _diacriticalMarks = RegExp('[\u0300-\u036F]+');

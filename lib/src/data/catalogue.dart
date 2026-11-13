@@ -6,6 +6,7 @@ library;
 import 'dart:typed_data';
 
 import 'model.dart';
+import 'slices.dart';
 import 'text.dart';
 
 /// A genre and how many rows have it.
@@ -88,30 +89,97 @@ final class PlayResults {
 /// requester's folded name. The catalogue instance itself
 /// is kept when a refresh finds the sheets unchanged.
 final class Catalogue {
-  /// Assembles a catalogue; use `parseCatalogue` instead.
-  Catalogue({
+  Catalogue._({
     required this.highlights,
     required this.plays,
     required this.streams,
     required this.requesters,
     required this.titles,
     required Map<String, Song> songs,
-  }) : _songs = songs {
-    _titleFolds = [for (final t in titles) fold(t)];
-    _requesterFolds = [for (final r in requesters) r.folded];
-    _requesterByFold = {for (final r in requesters) r.folded: r.id};
-    // fields joined by a newline: a query token never contains whitespace, so never spans two fields
-    _highlightFields = [
-      for (final h in highlights)
-        '${fold(h.title)}\n${h.requesterId == null ? '' : _requesterFolds[h.requesterId!]}\n${_genreFolds[h.genre.index]}',
-    ];
-    _highlightKeys = [for (final h in highlights) h.key];
-    _highlightGenreCounts = _countGenres(highlights.map((h) => h.genre));
-    _highlightRequests = Int32List(requesters.length);
-    for (final h in highlights) {
-      if (h.requesterId != null) _highlightRequests[h.requesterId!]++;
+    required List<String> titleFolds,
+    required List<String> requesterFolds,
+    required Map<String, int> requesterByFold,
+    required List<String> highlightFields,
+    required List<String> highlightKeys,
+    required List<GenreCount> highlightGenreCounts,
+    required List<GenreCount> playGenreCounts,
+    required Int32List highlightRequests,
+  }) : _songs = songs,
+       _titleFolds = titleFolds,
+       _requesterFolds = requesterFolds,
+       _requesterByFold = requesterByFold,
+       _highlightFields = highlightFields,
+       _highlightKeys = highlightKeys,
+       _highlightGenreCounts = highlightGenreCounts,
+       _playGenreCounts = playGenreCounts,
+       _highlightRequests = highlightRequests;
+
+  /// Assembles a catalogue and computes its indexes, in steps (see `CatalogueLoad`), then [done] receives the
+  /// catalogue. Only the parser does this (`parseCatalogue`).
+  ///
+  /// The loops over the titles (11,000 in the real sheets), the plays (31,000) and the highlights (2,000, whose
+  /// titles are folded) have a pause point every [pauseEvery] of them (at least 1). The other loops (over the
+  /// requesters, 1,700, and again over the highlights, for their keys and counts) cost a fraction of a millisecond
+  /// together and run in one step.
+  static Iterable<void> assemble({
+    required List<Highlight> highlights,
+    required List<Play> plays,
+    required List<LiveStream> streams,
+    required List<Requester> requesters,
+    required List<String> titles,
+    required Map<String, Song> songs,
+    required void Function(Catalogue catalogue) done,
+    int pauseEvery = rowsPerPause,
+  }) sync* {
+    if (pauseEvery < 1) throw ArgumentError.value(pauseEvery, 'pauseEvery', 'must be at least 1');
+    final titleFolds = <String>[];
+    for (var i = 0; i < titles.length; i++) {
+      titleFolds.add(fold(titles[i]));
+      if (i % pauseEvery == 0) yield null;
     }
-    _playGenreCounts = _countGenres(plays.map((p) => p.genre));
+    final requesterFolds = [for (final r in requesters) r.folded];
+    final requesterByFold = {for (final r in requesters) r.folded: r.id};
+    yield null;
+    // fields joined by a newline: a query token never contains whitespace, so never spans two fields
+    final highlightFields = <String>[];
+    for (var i = 0; i < highlights.length; i++) {
+      final h = highlights[i];
+      highlightFields.add(
+        '${fold(h.title)}\n${h.requesterId == null ? '' : requesterFolds[h.requesterId!]}\n${_genreFolds[h.genre.index]}',
+      );
+      if (i % pauseEvery == 0) yield null;
+    }
+    final highlightKeys = [for (final h in highlights) h.key];
+    final highlightGenreCounts = _countGenres(highlights.map((h) => h.genre));
+    final highlightRequests = Int32List(requesters.length);
+    for (final h in highlights) {
+      if (h.requesterId != null) highlightRequests[h.requesterId!]++;
+    }
+    yield null;
+    final playGenres = List.filled(Genre.values.length, 0);
+    for (var i = 0; i < plays.length; i++) {
+      playGenres[plays[i].genre.index]++;
+      if (i % pauseEvery == 0) yield null;
+    }
+    final playGenreCounts = _genreCounts(playGenres);
+    done(
+      Catalogue._(
+        highlights: highlights,
+        plays: plays,
+        streams: streams,
+        requesters: requesters,
+        titles: titles,
+        songs: songs,
+        titleFolds: titleFolds,
+        requesterFolds: requesterFolds,
+        requesterByFold: requesterByFold,
+        highlightFields: highlightFields,
+        highlightKeys: highlightKeys,
+        highlightGenreCounts: highlightGenreCounts,
+        playGenreCounts: playGenreCounts,
+        highlightRequests: highlightRequests,
+      ),
+    );
   }
 
   /// Highlights in sheet order (oldest upload first).
@@ -132,14 +200,14 @@ final class Catalogue {
 
   final Map<String, Song> _songs;
 
-  late final List<String> _titleFolds;
-  late final List<String> _requesterFolds;
-  late final Map<String, int> _requesterByFold;
-  late final List<String> _highlightFields;
-  late final List<String> _highlightKeys;
-  late final List<GenreCount> _highlightGenreCounts;
-  late final List<GenreCount> _playGenreCounts;
-  late final Int32List _highlightRequests;
+  final List<String> _titleFolds;
+  final List<String> _requesterFolds;
+  final Map<String, int> _requesterByFold;
+  final List<String> _highlightFields;
+  final List<String> _highlightKeys;
+  final List<GenreCount> _highlightGenreCounts;
+  final List<GenreCount> _playGenreCounts;
+  final Int32List _highlightRequests;
 
   static final List<String> _genreFolds = [for (final g in Genre.values) fold(g.label)];
   static final List<String> _typeFolds = [for (final t in PlayType.values) fold(t.label)];
@@ -149,6 +217,11 @@ final class Catalogue {
     for (final g in genres) {
       counts[g.index]++;
     }
+    return _genreCounts(counts);
+  }
+
+  /// The genres of [counts] (by [Genre.index]) that have rows, largest count first, ties in [Genre] order.
+  static List<GenreCount> _genreCounts(List<int> counts) {
     final result = [
       for (final g in Genre.values)
         if (counts[g.index] > 0) (genre: g, count: counts[g.index]),
