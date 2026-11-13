@@ -1,14 +1,20 @@
 /// The rows of the lists and sheets: a highlight, a play, a stream header and
 /// a play in a song's history. Each one has the exact extent of
 /// [ListMetrics] for its kind.
+///
+/// The sheet writes its dates and times in US Eastern time. Dates are shown as
+/// written (the notes of the highlights and the videos quote them); only the
+/// time of a play is shown in the zone of the device (`wallTimeProvider`).
 library;
 
 import 'dart:math' as math;
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../data/catalogue.dart';
 import '../data/model.dart';
+import '../state/catalogue_state.dart';
 import 'format.dart';
 import 'theme.dart';
 import 'widgets.dart';
@@ -134,9 +140,9 @@ class HighlightRow extends StatelessWidget {
   }
 }
 
-/// A play of the Ong Log or of a stream setlist: time, track, artist ·
-/// requester, video button, type icon.
-class PlayRow extends StatelessWidget {
+/// A play of the Ong Log or of a stream setlist: time (in the zone of the
+/// device), track, artist · requester, video button, type icon.
+class PlayRow extends ConsumerWidget {
   const PlayRow({
     super.key,
     required this.catalogue,
@@ -161,7 +167,7 @@ class PlayRow extends StatelessWidget {
   final bool tinted;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final metrics = ListMetrics.of(context);
     final scheme = Theme.of(context).colorScheme;
     final ong = OngColors.of(context);
@@ -191,7 +197,7 @@ class PlayRow extends StatelessWidget {
                 SizedBox(
                   width: metrics.timeWidth,
                   child: Text(
-                    p.time.isEmpty ? '–' : p.time,
+                    formatPlayTime(p, ref.watch(wallTimeProvider)),
                     maxLines: 1,
                     style: TextStyle(fontSize: 12, color: ong.on3, fontFeatures: const [FontFeature.tabularFigures()]),
                   ),

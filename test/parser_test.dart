@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ong_music/src/data/model.dart';
 import 'package:ong_music/src/data/parser.dart';
+import 'package:ong_music/src/data/sheet_zone.dart';
 
 import 'fixtures.dart';
 
@@ -54,7 +55,7 @@ void main() {
       expect(c.requester(h.requesterId)!.name, 'Alice');
       final p = c.plays.single;
       expect(
-        (p.title, p.genre, p.type, p.flag, p.time),
+        (p.title, p.genre, p.type, p.flag, _easternTime(p)),
         ('Zelda - Song of Storms', Genre.anime, PlayType.loop, PlayFlag.raffle, '21:00'),
       );
       expect(c.requester(p.requesterId)!.name, 'Bob');
@@ -250,7 +251,7 @@ void main() {
         ],
       );
       expect(c.plays.map((p) => p.title), ['One', 'Two', 'Three']);
-      expect(c.plays.map((p) => p.time), ['23:27', '01:05', '21:07']);
+      expect(c.plays.map(_easternTime), ['23:27', '01:05', '21:07']);
       expect(c.plays.map((p) => p.streamId), [0, 0, 1]);
       expect(c.plays[1].rowDate, CalendarDate(2024, 1, 2));
       expect(c.streamOf(c.plays[1]).date, CalendarDate(2024, 1, 1));
@@ -271,7 +272,7 @@ void main() {
           sRow(date: '2024-01-05 20:00', title: 'Next stream'),
         ],
       );
-      expect(c.plays.map((p) => (p.title, p.rowDate.toIso(), p.time, p.streamId)), [
+      expect(c.plays.map((p) => (p.title, p.rowDate.toIso(), _easternTime(p), p.streamId)), [
         ('After the start', '2024-01-01', '', 0),
         ('Not a date', '2024-01-01', '', 0),
         ('After midnight', '2024-01-02', '00:10', 0),
@@ -488,13 +489,56 @@ void main() {
     });
   });
 
+  group('instants (the sheet writes US Eastern time)', () {
+    test('a play is the instant of its date and time, read as Eastern time, in every date format of the sheet', () {
+      final c = catalogueOf(
+        songs: [
+          start('2017-07-06'),
+          sRow(date: '2017-07-06 23:27:55', title: 'ISO date, seconds, summer'),
+          start('9/4/2020 21:00:00'),
+          sRow(date: '9/4/2020 21:07:55', title: 'month first'),
+          start('2024-01-01'),
+          sRow(date: '2024-01-01\u00a023:27:55', title: 'no-break space, winter'),
+          sRow(date: '2024-01-02', title: 'no time'),
+          sRow(date: '', title: 'no date'),
+          sRow(date: '2024-01-02 24:05', title: 'not a time of day'),
+          start('2026/11/12 21:34'),
+          sRow(date: '2026/11/13 01:39', title: 'slashes, after midnight'),
+        ],
+      );
+      expect(c.plays.map((p) => p.loggedAt), [
+        DateTime.utc(2017, 7, 7, 3, 27),
+        DateTime.utc(2020, 9, 5, 1, 7),
+        DateTime.utc(2024, 1, 2, 4, 27),
+        null,
+        null,
+        null,
+        DateTime.utc(2026, 11, 13, 6, 39),
+      ]);
+      expect(c.plays.last.loggedMinute, DateTime.utc(2026, 11, 13, 6, 39).millisecondsSinceEpoch ~/ 60000);
+      expect(c.plays.last.rowDate, CalendarDate(2026, 11, 13), reason: 'the date of the row is kept');
+    });
+
+    test('any date of a sheet cell gives an instant within the range of DateTime', () {
+      final c = catalogueOf(
+        songs: [
+          start('0000-01-01'),
+          sRow(date: '0000-01-01 00:00', title: 'first possible'),
+          sRow(date: '9999-12-31 23:59', title: 'last possible'),
+        ],
+      );
+      expect(c.plays.map((p) => p.loggedAt), [DateTime.utc(0, 1, 1, 5), DateTime.utc(10000, 1, 1, 4, 59)]);
+      expect(c.plays.map((p) => SheetZone.wallTime(p.loggedAt!).minute), [0, 59]);
+    });
+  });
+
   test('CalendarDate', () {
     final d = CalendarDate(2024, 2, 29);
     expect((d.year, d.month, d.day, d.weekday, d.toIso()), (2024, 2, 29, DateTime.thursday, '2024-02-29'));
     expect(d.daysUntil(CalendarDate(2024, 3, 1)), 1);
     expect(CalendarDate.tryParse('2023-02-29'), isNull);
     expect(CalendarDate.tryParse('Premiere'), isNull);
-    expect(CalendarDate.parseCell('7/4/2021 9:05:00'), (date: CalendarDate(2021, 7, 4), time: '09:05'));
+    expect(CalendarDate.parseCell('7/4/2021 9:05:00'), (date: CalendarDate(2021, 7, 4), minute: 9 * 60 + 5));
     expect(CalendarDate.fromEpochDay(0).toIso(), '1970-01-01');
     expect(() => CalendarDate(2024, 13, 1), throwsArgumentError);
   });
@@ -515,6 +559,10 @@ void main() {
       '12/31/1999 23:59',
       '2/29/2023',
       '2024-02-29 24:61',
+      '2024-02-29 23:60',
+      '2024-02-29 24:00',
+      '2024-02-29 23:59',
+      '2024-02-29 0:00',
       '2024-03-05\u008512:00',
       '0000-01-01',
       '9999-12-31',
@@ -555,8 +603,17 @@ void main() {
   });
 }
 
-/// [CalendarDate.parseCell] before it stopped using regular expressions, as the reference.
-({CalendarDate date, String time})? _parseCellReference(String cell) {
+/// The time of [play] on the wall clock of the sheet (US Eastern), `HH:MM`, empty without time.
+String _easternTime(Play play) {
+  final at = play.loggedAt;
+  if (at == null) return '';
+  final wall = SheetZone.wallTime(at);
+  return '${wall.hour.toString().padLeft(2, '0')}:${wall.minute.toString().padLeft(2, '0')}';
+}
+
+/// [CalendarDate.parseCell] before it stopped using regular expressions, as the reference (the time then a
+/// minute of the day, not one when it is not a time of day).
+({CalendarDate date, int? minute})? _parseCellReference(String cell) {
   final text = cell.trim();
   int year, month, day;
   var m = RegExp(r'^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:\s+(\d{1,2}):(\d{2}))?').firstMatch(text);
@@ -575,5 +632,7 @@ void main() {
   final dt = DateTime.utc(year, month, day);
   if (dt.month != month || dt.day != day) return null;
   final date = CalendarDate.fromEpochDay(dt.millisecondsSinceEpoch ~/ Duration.millisecondsPerDay);
-  return (date: date, time: m[4] == null ? '' : '${m[4]!.padLeft(2, '0')}:${m[5]}');
+  if (m[4] == null) return (date: date, minute: null);
+  final hour = int.parse(m[4]!), minute = int.parse(m[5]!);
+  return (date: date, minute: hour < 24 && minute < 60 ? hour * 60 + minute : null);
 }

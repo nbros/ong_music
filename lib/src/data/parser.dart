@@ -9,6 +9,7 @@ import 'dart:math' as math;
 import 'catalogue.dart';
 import 'csv.dart';
 import 'model.dart';
+import 'sheet_zone.dart';
 import 'text.dart';
 
 /// The payload is not one of the expected sheets (missing header, HTML page,
@@ -103,6 +104,12 @@ int _uptimeMinutes(String cell) {
   return hours == null ? 0 : hours * 60 + int.parse(m[2]!);
 }
 
+/// The instant of a date cell with a time, in minutes since the epoch (see `Play.loggedMinute`), or null.
+int? _instant(({CalendarDate date, int? minute})? cell) {
+  final minute = cell?.minute;
+  return minute == null ? null : SheetZone.epochMinute(cell!.date, minute);
+}
+
 /// Parses both sheets and builds the catalogue.
 ///
 /// Throws [CatalogueFormatException] when a payload does not look like its
@@ -146,8 +153,8 @@ class _StreamDraft {
 }
 
 class _PlayDraft {
-  _PlayDraft(this.time, this.date, this.titleId, this.genre, this.type, this.requester, this.flag, this.stream);
-  final String time;
+  _PlayDraft(this.minute, this.date, this.titleId, this.genre, this.type, this.requester, this.flag, this.stream);
+  final int? minute;
   final CalendarDate date;
   final int titleId;
   final Genre genre;
@@ -261,7 +268,7 @@ class _Builder {
       current.minutes = math.max(current.minutes, _uptimeMinutes(_cell(row, sUptime)));
       drafts.add(
         _PlayDraft(
-          when?.time ?? '',
+          _instant(when),
           date,
           _title(title),
           Genre.parse(_cell(row, sGenre)),
@@ -346,7 +353,7 @@ class _Builder {
       for (var i = 0; i < drafts.length; i++)
         Play(
           id: i,
-          time: drafts[i].time,
+          loggedMinute: drafts[i].minute,
           rowDate: drafts[i].date,
           titleId: drafts[i].titleId,
           title: titles[drafts[i].titleId],

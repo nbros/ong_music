@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:ong_music/src/data/catalogue.dart';
 import 'package:ong_music/src/data/schedule.dart';
+import 'package:ong_music/src/data/sheet_zone.dart';
 import 'package:ong_music/src/data/twitch.dart';
 import 'package:ong_music/src/state/catalogue_state.dart';
 import 'package:ong_music/src/state/settings_state.dart';
@@ -205,8 +206,11 @@ class TestApp {
 /// Pumps the app with [state] (default: [testCatalogue], fetched 2 hours
 /// before [testNow]) on a 412 × 892 phone, as a native app unless
 /// [installHint] or [fullscreen] (default: none, as in the native apps) say
-/// otherwise. The time is [clock] (default: [testNow]);
-/// Twitch is [twitch] (default: nothing known, never live).
+/// otherwise. The time is [clock] (default: [testNow]); the zone of the
+/// device is [wallTime] (default: US Eastern, the zone of the sheet, so the
+/// dates and times show as written in the fixtures; never the zone of the
+/// machine running the tests). Twitch is [twitch] (default: nothing known,
+/// never live).
 Future<TestApp> pumpApp(
   WidgetTester tester, {
   CatalogueState? state,
@@ -217,6 +221,7 @@ Future<TestApp> pumpApp(
   InstallHint installHint = InstallHint.none,
   FakeTwitchApi? twitch,
   DateTime Function()? clock,
+  DateTime Function(DateTime instant) wallTime = SheetZone.wallTime,
   bool alwaysUse24HourFormat = false,
   bool startsInBackground = false,
   PageFullscreen? fullscreen,
@@ -251,6 +256,7 @@ Future<TestApp> pumpApp(
         sharedPreferencesProvider.overrideWithValue(preferences),
         catalogueProvider.overrideWith(() => notifier),
         clockProvider.overrideWithValue(clock ?? () => testNow),
+        wallTimeProvider.overrideWithValue(wallTime),
         twitchApiProvider.overrideWithValue(twitchApi),
         installHintProvider.overrideWithValue(installHint),
         startsInBackgroundProvider.overrideWithValue(startsInBackground),

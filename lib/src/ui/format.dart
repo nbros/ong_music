@@ -33,6 +33,19 @@ String formatShortDate(CalendarDate? date, {required int currentYear}) {
 String formatFullDate(CalendarDate date) =>
     '${_weekdays[date.weekday - 1]} ${date.day} ${_months[date.month - 1]} ${date.year}';
 
+/// The wall time of an instant in the zone of the viewer (`wallTimeProvider`):
+/// only the fields of the result (year … minute) are read.
+typedef WallTime = DateTime Function(DateTime instant);
+
+/// The time of [play] in the viewer's zone, `07:39` (24-hour); `–` when the
+/// row has no time.
+String formatPlayTime(Play play, WallTime wallTime) {
+  final at = play.loggedAt;
+  if (at == null) return '–';
+  final wall = wallTime(at);
+  return '${wall.hour.toString().padLeft(2, '0')}:${wall.minute.toString().padLeft(2, '0')}';
+}
+
 /// `8 h 03`; empty for 0 minutes.
 String formatDuration(int minutes) =>
     minutes <= 0 ? '' : '${minutes ~/ 60} h ${(minutes % 60).toString().padLeft(2, '0')}';
