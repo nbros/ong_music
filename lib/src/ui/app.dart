@@ -13,6 +13,7 @@ import '../web/web_platform.dart';
 import 'about_page.dart';
 import 'address.dart';
 import 'detail_pane.dart';
+import 'font_warm_up.dart';
 import 'highlights_page.dart';
 import 'install_banner.dart';
 import 'layout.dart';
@@ -44,8 +45,14 @@ const List<NavDestination> _destinations = [
   (icon: Icons.person, label: 'About'),
 ];
 
-final _lightTheme = buildTheme(Brightness.light);
-final _darkTheme = buildTheme(Brightness.dark);
+/// The light and dark themes with [fontFamilyFallback] (see [fontFallbackProvider]).
+typedef _Themes = ({List<String>? fallback, ThemeData light, ThemeData dark});
+
+_Themes _buildThemes(List<String>? fallback) => (
+  fallback: fallback,
+  light: buildTheme(Brightness.light, fontFamilyFallback: fallback),
+  dark: buildTheme(Brightness.dark, fontFamilyFallback: fallback),
+);
 
 // web only (null in the native apps, where the system setting reaches Flutter)
 final bool? _browserUses24HourClock = browserUses24HourClock();
@@ -90,20 +97,31 @@ class _OngMusicAppState extends ConsumerState<OngMusicApp> {
     super.dispose();
   }
 
+  /// The themes, built again only when the fallback of their texts changes (the fonts of rare characters come).
+  _Themes? _themes;
+
   @override
   Widget build(BuildContext context) {
     // start loading the catalogue at once, whatever the first tab
     ref.watch(catalogueProvider.select((s) => s.hasData));
+    final fallback = ref.watch(fontFallbackProvider);
+    // the fallback changes at once (a text whose style is halfway through a theme animation keeps the old one);
+    // a change of theme mode animates as before
+    final fallbackChanged = _themes != null && !listEquals(_themes!.fallback, fallback);
+    final themes = _themes != null && !fallbackChanged ? _themes! : _themes = _buildThemes(fallback);
     return MaterialApp.router(
       title: 'Ong Music',
       debugShowCheckedModeBanner: false,
       themeMode: ref.watch(themePreferenceProvider).themeMode,
-      theme: _lightTheme,
-      darkTheme: _darkTheme,
-      builder: (context, child) => AppLayout(
-        child: _browserUses24HourClock == true
-            ? MediaQuery(data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true), child: child!)
-            : child!,
+      theme: themes.light,
+      darkTheme: themes.dark,
+      themeAnimationDuration: fallbackChanged ? Duration.zero : kThemeAnimationDuration,
+      builder: (context, child) => FontWarmUpScope(
+        child: AppLayout(
+          child: _browserUses24HourClock == true
+              ? MediaQuery(data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true), child: child!)
+              : child!,
+        ),
       ),
       routerDelegate: _router,
       routeInformationParser: const AppAddressParser(),

@@ -172,8 +172,9 @@ const Map<Genre, Color> genreColors = {
 
 const _noSpacing = TextStyle(letterSpacing: 0);
 
-/// The app theme for [brightness].
-ThemeData buildTheme(Brightness brightness) {
+/// The app theme for [brightness]. [fontFamilyFallback], when given, is the fallback of every text of the theme: on the
+/// web, the fonts of the rare characters (see `fontFallbackProvider` in `ui/font_warm_up.dart`).
+ThemeData buildTheme(Brightness brightness, {List<String>? fontFamilyFallback}) {
   final dark = brightness == Brightness.dark;
   final scheme = dark ? darkScheme : lightScheme;
   final ong = dark ? OngColors.dark : OngColors.light;
@@ -181,7 +182,12 @@ ThemeData buildTheme(Brightness brightness) {
   // chips): without the standard density, Windows and desktop browsers would
   // shrink every control by 4 to 8 px (a "Watch" button lower than the round
   // buttons beside it).
-  final base = ThemeData(colorScheme: scheme, useMaterial3: true, visualDensity: VisualDensity.standard);
+  final base = ThemeData(
+    colorScheme: scheme,
+    useMaterial3: true,
+    visualDensity: VisualDensity.standard,
+    fontFamilyFallback: fontFamilyFallback,
+  );
   final text = base.textTheme;
   return base.copyWith(
     scaffoldBackgroundColor: scheme.surface,

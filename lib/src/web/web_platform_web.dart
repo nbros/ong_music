@@ -10,6 +10,8 @@ import '../logger.dart';
 import 'browser_history.dart';
 import 'browser_history_web.dart';
 import 'embedded_video.dart';
+import 'font_network.dart';
+import 'font_network_web.dart';
 import 'fullscreen.dart';
 import 'install_hint.dart';
 import 'link_anchor.dart';
@@ -62,6 +64,11 @@ BrowserHistory? browserHistory() => PageHistory();
 
 /// The links of the page laid over the controls that open outside addresses.
 LinkAnchors? linkAnchors() => BrowserLinkAnchors();
+
+/// Whether the browser is online, for the fonts it downloads: one for the app's lifetime.
+FontNetwork? fontNetwork() => _fontNetwork;
+
+final BrowserFontNetwork _fontNetwork = BrowserFontNetwork();
 
 /// The names of one version of the Fullscreen API.
 enum _FullscreenNames {

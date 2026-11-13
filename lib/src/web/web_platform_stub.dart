@@ -2,6 +2,7 @@ import 'dart:ui' show Color;
 
 import 'browser_history.dart';
 import 'embedded_video.dart';
+import 'font_network.dart';
 import 'fullscreen.dart';
 import 'install_hint.dart';
 import 'link_anchor.dart';
@@ -23,6 +24,9 @@ BrowserHistory? browserHistory() => null;
 /// The links of the page over the controls that open outside addresses;
 /// null outside a browser, where the controls only open them.
 LinkAnchors? linkAnchors() => null;
+
+/// Whether the browser is online, for the fonts it downloads; null outside a browser, where no font is downloaded.
+FontNetwork? fontNetwork() => null;
 
 /// Registers the fonts that the web build needs and does not get by itself.
 Future<void> loadWebFonts() async {}
