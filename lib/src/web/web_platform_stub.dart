@@ -1,8 +1,10 @@
 import 'dart:ui' show Color;
 
+import 'browser_history.dart';
 import 'embedded_video.dart';
 import 'fullscreen.dart';
 import 'install_hint.dart';
+import 'link_anchor.dart';
 
 /// The browser, or null outside a browser (native apps).
 BrowserEnvironment? currentBrowser() => null;
@@ -14,6 +16,13 @@ PageFullscreen? pageFullscreen() => null;
 /// Where videos play inside the app; null outside a browser, where they open
 /// on YouTube.
 VideoEmbedder? videoEmbedder() => null;
+
+/// The history of the browser's tab; null outside a browser.
+BrowserHistory? browserHistory() => null;
+
+/// The links of the page over the controls that open outside addresses;
+/// null outside a browser, where the controls only open them.
+LinkAnchors? linkAnchors() => null;
 
 /// Registers the fonts that the web build needs and does not get by itself.
 Future<void> loadWebFonts() async {}

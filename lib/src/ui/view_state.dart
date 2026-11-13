@@ -12,6 +12,7 @@ import 'package:material_ui/material_ui.dart';
 import '../data/catalogue.dart';
 import '../data/model.dart';
 import '../state/catalogue_state.dart';
+import 'address.dart';
 
 /// The three destinations of the navigation bar.
 enum AppTab { highlights, ongLog, about }
@@ -21,8 +22,9 @@ final selectedTabProvider = NotifierProvider<SelectedTabNotifier, AppTab>(Select
 
 /// Holds [AppTab].
 class SelectedTabNotifier extends Notifier<AppTab> {
+  /// The tab of the address the web app was opened on (Highlights in the native apps).
   @override
-  AppTab build() => AppTab.highlights;
+  AppTab build() => ref.read(initialAddressProvider).tab;
 
   /// Shows [tab].
   void select(AppTab tab) => state = tab;
@@ -55,7 +57,9 @@ class HighlightFilterNotifier extends Notifier<HighlightFilter> {
         state = HighlightFilter(query: state.query, genre: state.genre, mine: state.mine);
       }
     });
-    return const HighlightFilter();
+    // the query of the address the web app was opened on
+    final initial = ref.read(initialAddressProvider);
+    return initial.tab == AppTab.highlights ? HighlightFilter(query: initial.query) : const HighlightFilter();
   }
 
   void setQuery(String query) =>
@@ -94,7 +98,9 @@ class PlayFilterNotifier extends Notifier<PlayFilter> {
         state = PlayFilter(query: state.query, type: state.type, genre: state.genre, withVideo: state.withVideo);
       }
     });
-    return const PlayFilter();
+    // the query of the address the web app was opened on
+    final initial = ref.read(initialAddressProvider);
+    return initial.tab == AppTab.ongLog ? PlayFilter(query: initial.query) : const PlayFilter();
   }
 
   void setQuery(String query) => state = PlayFilter(
@@ -147,9 +153,24 @@ class PlayFilterNotifier extends Notifier<PlayFilter> {
   void searchOnly(String query) => state = PlayFilter(query: query);
 }
 
+/// How many searches were started from elsewhere than their field ("N in the
+/// Ong Log →", "Requested by …"): in the web app, each one is a step of the
+/// browser's history, as a tab change is, even on the same tab (typing is
+/// not; see `address.dart`).
+final searchStepsProvider = NotifierProvider<SearchStepsNotifier, int>(SearchStepsNotifier.new);
+
+/// Counts the searches of [searchStepsProvider].
+class SearchStepsNotifier extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  void add() => state++;
+}
+
 /// Opens the Ong Log on [query], without chip filter: the link shows the number
 /// of plays matching the query alone (cross-link of the Highlights search).
 void showOngLogFor(WidgetRef ref, String query) {
+  ref.read(searchStepsProvider.notifier).add();
   ref.read(playFilterProvider.notifier).searchOnly(query);
   ref.read(selectedTabProvider.notifier).select(AppTab.ongLog);
   FocusManager.instance.primaryFocus?.unfocus();
@@ -157,6 +178,7 @@ void showOngLogFor(WidgetRef ref, String query) {
 
 /// Opens the Ong Log on the requests of [name], without chip filter.
 void showRequesterInOngLog(WidgetRef ref, String name) {
+  ref.read(searchStepsProvider.notifier).add();
   ref.read(playFilterProvider.notifier).searchOnly(name);
   ref.read(selectedTabProvider.notifier).select(AppTab.ongLog);
   FocusManager.instance.primaryFocus?.unfocus();

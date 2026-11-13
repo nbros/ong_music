@@ -462,6 +462,9 @@ class PlayTypeIcon extends StatelessWidget {
 class VideoPill extends StatelessWidget {
   const VideoPill({super.key, required this.onPressed});
 
+  /// What screen readers call it.
+  static const label = 'Watch the video';
+
   final VoidCallback onPressed;
 
   @override
@@ -471,7 +474,7 @@ class VideoPill extends StatelessWidget {
     return Semantics(
       container: true,
       button: true,
-      label: 'Watch the video',
+      label: label,
       onTap: onPressed,
       excludeSemantics: true,
       // no tooltip: the label is for screen readers

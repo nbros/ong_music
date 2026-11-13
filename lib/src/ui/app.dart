@@ -11,6 +11,7 @@ import '../state/catalogue_state.dart';
 import '../state/settings_state.dart';
 import '../web/web_platform.dart';
 import 'about_page.dart';
+import 'address.dart';
 import 'detail_pane.dart';
 import 'highlights_page.dart';
 import 'install_banner.dart';
@@ -60,6 +61,13 @@ class OngMusicApp extends ConsumerStatefulWidget {
 class _OngMusicAppState extends ConsumerState<OngMusicApp> {
   late final AppLifecycleListener _lifecycle;
 
+  // the address of the web app (the native apps go through the same router, and report nothing)
+  late final _addressBar = AddressBar(
+    history: ref.read(browserHistoryProvider),
+    initial: ref.read(initialAddressProvider),
+  );
+  late final _router = AppRouterDelegate(ref: ref, bar: _addressBar, shell: const AppShell());
+
   @override
   void initState() {
     super.initState();
@@ -77,6 +85,8 @@ class _OngMusicAppState extends ConsumerState<OngMusicApp> {
   @override
   void dispose() {
     _lifecycle.dispose();
+    _router.dispose();
+    _addressBar.dispose();
     super.dispose();
   }
 
@@ -84,7 +94,7 @@ class _OngMusicAppState extends ConsumerState<OngMusicApp> {
   Widget build(BuildContext context) {
     // start loading the catalogue at once, whatever the first tab
     ref.watch(catalogueProvider.select((s) => s.hasData));
-    return MaterialApp(
+    return MaterialApp.router(
       title: 'Ong Music',
       debugShowCheckedModeBanner: false,
       themeMode: ref.watch(themePreferenceProvider).themeMode,
@@ -95,7 +105,9 @@ class _OngMusicAppState extends ConsumerState<OngMusicApp> {
             ? MediaQuery(data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true), child: child!)
             : child!,
       ),
-      home: const AppShell(),
+      routerDelegate: _router,
+      routeInformationParser: const AppAddressParser(),
+      routeInformationProvider: _addressBar,
     );
   }
 }

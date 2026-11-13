@@ -7,9 +7,13 @@ import 'package:flutter/services.dart';
 import 'package:web/web.dart' as web;
 
 import '../logger.dart';
+import 'browser_history.dart';
+import 'browser_history_web.dart';
 import 'embedded_video.dart';
 import 'fullscreen.dart';
 import 'install_hint.dart';
+import 'link_anchor.dart';
+import 'link_anchor_web.dart';
 import 'youtube_web.dart';
 
 /// The browser, or null outside a browser (native apps).
@@ -52,6 +56,12 @@ PageFullscreen? pageFullscreen() {
 
 /// Where videos play inside the app: YouTube's embedded player.
 VideoEmbedder? videoEmbedder() => YouTubeEmbedder();
+
+/// The history of the tab.
+BrowserHistory? browserHistory() => PageHistory();
+
+/// The links of the page laid over the controls that open outside addresses.
+LinkAnchors? linkAnchors() => BrowserLinkAnchors();
 
 /// The names of one version of the Fullscreen API.
 enum _FullscreenNames {

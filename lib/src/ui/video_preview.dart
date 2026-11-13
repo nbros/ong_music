@@ -12,6 +12,7 @@ import '../data/model.dart';
 import '../web/embedded_video.dart';
 import '../web/web_platform.dart';
 import 'actions.dart';
+import 'outside_link.dart';
 import 'sheets.dart';
 import 'theme.dart';
 import 'view_state.dart';
@@ -304,16 +305,21 @@ class _Refused extends ConsumerWidget {
                   style: TextStyle(fontSize: 14, height: 20 / 14, color: Colors.white),
                 ),
               ),
-              FilledButton.icon(
-                onPressed: () => openVideo(context, ref, highlight),
-                style: FilledButton.styleFrom(
-                  backgroundColor: ong.brand,
-                  foregroundColor: ong.onBrand,
-                  minimumSize: const Size(0, 40),
-                  textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+              // no link of the page over the player: the player is gone when this shows
+              VideoLink(
+                highlight: highlight,
+                label: 'Watch on YouTube',
+                builder: (context, open) => FilledButton.icon(
+                  onPressed: open,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: ong.brand,
+                    foregroundColor: ong.onBrand,
+                    minimumSize: const Size(0, 40),
+                    textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                  ),
+                  icon: const Icon(Icons.open_in_new, size: 18),
+                  label: const Text('Watch on YouTube'),
                 ),
-                icon: const Icon(Icons.open_in_new, size: 18),
-                label: const Text('Watch on YouTube'),
               ),
             ],
           ),

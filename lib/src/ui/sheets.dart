@@ -21,6 +21,7 @@ import '../state/settings_state.dart';
 import 'actions.dart';
 import 'format.dart';
 import 'layout.dart';
+import 'outside_link.dart';
 import 'rows.dart';
 import 'theme.dart';
 import 'video_preview.dart';
@@ -570,16 +571,20 @@ class HighlightSheet extends ConsumerWidget {
                     children: [
                       Expanded(
                         child: hasVideo
-                            ? FilledButton.icon(
-                                onPressed: () => openVideo(context, ref, h),
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: ong.brand,
-                                  foregroundColor: ong.onBrand,
-                                  minimumSize: const Size(0, 40),
-                                  textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                            ? VideoLink(
+                                highlight: h,
+                                label: 'Watch on YouTube',
+                                builder: (context, open) => FilledButton.icon(
+                                  onPressed: open,
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: ong.brand,
+                                    foregroundColor: ong.onBrand,
+                                    minimumSize: const Size(0, 40),
+                                    textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                                  ),
+                                  icon: const Icon(Icons.play_arrow, size: 20),
+                                  label: const Text('Watch on YouTube'),
                                 ),
-                                icon: const Icon(Icons.play_arrow, size: 20),
-                                label: const Text('Watch on YouTube'),
                               )
                             : FilledButton.tonal(
                                 onPressed: null,
@@ -742,27 +747,32 @@ class SongSheet extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   for (final v in videos)
-                    Semantics(
-                      button: true,
+                    VideoLink(
+                      highlight: v,
                       label: 'Video of ${formatShortDate(v.date, currentYear: year)}',
-                      // the ink well's own action goes with its semantics
-                      onTap: () => _openVideoOrSheet(context, ref, catalogue, v),
-                      excludeSemantics: true,
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(10),
-                        onTap: () => _openVideoOrSheet(context, ref, catalogue, v),
-                        child: SizedBox(
-                          width: 150,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Thumbnail(youtubeId: v.youtubeId, width: 150),
-                              const SizedBox(height: 2),
-                              Text(
-                                formatShortDate(v.date, currentYear: year),
-                                style: TextStyle(fontSize: 12, height: 16 / 12, color: on3),
-                              ),
-                            ],
+                      onOpen: () => _openVideoOrSheet(context, ref, catalogue, v),
+                      builder: (context, open) => Semantics(
+                        button: true,
+                        label: 'Video of ${formatShortDate(v.date, currentYear: year)}',
+                        // the ink well's own action goes with its semantics
+                        onTap: open,
+                        excludeSemantics: true,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(10),
+                          onTap: open,
+                          child: SizedBox(
+                            width: 150,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Thumbnail(youtubeId: v.youtubeId, width: 150),
+                                const SizedBox(height: 2),
+                                Text(
+                                  formatShortDate(v.date, currentYear: year),
+                                  style: TextStyle(fontSize: 12, height: 16 / 12, color: on3),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),

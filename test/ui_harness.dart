@@ -15,16 +15,20 @@ import 'package:ong_music/src/state/settings_state.dart';
 import 'package:ong_music/src/state/twitch_state.dart';
 import 'package:ong_music/src/ui/about_page.dart';
 import 'package:ong_music/src/ui/actions.dart';
+import 'package:ong_music/src/ui/address.dart';
 import 'package:ong_music/src/ui/app.dart';
 import 'package:ong_music/src/ui/fullscreen_button.dart';
 import 'package:ong_music/src/ui/install_banner.dart';
 import 'package:ong_music/src/ui/layout.dart';
 import 'package:ong_music/src/ui/nav_rail.dart';
+import 'package:ong_music/src/ui/outside_link.dart';
 import 'package:ong_music/src/ui/video_preview.dart';
 import 'package:ong_music/src/ui/widgets.dart';
 import 'package:ong_music/src/web/embedded_video.dart';
 import 'package:ong_music/src/web/fullscreen.dart';
+import 'package:ong_music/src/web/browser_history.dart';
 import 'package:ong_music/src/web/install_hint.dart';
+import 'package:ong_music/src/web/link_anchor.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'fixtures.dart';
@@ -200,6 +204,10 @@ class Effects {
 
   /// How many times the app asked the system to close it (Android back).
   int exits = 0;
+
+  /// The methods the app called on the navigation channel (the address of
+  /// the web app).
+  final navigation = <String>[];
 }
 
 /// The running test app.
@@ -224,6 +232,11 @@ class TestApp {
 ///
 /// Videos open on YouTube, as in the native apps, unless [videos] plays them
 /// in place, as the web app does.
+///
+/// The app has no address, as the native apps, unless [browser] gives it the
+/// browser's address bar and history, as in the web app (it starts on
+/// [FakeBrowser.address]); its controls opening outside addresses are links
+/// of the page only with [links].
 Future<TestApp> pumpApp(
   WidgetTester tester, {
   CatalogueState? state,
@@ -239,6 +252,8 @@ Future<TestApp> pumpApp(
   PageFullscreen? fullscreen,
   PointerKind? pointer,
   VideoEmbedder? videos,
+  FakeBrowser? browser,
+  LinkAnchors? links,
 }) async {
   // before the size: setting it makes MediaQuery read the clock format again
   tester.platformDispatcher.alwaysUse24HourFormatTestValue = alwaysUse24HourFormat;
@@ -264,6 +279,16 @@ Future<TestApp> pumpApp(
     return null;
   });
   addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, null));
+  tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.navigation, (call) async {
+    effects.navigation.add(call.method);
+    return browser?._handle(call);
+  });
+  addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.navigation, null));
+  if (browser != null) {
+    browser._tester = tester;
+    tester.platformDispatcher.defaultRouteNameTestValue = browser.address;
+    addTearDown(tester.platformDispatcher.clearDefaultRouteNameTestValue);
+  }
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
@@ -275,6 +300,8 @@ Future<TestApp> pumpApp(
         startsInBackgroundProvider.overrideWithValue(startsInBackground),
         pageFullscreenProvider.overrideWithValue(fullscreen),
         videoEmbedderProvider.overrideWithValue(videos),
+        browserHistoryProvider.overrideWithValue(browser),
+        linkAnchorsProvider.overrideWithValue(links),
         if (pointer != null) pointerProvider.overrideWith(() => PinnedPointer(pointer)),
         thumbnailImageProvider.overrideWithValue((url) => MemoryImage(transparentPng)),
         urlOpenerProvider.overrideWithValue((uri) async {
@@ -297,6 +324,161 @@ Future<TestApp> pumpApp(
     await tester.pump(const Duration(milliseconds: 100));
   }
   return TestApp(notifier, effects, preferences, twitchApi);
+}
+
+/// The browser's address bar and history, as the web app sees them through
+/// the engine (multi-entry history, hash addresses) and [BrowserHistory]: its
+/// steps, from the first one, [start], and the one on screen.
+class FakeBrowser implements BrowserHistory {
+  FakeBrowser([String start = '/']) : steps = [start], overs = [0];
+
+  /// The addresses of the steps, as the app reports them (the part after `#`).
+  final List<String> steps;
+
+  /// For each step, how many things open over the page it stands for.
+  final List<int> overs;
+
+  /// The step on screen.
+  int index = 0;
+
+  /// Every address the app wrote, in order: `push /log`, `replace /log?q=a`,
+  /// `push /log +1` (a step for a sheet over the page).
+  final writes = <String>[];
+
+  /// Every move the app asked for (`go(-1)`).
+  final moves = <int>[];
+
+  /// Whether the app asked for a history of several steps.
+  bool multiEntry = false;
+
+  /// Whether Back went past the app's first step: the visitor left the site.
+  bool left = false;
+
+  late WidgetTester _tester;
+
+  /// The address on screen.
+  String get address => steps[index];
+
+  /// The steps, each with what it stands for over the page: `/log`, `/log +1`.
+  List<String> get history => [for (var i = 0; i < steps.length; i++) _named(i)];
+
+  String _named(int i) => overs[i] == 0 ? steps[i] : '${steps[i]} +${overs[i]}';
+
+  @override
+  ({int position, int over}) get current => (position: index, over: overs[index]);
+
+  /// The browser moves a moment later, and says so.
+  @override
+  void go(int delta) {
+    moves.add(delta);
+    Timer.run(() {
+      final to = index + delta;
+      if (to < 0) {
+        left = true;
+        return;
+      }
+      if (to >= steps.length) return;
+      _send(to);
+    });
+  }
+
+  Future<Object?> _handle(MethodCall call) async {
+    switch (call.method) {
+      case 'selectMultiEntryHistory':
+        multiEntry = true;
+      case 'selectSingleEntryHistory':
+        multiEntry = false;
+      case 'routeInformationUpdated':
+        final arguments = call.arguments as Map;
+        final uri = arguments['uri'] as String;
+        final over = overOfState(arguments['state']);
+        final replace = arguments['replace'] as bool;
+        if (replace) {
+          steps[index] = uri;
+          overs[index] = over;
+        } else {
+          steps
+            ..removeRange(index + 1, steps.length)
+            ..add(uri);
+          overs
+            ..removeRange(index + 1, overs.length)
+            ..add(over);
+          index++;
+        }
+        writes.add('${replace ? 'replace' : 'push'} ${_named(index)}');
+    }
+    return null;
+  }
+
+  /// The browser's Back button (a swipe back, the system Back of a phone).
+  Future<void> back() async {
+    if (index == 0) {
+      left = true;
+      return;
+    }
+    await _go(index - 1);
+  }
+
+  /// The browser's Forward button.
+  Future<void> forward() async {
+    if (index + 1 < steps.length) await _go(index + 1);
+  }
+
+  /// An address typed in the bar (or a link of another page to the app) while
+  /// the app runs: a new step.
+  Future<void> type(String location) async {
+    steps
+      ..removeRange(index + 1, steps.length)
+      ..add(location);
+    overs
+      ..removeRange(index + 1, overs.length)
+      ..add(0);
+    await _go(steps.length - 1);
+  }
+
+  Future<void> _go(int step) async {
+    await _send(step);
+    await settle(_tester);
+  }
+
+  Future<void> _send(int step) {
+    index = step;
+    return _tester.binding.defaultBinaryMessenger.handlePlatformMessage(
+      SystemChannels.navigation.name,
+      SystemChannels.navigation.codec.encodeMethodCall(
+        MethodCall('pushRouteInformation', {
+          'location': steps[step],
+          'state': overs[step] == 0 ? null : {'over': overs[step]},
+        }),
+      ),
+      (_) {},
+    );
+  }
+}
+
+/// Lets the app and the browser catch up: frames, and the moves of the
+/// history (a moment later each).
+Future<void> settle(WidgetTester tester) async {
+  for (var i = 0; i < 4; i++) {
+    await tester.pump();
+    await tester.pumpAndSettle();
+  }
+}
+
+/// [LinkAnchors] drawing each link as a [FakeAnchor].
+class FakeLinkAnchors implements LinkAnchors {
+  @override
+  Widget anchor(Uri uri) => FakeAnchor(uri: uri);
+}
+
+/// The link of the page of [FakeLinkAnchors]: nothing to see.
+class FakeAnchor extends StatelessWidget {
+  const FakeAnchor({super.key, required this.uri});
+
+  final Uri uri;
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.expand();
 }
 
 /// A pointer that stays [kind] whatever the pointer events.
@@ -492,7 +674,8 @@ class FakeVideo implements EmbeddedVideo {
 
   @override
   void dispose() {
-    expect(disposed, isFalse, reason: 'disposed twice');
+    // synchronous: a video may stop while the test pumps (a move of the browser's history)
+    expectSync(disposed, isFalse, reason: 'disposed twice');
     disposed = true;
   }
 }

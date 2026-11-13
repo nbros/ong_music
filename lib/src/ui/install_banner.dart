@@ -10,6 +10,7 @@ import '../state/settings_state.dart';
 import '../web/install_hint.dart';
 import '../web/web_platform.dart';
 import 'actions.dart';
+import 'outside_link.dart';
 import 'theme.dart';
 
 /// The Google Play page of the Android app.
@@ -250,11 +251,16 @@ class _HintBody extends ConsumerWidget {
         else if (hint.kind == InstallHintKind.playStore)
           Align(
             alignment: AlignmentDirectional.centerStart,
-            child: TextButton.icon(
-              style: TextButton.styleFrom(foregroundColor: color, padding: const EdgeInsets.symmetric(horizontal: 8)),
-              onPressed: () => openLink(context, ref, playStoreUrl),
-              icon: Icon(Icons.open_in_new, size: 18, color: on3),
-              label: const Text('Open the Play Store'),
+            child: OutsideLink(
+              url: playStoreUrl,
+              label: 'Open the Play Store',
+              onOpen: () => openLink(context, ref, playStoreUrl),
+              builder: (context, open) => TextButton.icon(
+                style: TextButton.styleFrom(foregroundColor: color, padding: const EdgeInsets.symmetric(horizontal: 8)),
+                onPressed: open,
+                icon: Icon(Icons.open_in_new, size: 18, color: on3),
+                label: const Text('Open the Play Store'),
+              ),
             ),
           )
         else

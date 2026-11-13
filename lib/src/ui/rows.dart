@@ -10,6 +10,7 @@ import 'package:material_ui/material_ui.dart';
 import '../data/catalogue.dart';
 import '../data/model.dart';
 import 'format.dart';
+import 'outside_link.dart';
 import 'theme.dart';
 import 'widgets.dart';
 
@@ -65,7 +66,7 @@ class HighlightRow extends StatelessWidget {
     final onThumbnail = h.youtubeId == null ? null : this.onThumbnail;
     final thumbnail = onThumbnail == null
         ? Thumbnail(youtubeId: h.youtubeId, width: ListMetrics.thumbnailWidth, label: '#${h.seq}')
-        : _ThumbnailLink(youtubeId: h.youtubeId!, label: '#${h.seq}', onTap: onThumbnail);
+        : _ThumbnailLink(youtubeId: h.youtubeId!, url: h.url, label: '#${h.seq}', onTap: onThumbnail);
     final artist = h.artist;
     final requester = catalogue.requester(h.requesterId);
     final date = formatShortDate(h.date, currentYear: currentYear);
@@ -190,9 +191,12 @@ class _SelectableInk extends StatelessWidget {
 /// expanded window: on hover, a veil and an "open" badge over it. For the eye
 /// and the mouse only: screen readers have the row, and the fiche.
 class _ThumbnailLink extends StatefulWidget {
-  const _ThumbnailLink({required this.youtubeId, required this.label, required this.onTap});
+  const _ThumbnailLink({required this.youtubeId, required this.url, required this.label, required this.onTap});
 
   final String youtubeId;
+
+  /// The address of the video, for the browser (web app).
+  final String url;
   final String label;
   final VoidCallback onTap;
 
@@ -209,26 +213,33 @@ class _ThumbnailLinkState extends State<_ThumbnailLink> {
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: Thumbnail(
-          youtubeId: widget.youtubeId,
-          width: ListMetrics.thumbnailWidth,
-          label: widget.label,
-          overlay: _hovered
-              ? const ColoredBox(
-                  color: Color(0x77000000),
-                  child: Center(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(color: Color(0xAA000000), shape: BoxShape.circle),
-                      child: SizedBox.square(
-                        dimension: 36,
-                        child: Icon(Icons.open_in_new, size: 18, color: Colors.white),
+      child: OutsideLink(
+        url: widget.url,
+        // unsaid: screen readers have the row, and the fiche
+        label: '',
+        video: true,
+        onOpen: widget.onTap,
+        builder: (context, open) => GestureDetector(
+          onTap: open,
+          child: Thumbnail(
+            youtubeId: widget.youtubeId,
+            width: ListMetrics.thumbnailWidth,
+            label: widget.label,
+            overlay: _hovered
+                ? const ColoredBox(
+                    color: Color(0x77000000),
+                    child: Center(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(color: Color(0xAA000000), shape: BoxShape.circle),
+                        child: SizedBox.square(
+                          dimension: 36,
+                          child: Icon(Icons.open_in_new, size: 18, color: Colors.white),
+                        ),
                       ),
                     ),
-                  ),
-                )
-              : null,
+                  )
+                : null,
+          ),
         ),
       ),
     ),
@@ -335,7 +346,12 @@ class PlayRow extends StatelessWidget {
               ),
             ),
             if (video != null && video.youtubeId != null)
-              VideoPill(onPressed: () => onVideo(video))
+              VideoLink(
+                highlight: video,
+                label: VideoPill.label,
+                onOpen: () => onVideo(video),
+                builder: (context, open) => VideoPill(onPressed: open),
+              )
             else
               const SizedBox(width: 6),
             const SizedBox(width: 6),
@@ -537,7 +553,13 @@ class HistoryRow extends StatelessWidget {
                   ],
                 ),
               ),
-              if (video != null && video.youtubeId != null) VideoPill(onPressed: () => onVideo(video)),
+              if (video != null && video.youtubeId != null)
+                VideoLink(
+                  highlight: video,
+                  label: VideoPill.label,
+                  onOpen: () => onVideo(video),
+                  builder: (context, open) => VideoPill(onPressed: open),
+                ),
               const SizedBox(width: 6),
               PlayTypeIcon(p.type),
             ],

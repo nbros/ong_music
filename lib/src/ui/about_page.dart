@@ -17,6 +17,7 @@ import 'format.dart';
 import 'install_banner.dart';
 import 'layout.dart';
 import 'list_scaffold.dart';
+import 'outside_link.dart';
 import 'theme.dart';
 import 'view_state.dart';
 import 'widgets.dart';
@@ -104,11 +105,16 @@ class AboutPage extends ConsumerWidget {
                 for (final (label, url, icon) in aboutLinks)
                   SizedBox(
                     width: width,
-                    child: _LinkTile(
+                    child: OutsideLink(
+                      url: url,
                       label: label,
-                      icon: icon(context),
-                      color: expanded ? scheme.surfaceContainerHigh : scheme.surfaceContainer,
-                      onTap: () => openLink(context, ref, url),
+                      onOpen: () => openLink(context, ref, url),
+                      builder: (context, open) => _LinkTile(
+                        label: label,
+                        icon: icon(context),
+                        color: expanded ? scheme.surfaceContainerHigh : scheme.surfaceContainer,
+                        onTap: open,
+                      ),
                     ),
                   ),
               ],
@@ -344,23 +350,28 @@ class _TwitchSectionState extends ConsumerState<_TwitchSection> {
     final ong = OngColors.of(context);
     return Column(
       children: [
-        FilledButton.icon(
-          onPressed: () => openLink(context, ref, twitchUrl),
-          style: FilledButton.styleFrom(
-            backgroundColor: ong.brand,
-            foregroundColor: ong.onBrand,
-            padding: const EdgeInsets.fromLTRB(16, 0, 20, 0),
-            textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+        OutsideLink(
+          url: twitchUrl,
+          label: live ? 'Watch live on Twitch' : 'Watch on Twitch',
+          onOpen: () => openLink(context, ref, twitchUrl),
+          builder: (context, open) => FilledButton.icon(
+            onPressed: open,
+            style: FilledButton.styleFrom(
+              backgroundColor: ong.brand,
+              foregroundColor: ong.onBrand,
+              padding: const EdgeInsets.fromLTRB(16, 0, 20, 0),
+              textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+            ),
+            icon: VectorGraphic(
+              loader: const AssetBytesLoader('assets/icons/twitch.svg'),
+              width: 20,
+              height: 20,
+              // decoration: without this the button is announced as an image
+              excludeFromSemantics: true,
+              colorFilter: ColorFilter.mode(ong.onBrand, BlendMode.srcIn),
+            ),
+            label: Text(live ? 'Watch live on Twitch' : 'Watch on Twitch'),
           ),
-          icon: VectorGraphic(
-            loader: const AssetBytesLoader('assets/icons/twitch.svg'),
-            width: 20,
-            height: 20,
-            // decoration: without this the button is announced as an image
-            excludeFromSemantics: true,
-            colorFilter: ColorFilter.mode(ong.onBrand, BlendMode.srcIn),
-          ),
-          label: Text(live ? 'Watch live on Twitch' : 'Watch on Twitch'),
         ),
         // The line keeps its place while nothing is known yet (the answers come a moment after the tab
         // opens): what is below must not move when it appears.
@@ -709,6 +720,12 @@ class _Footer extends ConsumerWidget {
         ),
       ),
     );
+    Widget outsideLink(String label, String url) => OutsideLink(
+      url: url,
+      label: label,
+      onOpen: () => openLink(context, ref, url),
+      builder: (context, open) => link(label, open),
+    );
     return Padding(
       padding: EdgeInsets.fromLTRB(16, top, 16, 20),
       child: Column(
@@ -719,9 +736,9 @@ class _Footer extends ConsumerWidget {
             alignment: WrapAlignment.center,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              link('Privacy policy', () => openLink(context, ref, privacyPolicyUrl)),
+              outsideLink('Privacy policy', privacyPolicyUrl),
               Text(' · ', style: style),
-              link('Community spreadsheet', () => openLink(context, ref, spreadsheetUrl)),
+              outsideLink('Community spreadsheet', spreadsheetUrl),
               Text(' · ', style: style),
               // the open source software the app is made with, and its licences
               link(
