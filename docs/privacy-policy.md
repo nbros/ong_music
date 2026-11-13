@@ -14,7 +14,7 @@ This policy applies to all versions of **Ong Music**: Android, Windows and the w
 Since **Ong Music** does not collect any personal data, there is no data collection process in place.
 
 ## Data downloaded by the app
-**Ong Music** downloads public data from Google Sheets, and video thumbnails from YouTube. Like when you visit any website, these servers see the request (for example your IP address). The app adds no identifier to these requests. The web version also downloads fonts from Google Fonts (fonts.gstatic.com), only when a title contains characters its own fonts lack, such as Japanese, Chinese, Korean or Arabic characters, some symbols, or emoji.
+**Ong Music** downloads public data from Google Sheets, and video thumbnails from YouTube. Like when you visit any website, these servers see the request (for example your IP address). The app adds no identifier to these requests. The web version also downloads fonts from Google Fonts (fonts.googleapis.com and fonts.gstatic.com) for the characters its own fonts lack, such as Japanese, Chinese, Korean or Arabic characters, some symbols, or emoji. Shortly after it opens, it asks for fonts limited to the characters the catalogue uses, and sends Google the list of those characters, which come from the public data.
 
 The web version, this site and the Windows download are served by GitHub (GitHub Pages and GitHub Releases), which sees these requests in the same way.
 

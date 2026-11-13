@@ -18,6 +18,7 @@ import 'package:ong_music/src/ui/about_page.dart';
 import 'package:ong_music/src/ui/actions.dart';
 import 'package:ong_music/src/ui/address.dart';
 import 'package:ong_music/src/ui/app.dart';
+import 'package:ong_music/src/ui/font_warm_up.dart';
 import 'package:ong_music/src/ui/fullscreen_button.dart';
 import 'package:ong_music/src/ui/install_banner.dart';
 import 'package:ong_music/src/ui/layout.dart';
@@ -28,6 +29,7 @@ import 'package:ong_music/src/ui/widgets.dart';
 import 'package:ong_music/src/web/embedded_video.dart';
 import 'package:ong_music/src/web/fullscreen.dart';
 import 'package:ong_music/src/web/browser_history.dart';
+import 'package:ong_music/src/web/font_network.dart';
 import 'package:ong_music/src/web/install_hint.dart';
 import 'package:ong_music/src/web/link_anchor.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -241,6 +243,12 @@ class TestApp {
 /// browser's address bar and history, as in the web app (it starts on
 /// [FakeBrowser.address]); its controls opening outside addresses are links
 /// of the page only with [links].
+///
+/// No font of rare characters is downloaded, as in the native apps, unless
+/// [fontNetwork] is given, as in the web app: [fontKitDownload] then answers
+/// the downloads (default: none ends), [fontKitRegistration] receives the
+/// registrations, and [fontPause] lets the collection of the characters go on
+/// (default: a timer of zero).
 Future<TestApp> pumpApp(
   WidgetTester tester, {
   CatalogueState? state,
@@ -259,6 +267,10 @@ Future<TestApp> pumpApp(
   VideoEmbedder? videos,
   FakeBrowser? browser,
   LinkAnchors? links,
+  FontNetwork? fontNetwork,
+  FontKitDownload? fontKitDownload,
+  FontKitRegistration? fontKitRegistration,
+  Future<void> Function()? fontPause,
 }) async {
   // before the size: setting it makes MediaQuery read the clock format again
   tester.platformDispatcher.alwaysUse24HourFormatTestValue = alwaysUse24HourFormat;
@@ -308,6 +320,10 @@ Future<TestApp> pumpApp(
         videoEmbedderProvider.overrideWithValue(videos),
         browserHistoryProvider.overrideWithValue(browser),
         linkAnchorsProvider.overrideWithValue(links),
+        fontNetworkProvider.overrideWithValue(fontNetwork),
+        fontKitDownloadProvider.overrideWithValue(fontKitDownload ?? (kit) => Completer<Uint8List>().future),
+        fontKitRegistrationProvider.overrideWithValue(fontKitRegistration ?? (fonts) async {}),
+        fontWarmUpPauseProvider.overrideWithValue(fontPause ?? () => Future<void>.delayed(Duration.zero)),
         if (pointer != null) pointerProvider.overrideWith(() => PinnedPointer(pointer)),
         thumbnailImageProvider.overrideWithValue((url) => MemoryImage(transparentPng)),
         urlOpenerProvider.overrideWithValue((uri) async {
