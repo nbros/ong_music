@@ -92,6 +92,20 @@ final class GroupedListLayout {
     return lo;
   }
 
+  /// The item index of row [row].
+  int itemOfRow(int row) {
+    var lo = 0, hi = groupCount - 1;
+    while (lo < hi) {
+      final mid = (lo + hi + 1) >> 1;
+      if (groupStarts[mid] <= row) {
+        lo = mid;
+      } else {
+        hi = mid - 1;
+      }
+    }
+    return row + lo + 1;
+  }
+
   /// Whether item [item] is a header.
   bool isHeader(int item) => headerItem(groupOfItem(item)) == item;
 

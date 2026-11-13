@@ -115,6 +115,11 @@ class AppLayout extends ConsumerWidget {
       InheritedModel.inheritFrom<_LayoutScope>(context, aspect: _Aspect.mode)?.mode ??
       WindowMode.of(MediaQuery.sizeOf(context));
 
+  /// [modeOf] without making [context] depend on it: for event handlers.
+  static WindowMode readModeOf(BuildContext context) =>
+      context.getInheritedWidgetOfExactType<_LayoutScope>()?.mode ??
+      WindowMode.of(MediaQuery.maybeSizeOf(context) ?? Size.zero);
+
   /// The pointer ([PointerKind.guess] without an [AppLayout] above).
   static PointerKind pointerOf(BuildContext context) =>
       InheritedModel.inheritFrom<_LayoutScope>(context, aspect: _Aspect.pointer)?.pointer ?? PointerKind.guess;

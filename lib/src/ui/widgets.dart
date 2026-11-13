@@ -89,6 +89,66 @@ final class ListMetrics {
   static double _max(double a, double b) => a > b ? a : b;
 }
 
+// ------------------------------------------------------------------ selection
+
+/// The shape of the selection and hover states of a list row in an expanded
+/// window: a rounded rectangle [insets] inside the row. Drawn inside the row,
+/// it moves and resizes nothing.
+class InsetRoundedBorder extends ShapeBorder {
+  const InsetRoundedBorder({required this.insets, required this.radius});
+
+  /// A row of a list: 8 px in from each side.
+  static const row = InsetRoundedBorder(insets: EdgeInsets.symmetric(horizontal: 8), radius: 14);
+
+  /// A stream header: 8 px in from each side, 4 from the top.
+  static const header = InsetRoundedBorder(insets: EdgeInsets.fromLTRB(8, 4, 8, 0), radius: 10);
+
+  final EdgeInsets insets;
+  final double radius;
+
+  @override
+  EdgeInsetsGeometry get dimensions => EdgeInsets.zero;
+
+  RRect _rrect(Rect rect) => RRect.fromRectAndRadius(insets.deflateRect(rect), Radius.circular(radius));
+
+  @override
+  Path getOuterPath(Rect rect, {TextDirection? textDirection}) => Path()..addRRect(_rrect(rect));
+
+  @override
+  Path getInnerPath(Rect rect, {TextDirection? textDirection}) => getOuterPath(rect);
+
+  @override
+  void paint(Canvas canvas, Rect rect, {TextDirection? textDirection}) {}
+
+  @override
+  bool get preferPaintInterior => true;
+
+  @override
+  void paintInterior(Canvas canvas, Rect rect, Paint paint, {TextDirection? textDirection}) =>
+      canvas.drawRRect(_rrect(rect), paint);
+
+  @override
+  ShapeBorder scale(double t) => InsetRoundedBorder(insets: insets * t, radius: radius * t);
+
+  @override
+  bool operator ==(Object other) => other is InsetRoundedBorder && other.insets == insets && other.radius == radius;
+
+  @override
+  int get hashCode => Object.hash(insets, radius);
+}
+
+/// The tint of a selected row: `primary` at 16 % (the tint of the play a
+/// setlist was opened from).
+Color selectedRowColor(BuildContext context) => Theme.of(context).colorScheme.primary.withValues(alpha: 0.16);
+
+/// The hover state of a row in an expanded window: `onSurface` at 6 %.
+Color hoveredRowColor(BuildContext context) => Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.06);
+
+/// Whether the keyboard focus is in a text field: keys that type there are
+/// not shortcuts then.
+bool isEditingText() =>
+    FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<EditableText>() != null;
+
 // ------------------------------------------------------------------ text
 
 /// The spans of [text] with the hits of [tokens] (see `matchRanges`) marked:
@@ -451,6 +511,7 @@ class Thumbnail extends ConsumerWidget {
     this.big = false,
     this.radius = 10,
     this.label,
+    this.overlay,
   });
 
   final String? youtubeId;
@@ -462,6 +523,9 @@ class Thumbnail extends ConsumerWidget {
 
   /// Shown in the bottom left corner (`#1952`).
   final String? label;
+
+  /// Drawn over the image, under [label].
+  final Widget? overlay;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -497,36 +561,42 @@ class Thumbnail extends ConsumerWidget {
       );
     }
     final label = this.label;
+    final overlay = this.overlay;
     return ClipRRect(
       borderRadius: BorderRadius.circular(radius),
       child: Container(
         width: width,
         height: height,
         color: ong.thumbnail,
-        child: label == null
+        child: label == null && overlay == null
             ? content
             : Stack(
                 fit: StackFit.expand,
                 children: [
                   content,
-                  Positioned(
-                    left: 4,
-                    bottom: 4,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      decoration: BoxDecoration(color: const Color(0xBB000000), borderRadius: BorderRadius.circular(4)),
-                      child: Text(
-                        label,
-                        textScaler: TextScaler.noScaling,
-                        style: const TextStyle(
-                          fontSize: 10,
-                          height: 1.4,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.white,
+                  ?overlay,
+                  if (label != null)
+                    Positioned(
+                      left: 4,
+                      bottom: 4,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xBB000000),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          label,
+                          textScaler: TextScaler.noScaling,
+                          style: const TextStyle(
+                            fontSize: 10,
+                            height: 1.4,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.white,
+                          ),
                         ),
                       ),
                     ),
-                  ),
                 ],
               ),
       ),
@@ -1185,11 +1255,15 @@ class EmptyMessage extends StatelessWidget {
 /// as it always has on phones. The pointer may change while the user scrolls:
 /// the same widgets either way, the scroll position stays.
 class LaneScrollbar extends StatelessWidget {
-  const LaneScrollbar({super.key, this.controller, this.interactive, required this.child});
+  const LaneScrollbar({super.key, this.controller, this.interactive, this.ends = 0, required this.child});
 
   /// The controller of the scroll view, or null for the primary one.
   final ScrollController? controller;
   final bool? interactive;
+
+  /// Space kept free at both ends of the lane, with a mouse: clear of the
+  /// rounded corners of a card.
+  final double ends;
   final Widget child;
 
   @override
@@ -1203,6 +1277,7 @@ class LaneScrollbar extends StatelessWidget {
           ? theme.copyWith(
               thickness: const WidgetStatePropertyAll(6),
               crossAxisMargin: (scrollbarLane - 6) / 2,
+              mainAxisMargin: ends,
               radius: const Radius.circular(3),
               minThumbLength: 48,
               thumbColor: WidgetStateProperty.resolveWith(

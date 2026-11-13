@@ -1220,8 +1220,9 @@ void main() {
       });
     }
 
-    testWidgets('wide window: a list keeps a column of 720 px, centred right of the rail', (tester) async {
-      await pumpApp(tester, size: const Size(1400, 900));
+    testWidgets('wide and low window: a list keeps a column of 720 px, centred right of the rail', (tester) async {
+      // (too low for the list and detail panes of an expanded window)
+      await pumpApp(tester, size: const Size(1400, 470));
       final list = tester.getRect(find.byType(CustomScrollView).first);
       expect(list.width, 720);
       expect(list.center.dx, 80 + (1400 - 80) / 2);

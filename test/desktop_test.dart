@@ -29,10 +29,11 @@ void main() {
   }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
   testWidgets('desktop browser: the full screen button at the right of the content column', (tester) async {
-    await pumpApp(tester, fullscreen: FakeFullscreen(), size: const Size(1600, 900), pointer: PointerKind.mouse);
+    // (a medium window: an expanded one has no ⋮ buttons)
+    await pumpApp(tester, fullscreen: FakeFullscreen(), size: const Size(830, 900), pointer: PointerKind.mouse);
     // the column of 720 px in the middle of what the rail leaves; with a mouse, the button over the ⋮ buttons,
     // which the lane of the scroll bar keeps 12 px from the right edge of the column
-    const left = railWidth + (1600 - railWidth - 720) / 2, right = left + 720;
+    const left = railWidth + (830 - railWidth - 720) / 2, right = left + 720;
     for (final tab in ['Highlights', 'Ong Log']) {
       await goToTab(tester, tab);
       expectLayout(tester, left: left, right: right - scrollbarLane, column: 40, reason: tab);

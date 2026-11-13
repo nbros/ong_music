@@ -11,6 +11,7 @@ import '../state/catalogue_state.dart';
 import '../state/settings_state.dart';
 import '../web/web_platform.dart';
 import 'about_page.dart';
+import 'detail_pane.dart';
 import 'highlights_page.dart';
 import 'install_banner.dart';
 import 'layout.dart';
@@ -26,6 +27,14 @@ const double maxContentWidth = 640;
 
 /// The widest the column of a list tab is beside the navigation rail.
 const double maxListColumnWidth = 720;
+
+/// The widest the content right of the rail is in an expanded window (list
+/// and detail pane, or About): wider windows centre it.
+const double maxExpandedWidth = 1520;
+
+/// The width of the list pane of an expanded window whose content (right of
+/// the rail) is [width] wide.
+double listPaneWidth(double width) => (0.4 * width).clamp(360, 520);
 
 /// The three destinations, in the order of [AppTab].
 const List<NavDestination> _destinations = [
@@ -130,12 +139,21 @@ class _AppShellState extends ConsumerState<AppShell> {
     final dark = theme.brightness == Brightness.dark;
     final surface = theme.colorScheme.surface;
     WidgetsBinding.instance.addPostFrameCallback((_) => setBrowserTheme(background: surface, dark: dark));
-    // Android back: from another tab, go back to Highlights before leaving the app (an open sheet is a
-    // route of its own and closes first)
+    // Android back: a fiche stacked in the detail pane goes back to the one under it; then, from another tab,
+    // back to Highlights before leaving the app (an open sheet is a route of its own and closes first)
+    final stacked =
+        mode == WindowMode.expanded &&
+        tab != AppTab.about &&
+        ref.watch(detailPaneProvider(tab).select((stack) => stack.length > 1));
     return PopScope(
-      canPop: tab == AppTab.highlights,
+      canPop: tab == AppTab.highlights && !stacked,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) ref.read(selectedTabProvider.notifier).select(AppTab.highlights);
+        if (didPop) return;
+        if (stacked) {
+          ref.read(detailPaneProvider(tab).notifier).pop();
+        } else {
+          ref.read(selectedTabProvider.notifier).select(AppTab.highlights);
+        }
       },
       child: AnnotatedRegion<SystemUiOverlayStyle>(
         // on web, the engine turns statusBarColor into the page's theme-color (Safari's bars, the iOS
@@ -151,17 +169,24 @@ class _AppShellState extends ConsumerState<AppShell> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 if (rail)
-                  AppNavigationRail(
-                    destinations: _destinations,
-                    selectedIndex: tab.index,
-                    onDestinationSelected: _select,
+                  _Region(
+                    // expanded: the rail, the list pane, the detail pane, in that order for the Tab key
+                    enabled: mode == WindowMode.expanded,
+                    child: AppNavigationRail(
+                      destinations: _destinations,
+                      selectedIndex: tab.index,
+                      onDestinationSelected: _select,
+                    ),
                   ),
                 Expanded(
                   // the rail takes the safe area on the left (a camera cutout of a phone held sideways)
                   child: MediaQuery.removePadding(
                     context: context,
                     removeLeft: rail,
-                    child: SafeArea(bottom: false, child: _content(tab, rail)),
+                    child: SafeArea(
+                      bottom: false,
+                      child: mode == WindowMode.expanded ? _expandedContent(tab) : _content(tab, rail),
+                    ),
                   ),
                 ),
               ],
@@ -193,9 +218,6 @@ class _AppShellState extends ConsumerState<AppShell> {
   }
 
   /// The install banner over the tab on screen, each tab in its column.
-  ///
-  /// The place where the detail pane of an expanded window goes: today every
-  /// mode shows a single column.
   Widget _content(AppTab tab, bool rail) {
     final listWidth = rail ? maxListColumnWidth : maxContentWidth;
     return Column(
@@ -234,6 +256,74 @@ class _AppShellState extends ConsumerState<AppShell> {
       ],
     );
   }
+
+  /// An expanded window: the install banner over the tab on screen, a list
+  /// tab as a list pane and its detail pane, About across both; at most
+  /// [maxExpandedWidth] wide, centred.
+  Widget _expandedContent(AppTab tab) => LayoutBuilder(
+    builder: (context, constraints) {
+      final width = constraints.maxWidth < maxExpandedWidth ? constraints.maxWidth : maxExpandedWidth;
+      final listWidth = listPaneWidth(constraints.maxWidth);
+      return Center(
+        child: SizedBox(
+          width: width,
+          child: Column(
+            children: [
+              const InstallBanner(),
+              Expanded(
+                child: _SearchShortcut(
+                  child: IndexedStack(
+                    index: tab.index,
+                    sizing: StackFit.expand,
+                    children: [
+                      for (final t in AppTab.values)
+                        TickerMode(
+                          enabled: t == tab,
+                          child: t == AppTab.about
+                              ? KeyedSubtree(key: _pages[t], child: const AboutPage())
+                              // the list first, then the pane: the order of screen readers and of the Tab key
+                              : Row(
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  children: [
+                                    SizedBox(
+                                      width: listWidth,
+                                      child: _Region(
+                                        child: KeyedSubtree(
+                                          key: _pages[t],
+                                          child: t == AppTab.highlights ? const HighlightsPage() : const OngLogPage(),
+                                        ),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      child: _Region(child: DetailPane(tab: t)),
+                                    ),
+                                  ],
+                                ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+}
+
+/// A region of an expanded window (the rail, the list pane, the detail pane),
+/// gone through as a whole by the Tab key and by screen readers: side by side,
+/// they would otherwise be read row by row across the three.
+class _Region extends StatelessWidget {
+  const _Region({this.enabled = true, required this.child});
+
+  final bool enabled;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) =>
+      enabled ? FocusTraversalGroup(child: Semantics(container: true, explicitChildNodes: true, child: child)) : child;
 }
 
 /// A column centred and at most [maxWidth] wide.
@@ -320,8 +410,7 @@ class _SearchShortcutState extends ConsumerState<_SearchShortcut> {
         !keyboard.isAltPressed &&
         !keyboard.isShiftPressed;
     // `/` is typed as text in a text field
-    final editing = FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<EditableText>() != null;
-    final slash = event.character == '/' && !editing;
+    final slash = event.character == '/' && !isEditingText();
     if (!find && !slash) return false;
     ref.read(searchFocusProvider(tab)).requestFocus();
     return true;

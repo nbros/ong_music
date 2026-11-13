@@ -10,6 +10,7 @@ import '../state/catalogue_state.dart';
 import '../state/settings_state.dart';
 import 'actions.dart';
 import 'format.dart';
+import 'layout.dart';
 import 'list_scaffold.dart';
 import 'rows.dart';
 import 'sheets.dart';
@@ -37,6 +38,33 @@ class _HighlightsPageState extends ConsumerState<HighlightsPage> {
   void initState() {
     super.initState();
     _search = TextEditingController(text: ref.read(highlightFilterProvider).query);
+    // before the focused widget: the search field would move its cursor with the arrows
+    FocusManager.instance.addEarlyKeyEventHandler(_onKey);
+  }
+
+  /// ↑ and ↓ select the previous or next highlight, Enter starts the video of
+  /// the selected one (an expanded window).
+  KeyEventResult _onKey(KeyEvent event) {
+    if (!mounted) return KeyEventResult.ignored;
+    final key = listKeyOf(event, ref.read(searchFocusProvider(AppTab.highlights)));
+    if (key == null || !listHasKeys(context, ref, AppTab.highlights)) return KeyEventResult.ignored;
+    final stack = ref.read(detailPaneProvider(AppTab.highlights));
+    if (key == ListKey.enter) {
+      final selected = stack.firstOrNull;
+      if (selected is! HighlightFiche || selected.highlight.youtubeId == null) return KeyEventResult.ignored;
+      startVideo(context, ref, selected.highlight);
+      return KeyEventResult.handled;
+    }
+    final results = _shownResults;
+    final catalogue = _shownCatalogue;
+    if (results == null || catalogue == null || results.isEmpty) return KeyEventResult.handled;
+    final selected = selectedHighlightId(stack);
+    final index = selected == null ? -1 : results.ids.indexOf(selected);
+    // nothing selected in the list (filtered out): its first row
+    final next = index < 0 ? 0 : (index + (key == ListKey.next ? 1 : -1)).clamp(0, results.length - 1);
+    if (next != index) showHighlightSheet(context, catalogue, catalogue.highlights[results.ids[next]]);
+    revealExtent(_scroll, next * _shownRowExtent, _shownRowExtent);
+    return KeyEventResult.handled;
   }
 
   /// Keeps what is on screen there when the rows change under the same
@@ -64,6 +92,7 @@ class _HighlightsPageState extends ConsumerState<HighlightsPage> {
 
   @override
   void dispose() {
+    FocusManager.instance.removeEarlyKeyEventHandler(_onKey);
     _search.dispose();
     _scroll.dispose();
     super.dispose();
@@ -182,10 +211,31 @@ class _HighlightList extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final me = ref.watch(myRequesterKeyProvider);
     final currentYear = ref.watch(clockProvider)().toLocal().year;
+    final expanded = AppLayout.modeOf(context) == WindowMode.expanded;
+    final mouse = expanded && AppLayout.mouseOf(context);
     return SliverFixedExtentList(
       itemExtent: ListMetrics.of(context).highlightRow,
       delegate: SliverChildBuilderDelegate(childCount: results.length, (context, i) {
         final h = catalogue.highlights[results.ids[i]];
+        if (expanded) {
+          // a row shows its fiche in the pane; only the rows whose state changes are built again when the
+          // selection changes
+          return Consumer(
+            key: ValueKey(h.id),
+            builder: (context, ref, _) => HighlightRow(
+              catalogue: catalogue,
+              highlight: h,
+              tokens: results.tokens,
+              me: me,
+              currentYear: currentYear,
+              selected: ref.watch(
+                detailPaneProvider(AppTab.highlights).select((stack) => selectedHighlightId(stack) == h.id),
+              ),
+              onTap: () => showHighlightSheet(context, catalogue, h),
+              onThumbnail: mouse ? () => openVideo(context, ref, h) : null,
+            ),
+          );
+        }
         return HighlightRow(
           key: ValueKey(h.id),
           catalogue: catalogue,

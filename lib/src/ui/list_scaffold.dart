@@ -5,6 +5,7 @@ library;
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -12,7 +13,9 @@ import '../data/parser.dart';
 import '../data/sheets.dart';
 import '../state/catalogue_state.dart';
 import 'actions.dart';
+import 'layout.dart';
 import 'theme.dart';
+import 'view_state.dart';
 import 'widgets.dart';
 
 /// A download error in plain words.
@@ -95,6 +98,63 @@ void reanchorScroll(ScrollController controller, double Function(double offset) 
   final target = math.max(0.0, newOffset(offset));
   if (target != offset) position.correctBy(target - offset);
 }
+
+/// Scrolls [controller] just enough to show the extent from [top] to
+/// `top + extent`, below [inset] px at the top of the viewport (a pinned
+/// header): at once, without animation.
+void revealExtent(ScrollController controller, double top, double extent, {double inset = 0}) {
+  if (!controller.hasClients || controller.positions.length != 1) return;
+  final position = controller.position;
+  var target = position.pixels;
+  if (top - inset < target) {
+    target = top - inset;
+  } else if (top + extent > target + position.viewportDimension) {
+    target = top + extent - position.viewportDimension;
+  }
+  target = target.clamp(position.minScrollExtent, position.maxScrollExtent);
+  if (target != position.pixels) position.jumpTo(target);
+}
+
+/// What the keyboard asks of the list of a tab in an expanded window.
+enum ListKey {
+  /// ↑: the previous row.
+  previous,
+
+  /// ↓: the next row.
+  next,
+
+  /// Enter: start what the selected row holds.
+  enter,
+}
+
+/// What [event] asks of a list whose search field has [search]: ↑ and ↓
+/// outside a text field or in that search field, Enter outside a text field
+/// and any focused control (which Enter acts on); null for anything else.
+ListKey? listKeyOf(KeyEvent event, FocusNode search) {
+  if (event is! KeyDownEvent && event is! KeyRepeatEvent) return null;
+  final keyboard = HardwareKeyboard.instance;
+  if (keyboard.isShiftPressed || keyboard.isControlPressed || keyboard.isAltPressed || keyboard.isMetaPressed) {
+    return null;
+  }
+  final key = event.logicalKey;
+  if (key == LogicalKeyboardKey.arrowUp || key == LogicalKeyboardKey.arrowDown) {
+    if (isEditingText() && !search.hasPrimaryFocus) return null;
+    return key == LogicalKeyboardKey.arrowUp ? ListKey.previous : ListKey.next;
+  }
+  if (event is KeyDownEvent && (key == LogicalKeyboardKey.enter || key == LogicalKeyboardKey.numpadEnter)) {
+    final focus = FocusManager.instance.primaryFocus;
+    if (isEditingText() || (focus != null && focus is! FocusScopeNode)) return null;
+    return ListKey.enter;
+  }
+  return null;
+}
+
+/// Whether the list of [tab], built in [context], is the one the keyboard
+/// acts on: an expanded window, the tab on screen, nothing over it.
+bool listHasKeys(BuildContext context, WidgetRef ref, AppTab tab) =>
+    AppLayout.readModeOf(context) == WindowMode.expanded &&
+    ref.read(selectedTabProvider) == tab &&
+    (ModalRoute.of(context)?.isCurrent ?? true);
 
 /// The scrolling part of a list tab: pull to refresh, scrollbar, a thin
 /// progress bar while the data refreshes in the background, and [overlay]

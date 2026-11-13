@@ -39,8 +39,9 @@ final testNow = DateTime.utc(2026, 11, 12, 12);
 /// - highlights: #1 Song of Storms (video, jsbach64), #2 I Will Survive
 ///   (video, shadowvanta, vocals, notes), #3 How Far I'll Go (no video).
 ///
-/// [moreHighlights] come after them.
-Catalogue testCatalogue({List<List<String>> moreHighlights = const []}) => catalogueOf(
+/// [moreHighlights] come after them, [moreSongs] after the songs (a stream
+/// of their own begins with [start]).
+Catalogue testCatalogue({SheetRows moreHighlights = const [], SheetRows moreSongs = const []}) => catalogueOf(
   highlights: [
     hRow(
       order: '1',
@@ -99,8 +100,12 @@ Catalogue testCatalogue({List<List<String>> moreHighlights = const []}) => catal
       type: 'Loop',
       requester: 'shadowvanta',
     ),
+    ...moreSongs,
   ],
 );
+
+/// Rows of a spreadsheet, as the fixtures give them.
+typedef SheetRows = List<List<String>>;
 
 /// A [CatalogueNotifier] with a fixed state that records the calls.
 class FakeCatalogueNotifier extends CatalogueNotifier {

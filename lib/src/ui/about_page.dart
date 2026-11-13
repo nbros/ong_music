@@ -15,6 +15,7 @@ import '../state/twitch_state.dart';
 import 'actions.dart';
 import 'format.dart';
 import 'install_banner.dart';
+import 'layout.dart';
 import 'list_scaffold.dart';
 import 'theme.dart';
 import 'view_state.dart';
@@ -74,90 +75,154 @@ String twitchNameHelp(String name, Catalogue? catalogue) {
       'Tap the “You” chip to see only yours.';
 }
 
-/// The About tab.
+/// The About tab: one column; in an expanded window, two cards side by side
+/// (the artist on the left, the app's settings on the right) and the footer
+/// under both.
 class AboutPage extends ConsumerWidget {
   const AboutPage({super.key});
 
+  /// The widest the two cards are together, with their outer margins.
+  static const double maxCardsWidth = 1040;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final expanded = AppLayout.modeOf(context) == WindowMode.expanded;
     final scheme = Theme.of(context).colorScheme;
-    final ong = OngColors.of(context);
-    return LaneScrollbar(
-      child: ListView(
-        // the scrollbar follows the primary scroll controller: desktop does not attach it by itself
-        primary: true,
-        padding: EdgeInsets.only(top: 20, bottom: MediaQuery.paddingOf(context).bottom),
-        children: [
-          // hero
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
-            child: Column(
+    // inside a card, what stood on the background stands on the card
+    final background = expanded ? scheme.surfaceContainer : scheme.surface;
+    final artist = [
+      _Hero(ring: background, inCard: expanded),
+      // links
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 18, 16, 4),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final width = constraints.maxWidth / 4;
+            return Wrap(
+              runSpacing: 14,
               children: [
-                Container(
-                  width: 96,
-                  height: 96,
-                  margin: const EdgeInsets.only(bottom: 12),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: const Color(0xFFF3D2C3),
-                    boxShadow: [
-                      BoxShadow(color: ong.brand, spreadRadius: 5),
-                      BoxShadow(color: scheme.surface, spreadRadius: 3),
-                    ],
-                  ),
-                  child: ClipOval(
-                    child: Image.asset(
-                      'assets/ongZoom.png',
-                      fit: BoxFit.cover,
-                      filterQuality: FilterQuality.medium,
-                      excludeFromSemantics: true,
+                for (final (label, url, icon) in aboutLinks)
+                  SizedBox(
+                    width: width,
+                    child: _LinkTile(
+                      label: label,
+                      icon: icon(context),
+                      color: expanded ? scheme.surfaceContainerHigh : scheme.surfaceContainer,
+                      onTap: () => openLink(context, ref, url),
                     ),
                   ),
+              ],
+            );
+          },
+        ),
+      ),
+      const InstallSection(),
+    ];
+    final settings = [
+      _SectionTitle('Appearance', top: expanded ? 16 : 24),
+      const _ThemeSelector(),
+      const _SectionTitle('Your Twitch name'),
+      const _TwitchNameField(),
+      const _SectionTitle('Data'),
+      const _DataSection(),
+    ];
+    final bottom = MediaQuery.paddingOf(context).bottom;
+    if (!expanded) {
+      return LaneScrollbar(
+        child: ListView(
+          // the scrollbar follows the primary scroll controller: desktop does not attach it by itself
+          primary: true,
+          padding: EdgeInsets.only(top: 20, bottom: bottom),
+          children: [...artist, ...settings, const _Footer()],
+        ),
+      );
+    }
+    Widget card(List<Widget> children) => Container(
+      padding: const EdgeInsets.fromLTRB(8, 12, 8, 24),
+      decoration: BoxDecoration(color: scheme.surfaceContainer, borderRadius: BorderRadius.circular(28)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children),
+    );
+    return LaneScrollbar(
+      child: ListView(
+        primary: true,
+        padding: EdgeInsets.only(bottom: bottom),
+        children: [
+          Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: maxCardsWidth),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  spacing: 16,
+                  children: [
+                    Expanded(child: card([const SizedBox(height: 20), ...artist])),
+                    Expanded(child: card(settings)),
+                  ],
                 ),
-                Text(
-                  'Jonathan Ong',
-                  style: TextStyle(fontSize: 24, height: 32 / 24, fontWeight: FontWeight.w500, color: scheme.onSurface),
-                ),
-                Padding(
-                  padding: const EdgeInsets.only(top: 6, bottom: 16),
-                  child: Text(
-                    'Classically trained pianist from Sydney who streams on Twitch, known for his '
-                    'multi-instrumental loops and virtuosic piano playing.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: scheme.onSurfaceVariant, height: 20 / 14),
-                  ),
-                ),
-                const _TwitchSection(),
+              ),
+            ),
+          ),
+          const _Footer(top: 16),
+        ],
+      ),
+    );
+  }
+}
+
+/// The artist's picture, in a ring of [ring] and of the brand colour, his
+/// name, introduction, and the Twitch button with its status line.
+class _Hero extends StatelessWidget {
+  const _Hero({required this.ring, required this.inCard});
+
+  final Color ring;
+
+  /// In a card: the picture keeps its ring clear of the card's top and of the name.
+  final bool inCard;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final ong = OngColors.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+      child: Column(
+        children: [
+          Container(
+            width: 96,
+            height: 96,
+            margin: EdgeInsets.only(top: inCard ? 5 : 0, bottom: inCard ? 17 : 12),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: const Color(0xFFF3D2C3),
+              boxShadow: [
+                BoxShadow(color: ong.brand, spreadRadius: 5),
+                BoxShadow(color: ring, spreadRadius: 3),
               ],
             ),
-          ),
-          // links
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 18, 16, 4),
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final width = constraints.maxWidth / 4;
-                return Wrap(
-                  runSpacing: 14,
-                  children: [
-                    for (final (label, url, icon) in aboutLinks)
-                      SizedBox(
-                        width: width,
-                        child: _LinkTile(label: label, icon: icon(context), onTap: () => openLink(context, ref, url)),
-                      ),
-                  ],
-                );
-              },
+            child: ClipOval(
+              child: Image.asset(
+                'assets/ongZoom.png',
+                fit: BoxFit.cover,
+                filterQuality: FilterQuality.medium,
+                excludeFromSemantics: true,
+              ),
             ),
           ),
-          const InstallSection(),
-          const _SectionTitle('Appearance'),
-          const _ThemeSelector(),
-          const _SectionTitle('Your Twitch name'),
-          const _TwitchNameField(),
-          const _SectionTitle('Data'),
-          const _DataSection(),
-          const _Footer(),
+          Text(
+            'Jonathan Ong',
+            style: TextStyle(fontSize: 24, height: 32 / 24, fontWeight: FontWeight.w500, color: scheme.onSurface),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(top: 6, bottom: 16),
+            child: Text(
+              'Classically trained pianist from Sydney who streams on Twitch, known for his '
+              'multi-instrumental loops and virtuosic piano playing.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: scheme.onSurfaceVariant, height: 20 / 14),
+            ),
+          ),
+          const _TwitchSection(),
         ],
       ),
     );
@@ -343,10 +408,13 @@ class _TwitchSectionState extends ConsumerState<_TwitchSection> {
 }
 
 class _LinkTile extends StatelessWidget {
-  const _LinkTile({required this.label, required this.icon, required this.onTap});
+  const _LinkTile({required this.label, required this.icon, required this.color, required this.onTap});
 
   final String label;
   final Widget icon;
+
+  /// The colour of the tile behind the icon.
+  final Color color;
   final VoidCallback onTap;
 
   @override
@@ -369,7 +437,7 @@ class _LinkTile extends StatelessWidget {
                 width: 56,
                 height: 56,
                 alignment: Alignment.center,
-                decoration: BoxDecoration(color: scheme.surfaceContainer, borderRadius: BorderRadius.circular(18)),
+                decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(18)),
                 child: icon,
               ),
               const SizedBox(height: 6),
@@ -388,13 +456,16 @@ class _LinkTile extends StatelessWidget {
 }
 
 class _SectionTitle extends StatelessWidget {
-  const _SectionTitle(this.text);
+  const _SectionTitle(this.text, {this.top = 24});
 
   final String text;
 
+  /// Space above: less at the top of a card.
+  final double top;
+
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
+    padding: EdgeInsets.fromLTRB(16, top, 16, 8),
     child: Semantics(
       header: true,
       child: Text(
@@ -616,7 +687,10 @@ class _DataSectionState extends ConsumerState<_DataSection> {
 }
 
 class _Footer extends ConsumerWidget {
-  const _Footer();
+  const _Footer({this.top = 12});
+
+  /// Space above.
+  final double top;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -636,7 +710,7 @@ class _Footer extends ConsumerWidget {
       ),
     );
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+      padding: EdgeInsets.fromLTRB(16, top, 16, 20),
       child: Column(
         children: [
           Text(appVersion.isEmpty ? 'Ong Music' : 'Ong Music $appVersion', textAlign: TextAlign.center, style: style),

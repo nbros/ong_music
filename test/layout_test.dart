@@ -194,7 +194,10 @@ void main() {
         isSemantics(label: 'About\nTab 3 of 3', isSelected: false, isButton: true, hasTapAction: true),
       );
       // the picture is decoration: the rail says its three tabs and nothing else
-      expect(tester.widget<Image>(find.descendant(of: rail(), matching: find.byType(Image))).excludeFromSemantics, isTrue);
+      expect(
+        tester.widget<Image>(find.descendant(of: rail(), matching: find.byType(Image))).excludeFromSemantics,
+        isTrue,
+      );
       final said = <String>[];
       void collect(SemanticsNode node) {
         if (node.label.isNotEmpty) said.add(node.label);
@@ -300,8 +303,9 @@ void main() {
 
   group('medium window', () {
     testWidgets('a list in a column of 720 px at most, centred right of the rail; About in 640', (tester) async {
-      await pumpApp(tester, size: const Size(1000, 900));
-      const middle = 80 + (1000 - 80) / 2;
+      // (narrower than an expanded window, which has a list pane and a detail pane)
+      await pumpApp(tester, size: const Size(830, 900));
+      const middle = 80 + (830 - 80) / 2;
       for (final (tab, page, width) in [
         ('Highlights', HighlightsPage, 720.0),
         ('Ong Log', OngLogPage, 720.0),
@@ -319,13 +323,13 @@ void main() {
     });
 
     testWidgets('a sheet is centred right of the rail, the scrim covers the whole window', (tester) async {
-      await pumpApp(tester, size: const Size(1000, 900));
+      await pumpApp(tester, size: const Size(830, 900));
       await tester.tap(detailsButtons().at(1));
       await tester.pumpAndSettle();
       final sheet = sheetRect(tester);
-      expect((sheet.width, sheet.center.dx, sheet.bottom), (640, 80 + (1000 - 80) / 2, 900));
+      expect((sheet.width, sheet.center.dx, sheet.bottom), (640, 80 + (830 - 80) / 2, 900));
       final scrim = find.byWidgetPredicate((w) => w is ModalBarrier && w.dismissible);
-      expect(tester.getRect(scrim.last), const Rect.fromLTWH(0, 0, 1000, 900));
+      expect(tester.getRect(scrim.last), const Rect.fromLTWH(0, 0, 830, 900));
 
       // narrower: the sheet takes what the rail leaves; a compact window: the whole width, as on a phone
       tester.view.physicalSize = const Size(700, 900);
@@ -410,7 +414,7 @@ void main() {
 
   group('with a mouse', () {
     testWidgets('scroll bars always shown, in a lane: nothing under them, pinned header included', (tester) async {
-      await pumpApp(tester, size: const Size(1000, 900), pointer: PointerKind.mouse);
+      await pumpApp(tester, size: const Size(830, 900), pointer: PointerKind.mouse);
       final column = tester.getRect(find.byType(HighlightsPage));
       final list = listOf(HighlightsPage);
       expect(scrollbarOf(tester, list).thumbVisibility, isTrue);
@@ -468,7 +472,7 @@ void main() {
     }, variant: TargetPlatformVariant.only(TargetPlatform.android));
 
     testWidgets('with touch: the scroll bars over the content, shown while scrolling', (tester) async {
-      await pumpApp(tester, size: const Size(1000, 900), pointer: PointerKind.touch);
+      await pumpApp(tester, size: const Size(830, 900), pointer: PointerKind.touch);
       final column = tester.getRect(find.byType(HighlightsPage));
       final list = listOf(HighlightsPage);
       expect(scrollbarOf(tester, list).thumbVisibility, isFalse);

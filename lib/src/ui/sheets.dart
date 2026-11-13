@@ -26,8 +26,29 @@ import 'theme.dart';
 import 'view_state.dart';
 import 'widgets.dart';
 
-/// Shows a detail sheet. Called from inside a sheet, it replaces that sheet.
-Future<void> showDetailSheet(BuildContext context, WidgetBuilder builder) {
+/// Shows [fiche]: in the detail pane of an expanded window, in a bottom sheet
+/// otherwise. The one way a fiche opens, from a list, from another fiche or
+/// from the keyboard.
+///
+/// From a list, the fiche replaces what the pane shows (its row becomes the
+/// selected one); from a fiche in the pane, it goes over that fiche (the back
+/// bar of the pane returns to it). From inside a sheet, it replaces that sheet.
+Future<void> showFiche(BuildContext context, Fiche fiche) async {
+  if (AppLayout.readModeOf(context) == WindowMode.expanded) {
+    final container = ProviderScope.containerOf(context, listen: false);
+    final pane = DetailPaneScope.maybeOf(context);
+    final AppTab tab = pane?.tab ?? container.read(selectedTabProvider);
+    if (tab != AppTab.about) {
+      final notifier = container.read(detailPaneProvider(tab).notifier);
+      pane == null ? notifier.choose(fiche) : notifier.push(fiche);
+      return;
+    }
+  }
+  return _showSheet(context, fiche);
+}
+
+/// Shows [fiche] in a bottom sheet. Called from inside a sheet, it replaces that sheet.
+Future<void> _showSheet(BuildContext context, Fiche fiche) {
   final navigator = Navigator.of(context);
   if (ModalRoute.of(context) is ModalBottomSheetRoute) navigator.pop();
   final host = navigator.context;
@@ -37,6 +58,7 @@ Future<void> showDetailSheet(BuildContext context, WidgetBuilder builder) {
   final localizations = MaterialLocalizations.of(host);
   return navigator.push(
     _DetailSheetRoute(
+      fiche: fiche,
       capturedThemes: InheritedTheme.capture(from: host, to: navigator.context),
       barrierLabel: localizations.scrimLabel,
       barrierOnTapHint: localizations.scrimOnTapHint(localizations.bottomSheetLabel),
@@ -44,7 +66,7 @@ Future<void> showDetailSheet(BuildContext context, WidgetBuilder builder) {
       isScrollControlled: true,
       showDragHandle: true,
       useSafeArea: true,
-      constraints: const BoxConstraints(maxWidth: 640),
+      constraints: const BoxConstraints(maxWidth: maxFicheWidth),
       // no slide when the system asks for less motion
       sheetAnimationStyle: MediaQuery.disableAnimationsOf(host) ? AnimationStyle.noAnimation : null,
       // At most nine tenths of the window, drag handle included: read at each layout, not once on opening, for a
@@ -53,18 +75,61 @@ Future<void> showDetailSheet(BuildContext context, WidgetBuilder builder) {
         constraints: BoxConstraints(
           maxHeight: math.max(0, MediaQuery.sizeOf(context).height * 0.9 - kMinInteractiveDimension),
         ),
-        child: builder(context),
+        child: ficheContent(fiche),
       ),
     ),
   );
+}
+
+/// The widest a fiche is: a sheet, or the content of the detail pane.
+const double maxFicheWidth = 640;
+
+/// The content of [fiche]: the same widgets in a sheet and in the pane.
+Widget ficheContent(Fiche fiche) => switch (fiche) {
+  HighlightFiche(:final catalogue, :final highlight) => HighlightSheet(catalogue: catalogue, highlight: highlight),
+  SongFiche(:final catalogue, :final song) => SongSheet(catalogue: catalogue, song: song),
+  StreamFiche(:final catalogue, :final stream, :final play) => StreamSheet(
+    catalogue: catalogue,
+    stream: stream,
+    play: play,
+  ),
+};
+
+/// The title of [fiche], as the back bar of the pane names it.
+String ficheTitle(Fiche fiche) => switch (fiche) {
+  HighlightFiche(:final highlight) => highlight.track,
+  SongFiche(:final song) => song.track,
+  StreamFiche(:final stream) => formatFullDate(stream.date),
+};
+
+/// Marks what is under it as the content of the detail pane of [tab], an
+/// expanded window: the fiche lays itself out for the pane, and its links
+/// stack the next fiche in the pane instead of opening a sheet.
+class DetailPaneScope extends InheritedWidget {
+  const DetailPaneScope({super.key, required this.tab, required this.top, required super.child});
+
+  final AppTab tab;
+
+  /// Space above the content: none under the back bar.
+  final double top;
+
+  /// The pane [context] is in, or null in a sheet or a list.
+  static DetailPaneScope? maybeOf(BuildContext context) => context.getInheritedWidgetOfExactType<DetailPaneScope>();
+
+  @override
+  bool updateShouldNotify(DetailPaneScope oldWidget) => tab != oldWidget.tab || top != oldWidget.top;
 }
 
 /// The route of a detail sheet: a modal bottom sheet ([showModalBottomSheet]
 /// with the arguments above) centred on the content beside the navigation
 /// rail, not on the window, when there is a rail. The scrim covers the whole
 /// window.
+///
+/// When the window becomes expanded, the fiche of the sheet moves into the
+/// detail pane of the tab on screen and the sheet closes.
 class _DetailSheetRoute extends ModalBottomSheetRoute<void> {
   _DetailSheetRoute({
+    required this.fiche,
     required super.builder,
     required super.capturedThemes,
     required super.barrierLabel,
@@ -77,20 +142,45 @@ class _DetailSheetRoute extends ModalBottomSheetRoute<void> {
     required super.sheetAnimationStyle,
   });
 
+  final Fiche fiche;
+
+  bool _moving = false;
+
   @override
   Widget buildPage(BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation) =>
-      _BesideRail(child: super.buildPage(context, animation, secondaryAnimation));
+      _BesideRail(onExpanded: _moveToPane, child: super.buildPage(context, animation, secondaryAnimation));
+
+  void _moveToPane() {
+    if (_moving) return;
+    _moving = true;
+    // after the frame: no provider changes while building
+    SchedulerBinding.instance.addPostFrameCallback((_) => _moveNow());
+  }
+
+  void _moveNow() {
+    final navigator = this.navigator;
+    if (!isActive || navigator == null) return;
+    final container = ProviderScope.containerOf(navigator.context, listen: false);
+    final tab = container.read(selectedTabProvider);
+    // (no sheet opens over the About tab, which has no pane)
+    if (tab == AppTab.about) return;
+    container.read(detailPaneProvider(tab).notifier).choose(fiche);
+    navigator.removeRoute(this);
+  }
 }
 
 /// Lays [child] out right of the navigation rail, followed live (a window
 /// resized under the sheet), with the safe area on the left taken by the rail.
 class _BesideRail extends StatelessWidget {
-  const _BesideRail({required this.child});
+  const _BesideRail({required this.onExpanded, required this.child});
 
+  /// Called when the window is expanded (there is a detail pane).
+  final VoidCallback onExpanded;
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
+    if (AppLayout.modeOf(context) == WindowMode.expanded) onExpanded();
     final left = AppLayout.contentLeftOf(context);
     // the same widgets in every mode: the sheet keeps its state when the mode changes under it
     return Padding(
@@ -104,21 +194,30 @@ class _BesideRail extends StatelessWidget {
 bool get _hasScreenKeyboard =>
     defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS;
 
-/// Shows the sheet of [highlight].
+/// Shows the fiche of [highlight] (see [showFiche]).
 Future<void> showHighlightSheet(BuildContext context, Catalogue catalogue, Highlight highlight) =>
-    showDetailSheet(context, (_) => HighlightSheet(catalogue: catalogue, highlight: highlight));
+    showFiche(context, HighlightFiche(catalogue, highlight));
 
-/// Shows the sheet of [song].
-Future<void> showSongSheet(BuildContext context, Catalogue catalogue, Song song) =>
-    showDetailSheet(context, (_) => SongSheet(catalogue: catalogue, song: song));
+/// Shows the fiche of [song] (see [showFiche]); [play] is the row of the Ong
+/// Log it was chosen from.
+Future<void> showSongSheet(BuildContext context, Catalogue catalogue, Song song, {Play? play}) =>
+    showFiche(context, SongFiche(catalogue, song, play: play));
 
-/// Shows the setlist of [stream], scrolled to [play] (tinted) when given.
+/// Shows the setlist of [stream], scrolled to [play] (tinted) when given (see [showFiche]).
 Future<void> showStreamSheet(BuildContext context, Catalogue catalogue, LiveStream stream, {Play? play}) =>
-    showDetailSheet(context, (_) => StreamSheet(catalogue: catalogue, stream: stream, play: play));
+    showFiche(context, StreamFiche(catalogue, stream, play: play));
 
-/// Closes the sheet and searches the requests of [requester] in the Ong Log.
+/// Starts the video of [highlight] (it must have one): the large preview of
+/// its fiche, and Enter on the Highlights tab of an expanded window.
+///
+/// Opens it on YouTube for now: the one place to change for a video played in
+/// the fiche itself.
+Future<void> startVideo(BuildContext context, WidgetRef ref, Highlight highlight) => openVideo(context, ref, highlight);
+
+/// Searches the requests of [requester] in the Ong Log, closing the sheet
+/// first (a fiche in the pane stays).
 void _showRequester(BuildContext context, WidgetRef ref, Requester requester) {
-  Navigator.of(context).pop();
+  if (DetailPaneScope.maybeOf(context) == null) Navigator.of(context).pop();
   showRequesterInOngLog(ref, requester.name);
 }
 
@@ -133,7 +232,9 @@ void _openVideoOrSheet(BuildContext context, WidgetRef ref, Catalogue catalogue,
 
 // ------------------------------------------------------------------ layout
 
-/// The scrollable body of a sheet: content height, at most the sheet's.
+/// The scrollable body of a fiche: in a sheet, content height, at most the
+/// sheet's; in the detail pane, the whole pane, the content in the middle and
+/// at most [maxFicheWidth] wide, the scroll bar at the edge of the pane.
 class _SheetBody extends StatelessWidget {
   const _SheetBody({required this.slivers, this.controller});
 
@@ -142,6 +243,31 @@ class _SheetBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pane = DetailPaneScope.maybeOf(context);
+    if (pane != null) {
+      return LaneScrollbar(
+        controller: controller,
+        // clear of the rounded corners of the pane
+        ends: 22,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final side = math.max(0.0, (constraints.maxWidth - maxFicheWidth) / 2);
+            return CustomScrollView(
+              controller: controller,
+              // without a controller, the pane's own primary one
+              primary: controller == null,
+              scrollBehavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+              slivers: [
+                SliverPadding(
+                  padding: EdgeInsets.fromLTRB(side, pane.top, side, 28),
+                  sliver: SliverMainAxisGroup(slivers: slivers),
+                ),
+              ],
+            );
+          },
+        ),
+      );
+    }
     final bottom = MediaQuery.viewPaddingOf(context).bottom;
     return LaneScrollbar(
       controller: controller,
@@ -159,6 +285,11 @@ class _SheetBody extends StatelessWidget {
     );
   }
 }
+
+/// The shape of a row of a fiche in the pane: rounded, as the rows of the
+/// lists there (null in a sheet: today's square rows).
+ShapeBorder? _paneRowShape(BuildContext context) =>
+    DetailPaneScope.maybeOf(context) == null ? null : RoundedRectangleBorder(borderRadius: BorderRadius.circular(14));
 
 /// The small line above a sheet title: `● Popular · Highlight #1951`.
 class _Overline extends StatelessWidget {
@@ -410,7 +541,7 @@ class HighlightSheet extends ConsumerWidget {
               // which does the same
               child: ExcludeSemantics(
                 child: GestureDetector(
-                  onTap: () => openVideo(context, ref, h),
+                  onTap: () => startVideo(context, ref, h),
                   child: MouseRegion(
                     cursor: SystemMouseCursors.click,
                     child: LayoutBuilder(
@@ -681,6 +812,7 @@ class SongSheet extends ConsumerWidget {
                 catalogue: catalogue,
                 play: play,
                 me: me,
+                shape: _paneRowShape(context),
                 onTap: () => showStreamSheet(context, catalogue, catalogue.streamOf(play), play: play),
                 onVideo: (h) => openVideo(context, ref, h),
               );
@@ -726,7 +858,9 @@ class _StreamSheetState extends ConsumerState<StreamSheet> {
     final rowExtent = ListMetrics.of(context).playRow;
     final position = _controller.position;
     final index = play.id - widget.stream.firstPlayId;
-    final target = header + index * rowExtent - (position.viewportDimension - rowExtent) / 2;
+    // (the pane has some space above the header)
+    final top = DetailPaneScope.maybeOf(context)?.top ?? 0;
+    final target = top + header + index * rowExtent - (position.viewportDimension - rowExtent) / 2;
     _controller.jumpTo(target.clamp(0, position.maxScrollExtent));
   }
 
@@ -743,6 +877,7 @@ class _StreamSheetState extends ConsumerState<StreamSheet> {
     final s = widget.stream;
     final metrics = ListMetrics.of(context);
     final videos = s.highlightIds.length;
+    final shape = _paneRowShape(context);
     return _SheetBody(
       controller: _controller,
       slivers: [
@@ -778,6 +913,9 @@ class _StreamSheetState extends ConsumerState<StreamSheet> {
               tokens: const [],
               me: me,
               tinted: play.id == widget.play?.id,
+              shape: shape,
+              // in line with the title, in the pane
+              start: shape == null ? 16 : 20,
               onTap: () {
                 final song = catalogue.songOfPlay(play);
                 if (song != null) showSongSheet(context, catalogue, song);
