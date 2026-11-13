@@ -159,7 +159,7 @@ class _OngLogPageState extends ConsumerState<OngLogPage> {
     final anyChip = filter.type != null || filter.genre != null || filter.withVideo || mine;
     final layout = _layoutOf(results, filter, ListMetrics.of(context));
     _layoutCatalogue = catalogue;
-    final typing = TypingInLowWindow.of(context);
+    final noRoom = FiltersOutOfRoom.of(context);
     final searching = results.tokens.isNotEmpty;
     return Column(
       children: [
@@ -171,7 +171,7 @@ class _OngLogPageState extends ConsumerState<OngLogPage> {
         ),
         // kept, with its scroll position, while it is out of the way
         Visibility(
-          visible: !typing,
+          visible: !noRoom,
           maintainState: true,
           child: ChipRow(
             children: [
@@ -207,7 +207,7 @@ class _OngLogPageState extends ConsumerState<OngLogPage> {
             ],
           ),
         ),
-        if (!typing && (searching || anyChip))
+        if (!noRoom && (searching || anyChip))
           CountLine(text: '${plural(results.length, 'song')} · ${plural(results.streamCount, 'stream')}')
         else
           const SizedBox(height: 4),

@@ -39,7 +39,8 @@ bool browserHandlesClick() {
 ///   copy it; a plain click is the control's, as before;
 /// - screen readers have one node, said as a link to [url], named [label]
 ///   (the control's own name) with the control's action, in place of the
-///   control's own node.
+///   control's own node; without [linkSemantics], the control's own node
+///   stays (a tab of the top bar, which screen readers must hear as a tab).
 ///
 /// For a [video], a click the browser opens in front (Shift: a window, a tab
 /// in front) stops the video playing in the app first, as [onOpen] does
@@ -54,6 +55,7 @@ class OutsideLink extends ConsumerStatefulWidget {
     required this.label,
     required this.onOpen,
     this.video = false,
+    this.linkSemantics = true,
     required this.builder,
   });
 
@@ -67,6 +69,10 @@ class OutsideLink extends ConsumerStatefulWidget {
   final VoidCallback onOpen;
 
   final bool video;
+
+  /// Whether screen readers hear the control as a link to [url], in place of
+  /// its own node.
+  final bool linkSemantics;
 
   /// The control, which calls the given callback when activated.
   final Widget Function(BuildContext context, VoidCallback open) builder;
@@ -123,6 +129,21 @@ class _OutsideLinkState extends ConsumerState<OutsideLink> {
     final url = widget.url;
     final uri = url == null ? null : Uri.tryParse(url);
     if (anchors == null || uri == null) return widget.builder(context, widget.onOpen);
+    final link = MouseRegion(
+      // the hover states of the control and of what is behind it stay as they are
+      opaque: false,
+      onHover: (_) => _hovered(),
+      onExit: (_) => _left(),
+      child: Stack(
+        // exactly the size and place of the control: nothing moves when the link comes and goes
+        fit: StackFit.passthrough,
+        children: [
+          widget.builder(context, _open),
+          if (_anchored) Positioned.fill(child: anchors.anchor(uri)),
+        ],
+      ),
+    );
+    if (!widget.linkSemantics) return link;
     // one node: a node of the control under a node of the link would be two for screen readers
     return Semantics(
       container: true,
@@ -131,20 +152,7 @@ class _OutsideLinkState extends ConsumerState<OutsideLink> {
       label: widget.label,
       onTap: _open,
       excludeSemantics: true,
-      child: MouseRegion(
-        // the hover states of the control and of what is behind it stay as they are
-        opaque: false,
-        onHover: (_) => _hovered(),
-        onExit: (_) => _left(),
-        child: Stack(
-          // exactly the size and place of the control: nothing moves when the link comes and goes
-          fit: StackFit.passthrough,
-          children: [
-            widget.builder(context, _open),
-            if (_anchored) Positioned.fill(child: anchors.anchor(uri)),
-          ],
-        ),
-      ),
+      child: link,
     );
   }
 }

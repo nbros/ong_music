@@ -15,6 +15,7 @@ import '../data/model.dart';
 import '../data/text.dart';
 import 'format.dart';
 import 'fullscreen_button.dart';
+import 'instant_feedback.dart';
 import 'layout.dart';
 import 'theme.dart';
 
@@ -478,10 +479,8 @@ class VideoPill extends StatelessWidget {
       onTap: onPressed,
       excludeSemantics: true,
       // no tooltip: the label is for screen readers
-      child: InkResponse(
+      child: _PillInk(
         onTap: onPressed,
-        radius: 24,
-        containedInkWell: false,
         child: SizedBox(
           width: 48,
           height: 48,
@@ -497,6 +496,20 @@ class VideoPill extends StatelessWidget {
       ),
     );
   }
+}
+
+/// The ink of a [VideoPill]: a circle 48 px across, Material's ink on phones
+/// and tablets, an [AppInkWell] in the desktop look.
+class _PillInk extends StatelessWidget {
+  const _PillInk({required this.onTap, required this.child});
+
+  final VoidCallback onTap;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => AppLayout.desktopOf(context)
+      ? AppInkWell(onTap: onTap, customBorder: const CircleBorder(), child: child)
+      : InkResponse(onTap: onTap, radius: 24, containedInkWell: false, child: child);
 }
 
 // ------------------------------------------------------------------ thumbnails
@@ -619,6 +632,7 @@ class Thumbnail extends ConsumerWidget {
 /// at its right, in the column of the ⋮ buttons of the highlight rows: the
 /// field ends 48 px from the edge, where that column begins on a phone, and the
 /// button is at the edge, like the ⋮ buttons (48 px on a phone, 40 on desktop).
+/// Not in the desktop look, whose top bar has it: the field takes its place.
 class ListSearchField extends ConsumerStatefulWidget {
   const ListSearchField({
     super.key,
@@ -656,7 +670,7 @@ class _ListSearchFieldState extends ConsumerState<ListSearchField> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final controller = widget.controller;
-    final fullscreen = ref.watch(pageFullscreenProvider);
+    final fullscreen = AppLayout.desktopOf(context) ? null : ref.watch(pageFullscreenProvider);
     final mouse = AppLayout.mouseOf(context);
     final field = Padding(
       padding: EdgeInsets.fromLTRB(16, 6, fullscreen == null ? 16 : 0, 2),
@@ -671,7 +685,7 @@ class _ListSearchFieldState extends ConsumerState<ListSearchField> {
             color: scheme.surfaceContainerHigh,
             surfaceTintColor: Colors.transparent,
             shape: const StadiumBorder(),
-            child: InkWell(
+            child: AppInkWell(
               // the text field inside is the focus stop and the semantics node
               canRequestFocus: false,
               excludeFromSemantics: true,
@@ -694,25 +708,27 @@ class _ListSearchFieldState extends ConsumerState<ListSearchField> {
                     Expanded(
                       child: Padding(
                         padding: const EdgeInsets.only(left: 16, right: 4),
-                        child: Semantics(
-                          inputType: SemanticsInputType.search,
-                          child: TextField(
-                            controller: controller,
-                            focusNode: _focusNode,
-                            onChanged: widget.onChanged,
-                            onSubmitted: (_) => FocusManager.instance.primaryFocus?.unfocus(),
-                            textInputAction: TextInputAction.search,
-                            autocorrect: false,
-                            style: TextStyle(fontSize: 16, color: scheme.onSurface),
-                            decoration: InputDecoration(
-                              hintText: widget.hint,
-                              hintStyle: TextStyle(fontSize: 16, color: scheme.onSurfaceVariant),
-                              border: InputBorder.none,
-                              enabledBorder: InputBorder.none,
-                              focusedBorder: InputBorder.none,
-                              contentPadding: EdgeInsets.zero,
-                              // lets the text field be lower than 48 px
-                              isDense: true,
+                        child: _TakesPressOnDesktop(
+                          child: Semantics(
+                            inputType: SemanticsInputType.search,
+                            child: TextField(
+                              controller: controller,
+                              focusNode: _focusNode,
+                              onChanged: widget.onChanged,
+                              onSubmitted: (_) => FocusManager.instance.primaryFocus?.unfocus(),
+                              textInputAction: TextInputAction.search,
+                              autocorrect: false,
+                              style: TextStyle(fontSize: 16, color: scheme.onSurface),
+                              decoration: InputDecoration(
+                                hintText: widget.hint,
+                                hintStyle: TextStyle(fontSize: 16, color: scheme.onSurfaceVariant),
+                                border: InputBorder.none,
+                                enabledBorder: InputBorder.none,
+                                focusedBorder: InputBorder.none,
+                                contentPadding: EdgeInsets.zero,
+                                // lets the text field be lower than 48 px
+                                isDense: true,
+                              ),
                             ),
                           ),
                         ),
@@ -764,6 +780,19 @@ class _ListSearchFieldState extends ConsumerState<ListSearchField> {
       ],
     );
   }
+}
+
+/// In the desktop look, a control that is not a [StateLayer] (the text of a
+/// search field) whose press the state layer around it must not show: that
+/// press is the control's own, the one around it does not get it.
+class _TakesPressOnDesktop extends StatelessWidget {
+  const _TakesPressOnDesktop({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) =>
+      AppLayout.desktopOf(context) ? Listener(onPointerDown: StateLayer.takePress, child: child) : child;
 }
 
 /// The key that puts the cursor in a search field, at its right end while it
@@ -973,7 +1002,7 @@ class _ScrollArrow extends StatelessWidget {
                     type: MaterialType.transparency,
                     shape: const CircleBorder(),
                     clipBehavior: Clip.antiAlias,
-                    child: InkWell(
+                    child: AppInkWell(
                       onTap: onPressed,
                       // the keyboard has the chips themselves
                       canRequestFocus: false,
@@ -1019,21 +1048,27 @@ class ChipRow extends StatelessWidget {
   );
 }
 
-/// Whether the user is typing in a window too low for the filters and the list
-/// together: a phone held sideways with its keyboard up, which leaves little
-/// more than the height of the search field. The list tabs then show the
-/// search field and the list alone, until the keyboard goes.
-class TypingInLowWindow extends InheritedWidget {
-  const TypingInLowWindow({super.key, required this.value, required super.child});
+/// The height of the head of a list tab at the default text size: the search
+/// field (52 px and 8 px around it), the chips (48) and the 4 px under them.
+const double listHeadHeight = 112;
+
+/// Whether the list tabs show their search field and their list alone, without
+/// the filters, in a window too low for all three: a phone held sideways with
+/// its keyboard up, which leaves little more than the height of the search
+/// field (until the keyboard goes), or a window of the desktop look so low
+/// that under the top bar there is less than [listHeadHeight] (the filters
+/// come back when the window grows).
+class FiltersOutOfRoom extends InheritedWidget {
+  const FiltersOutOfRoom({super.key, required this.value, required super.child});
 
   final bool value;
 
   /// False without one above [context].
   static bool of(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<TypingInLowWindow>()?.value ?? false;
+      context.dependOnInheritedWidgetOfExactType<FiltersOutOfRoom>()?.value ?? false;
 
   @override
-  bool updateShouldNotify(TypingInLowWindow oldWidget) => oldWidget.value != value;
+  bool updateShouldNotify(FiltersOutOfRoom oldWidget) => oldWidget.value != value;
 }
 
 /// A filter chip of the design: label, optional icon and count.
@@ -1201,12 +1236,15 @@ class CountLine extends StatelessWidget {
           if (link != null)
             TextButton(
               onPressed: onLink,
-              style: TextButton.styleFrom(
-                foregroundColor: scheme.primary,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                minimumSize: const Size(48, _linkHeight),
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+              style: platformButtonStyle(
+                context,
+                TextButton.styleFrom(
+                  foregroundColor: scheme.primary,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  minimumSize: const Size(48, _linkHeight),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                ),
               ),
               child: Text('$link →'),
             )

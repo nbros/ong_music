@@ -10,6 +10,7 @@ import '../state/settings_state.dart';
 import '../web/install_hint.dart';
 import '../web/web_platform.dart';
 import 'actions.dart';
+import 'instant_feedback.dart';
 import 'outside_link.dart';
 import 'theme.dart';
 
@@ -242,7 +243,10 @@ class _HintBody extends ConsumerWidget {
           Align(
             alignment: AlignmentDirectional.centerStart,
             child: TextButton.icon(
-              style: TextButton.styleFrom(foregroundColor: color, padding: const EdgeInsets.symmetric(horizontal: 8)),
+              style: platformButtonStyle(
+                context,
+                TextButton.styleFrom(foregroundColor: color, padding: const EdgeInsets.symmetric(horizontal: 8)),
+              ),
               onPressed: () => _copyLink(context),
               icon: Icon(Icons.link, size: 18, color: on3),
               label: const Text('Copy link'),
@@ -256,7 +260,10 @@ class _HintBody extends ConsumerWidget {
               label: 'Open the Play Store',
               onOpen: () => openLink(context, ref, playStoreUrl),
               builder: (context, open) => TextButton.icon(
-                style: TextButton.styleFrom(foregroundColor: color, padding: const EdgeInsets.symmetric(horizontal: 8)),
+                style: platformButtonStyle(
+                  context,
+                  TextButton.styleFrom(foregroundColor: color, padding: const EdgeInsets.symmetric(horizontal: 8)),
+                ),
                 onPressed: open,
                 icon: Icon(Icons.open_in_new, size: 18, color: on3),
                 label: const Text('Open the Play Store'),

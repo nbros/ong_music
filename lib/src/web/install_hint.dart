@@ -9,10 +9,26 @@ import 'package:flutter/foundation.dart';
 /// What the browser tells about itself (see `currentBrowser()`).
 @immutable
 class BrowserEnvironment {
-  const BrowserEnvironment({required this.userAgent, required this.maxTouchPoints, required this.standalone});
+  const BrowserEnvironment({
+    required this.userAgent,
+    required this.maxTouchPoints,
+    required this.standalone,
+    this.platform = '',
+    this.clientHintsPlatform,
+  });
 
   /// `navigator.userAgent`.
   final String userAgent;
+
+  /// `navigator.platform` (`Linux armv81`, `MacIntel`, `Win32`): the system
+  /// the browser was built for, which a browser asking for desktop sites
+  /// leaves as it is.
+  final String platform;
+
+  /// `navigator.userAgentData.platform` (`Android`, `Linux`, `Chrome OS`,
+  /// `Windows`, `macOS`), in the browsers that give it (Chromium-based ones);
+  /// null elsewhere.
+  final String? clientHintsPlatform;
 
   /// `navigator.maxTouchPoints`: tells an iPad (whose Safari claims to be a
   /// Mac) from a Mac.
@@ -124,7 +140,7 @@ InstallHint installHintFor(BrowserEnvironment? browser) {
   final String device;
   if (ua.contains('iPhone') || ua.contains('iPod')) {
     device = 'iPhone';
-  } else if (ua.contains('iPad') || (ua.contains('Macintosh') && browser.maxTouchPoints > 1)) {
+  } else if (isIPad(browser)) {
     device = 'iPad';
   } else {
     return InstallHint.none;
@@ -132,6 +148,38 @@ InstallHint installHintFor(BrowserEnvironment? browser) {
   final inApp = !ua.contains('Safari/') || inAppBrowserTokens.any(ua.contains);
   if (inApp) return InstallHint(InstallHintKind.openInSafari, device: device);
   return InstallHint(InstallHintKind.addToHomeScreen, device: device, share: _safariShare(ua));
+}
+
+/// Whether [browser] runs on Android, including a browser asking for desktop
+/// sites (Chrome's "Desktop site", the default on large tablets), which sends
+/// the user agent of a Linux computer (`X11; Linux x86_64`) without the
+/// `Android` token.
+///
+/// In this order of trust: the client hints, where the browser gives them
+/// (Chromium-based browsers keep `Android` there; another system named there
+/// is not Android); the `Android` token; then a Linux user agent from a
+/// browser built for ARM (`navigator.platform` `Linux armv…` or
+/// `Linux aarch64`) on a touch screen. A Linux or Windows laptop with a touch
+/// screen and a Linux computer without one are not Android; nor is a
+/// Chromebook, whose user agent says `CrOS`, never `Linux`, and whose client
+/// hints say `Chrome OS`.
+bool isAndroid(BrowserEnvironment browser) {
+  final hinted = browser.clientHintsPlatform;
+  if (hinted == 'Android') return true;
+  final ua = browser.userAgent;
+  if (ua.contains('Android')) return true;
+  // a computer that says what it is
+  if (hinted != null && hinted.isNotEmpty && hinted != 'Linux') return false;
+  if (!ua.contains('Linux') || browser.maxTouchPoints == 0) return false;
+  final platform = browser.platform.toLowerCase();
+  return platform.contains('arm') || platform.contains('aarch64');
+}
+
+/// Whether [browser] is on an iPad, including an iPad whose Safari asks for
+/// desktop sites and claims to be a Mac: a Mac has no touch screen.
+bool isIPad(BrowserEnvironment browser) {
+  final ua = browser.userAgent;
+  return ua.contains('iPad') || (ua.contains('Macintosh') && browser.maxTouchPoints > 1);
 }
 
 /// Where the Safari of the device whose browser sends [ua] keeps "Share".

@@ -15,6 +15,7 @@ import '../state/twitch_state.dart';
 import 'actions.dart';
 import 'format.dart';
 import 'install_banner.dart';
+import 'instant_feedback.dart';
 import 'layout.dart';
 import 'list_scaffold.dart';
 import 'outside_link.dart';
@@ -356,11 +357,14 @@ class _TwitchSectionState extends ConsumerState<_TwitchSection> {
           onOpen: () => openLink(context, ref, twitchUrl),
           builder: (context, open) => FilledButton.icon(
             onPressed: open,
-            style: FilledButton.styleFrom(
-              backgroundColor: ong.brand,
-              foregroundColor: ong.onBrand,
-              padding: const EdgeInsets.fromLTRB(16, 0, 20, 0),
-              textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+            style: platformButtonStyle(
+              context,
+              FilledButton.styleFrom(
+                backgroundColor: ong.brand,
+                foregroundColor: ong.onBrand,
+                padding: const EdgeInsets.fromLTRB(16, 0, 20, 0),
+                textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+              ),
             ),
             icon: VectorGraphic(
               loader: const AssetBytesLoader('assets/icons/twitch.svg'),
@@ -437,7 +441,7 @@ class _LinkTile extends StatelessWidget {
       // the ink well's own action goes with its semantics
       onTap: onTap,
       excludeSemantics: true,
-      child: InkWell(
+      child: AppInkWell(
         borderRadius: BorderRadius.circular(18),
         onTap: onTap,
         child: Padding(
@@ -697,6 +701,23 @@ class _DataSectionState extends ConsumerState<_DataSection> {
   }
 }
 
+/// The licences page of the framework, as [showLicensePage] shows it; in the
+/// desktop look, with the hover of its rows at once ([InstantTileHover]).
+void _showLicences(BuildContext context) {
+  final version = appVersion.isEmpty ? null : appVersion;
+  if (!AppLayout.desktopOf(context)) {
+    showLicensePage(context: context, applicationName: 'Ong Music', applicationVersion: version);
+    return;
+  }
+  Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      builder: (context) => InstantTileHover(
+        child: LicensePage(applicationName: 'Ong Music', applicationVersion: version),
+      ),
+    ),
+  );
+}
+
 class _Footer extends ConsumerWidget {
   const _Footer({this.top = 12});
 
@@ -709,7 +730,7 @@ class _Footer extends ConsumerWidget {
     final style = TextStyle(fontSize: 12, height: 16 / 12, color: on3);
     Widget link(String label, VoidCallback onTap) => Semantics(
       link: true,
-      child: InkWell(
+      child: AppInkWell(
         onTap: onTap,
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 48),
@@ -741,14 +762,7 @@ class _Footer extends ConsumerWidget {
               outsideLink('Community spreadsheet', spreadsheetUrl),
               Text(' · ', style: style),
               // the open source software the app is made with, and its licences
-              link(
-                'Licences',
-                () => showLicensePage(
-                  context: context,
-                  applicationName: 'Ong Music',
-                  applicationVersion: appVersion.isEmpty ? null : appVersion,
-                ),
-              ),
+              link('Licences', () => _showLicences(context)),
             ],
           ),
           Text('Fan-made, not affiliated with Jonathan Ong.', textAlign: TextAlign.center, style: style),

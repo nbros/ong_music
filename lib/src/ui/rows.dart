@@ -16,6 +16,7 @@ import '../data/catalogue.dart';
 import '../data/model.dart';
 import '../state/catalogue_state.dart';
 import 'format.dart';
+import 'instant_feedback.dart';
 import 'outside_link.dart';
 import 'theme.dart';
 import 'widgets.dart';
@@ -160,7 +161,7 @@ class HighlightRow extends StatelessWidget {
       selected: selected,
       hint: h.youtubeId == null || selected != null ? 'Shows the details' : 'Opens the video',
       child: selected == null
-          ? InkWell(onTap: onTap, child: content)
+          ? AppInkWell(onTap: onTap, child: content)
           : _SelectableInk(selected: selected, shape: InsetRoundedBorder.row, onTap: onTap, child: content),
     );
   }
@@ -181,7 +182,7 @@ class _SelectableInk extends StatelessWidget {
   Widget build(BuildContext context) => Material(
     // the ink of the row on the row: a list scrolls it with the row
     type: MaterialType.transparency,
-    child: InkWell(
+    child: AppInkWell(
       onTap: onTap,
       customBorder: shape,
       hoverColor: hoveredRowColor(context),
@@ -225,26 +226,30 @@ class _ThumbnailLinkState extends State<_ThumbnailLink> {
         label: '',
         video: true,
         onOpen: widget.onTap,
-        builder: (context, open) => GestureDetector(
-          onTap: open,
-          child: Thumbnail(
-            youtubeId: widget.youtubeId,
-            width: ListMetrics.thumbnailWidth,
-            label: widget.label,
-            overlay: _hovered
-                ? const ColoredBox(
-                    color: Color(0x77000000),
-                    child: Center(
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(color: Color(0xAA000000), shape: BoxShape.circle),
-                        child: SizedBox.square(
-                          dimension: 36,
-                          child: Icon(Icons.open_in_new, size: 18, color: Colors.white),
+        builder: (context, open) => Listener(
+          // its own press, not the row's (desktop look)
+          onPointerDown: StateLayer.takePress,
+          child: GestureDetector(
+            onTap: open,
+            child: Thumbnail(
+              youtubeId: widget.youtubeId,
+              width: ListMetrics.thumbnailWidth,
+              label: widget.label,
+              overlay: _hovered
+                  ? const ColoredBox(
+                      color: Color(0x77000000),
+                      child: Center(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(color: Color(0xAA000000), shape: BoxShape.circle),
+                          child: SizedBox.square(
+                            dimension: 36,
+                            child: Icon(Icons.open_in_new, size: 18, color: Colors.white),
+                          ),
                         ),
                       ),
-                    ),
-                  )
-                : null,
+                    )
+                  : null,
+            ),
           ),
         ),
       ),
@@ -372,7 +377,7 @@ class PlayRow extends ConsumerWidget {
       child: shape == null
           ? Material(
               color: tint ? selectedRowColor(context) : Colors.transparent,
-              child: InkWell(onTap: onTap, child: body),
+              child: AppInkWell(onTap: onTap, child: body),
             )
           : _SelectableInk(selected: tint, shape: shape, onTap: onTap, child: body),
     );
@@ -412,7 +417,7 @@ class StreamHeader extends StatelessWidget {
         // the ink well's own action goes with its semantics
         onTap: onTap,
         excludeSemantics: true,
-        child: InkWell(
+        child: AppInkWell(
           onTap: onTap,
           customBorder: shape,
           hoverColor: shape == null ? null : hoveredRowColor(context),
@@ -516,7 +521,7 @@ class HistoryRow extends StatelessWidget {
     final p = play;
     final requester = catalogue.requester(p.requesterId);
     final video = catalogue.highlightOf(p);
-    return InkWell(
+    return AppInkWell(
       onTap: onTap,
       customBorder: shape,
       hoverColor: shape == null ? null : hoveredRowColor(context),

@@ -118,7 +118,7 @@ class _HighlightsPageState extends ConsumerState<HighlightsPage> {
     final mine = filter.mine && myCount > 0;
     final favourites = filter.favourites && favouriteCount > 0;
     final counts = results.counts;
-    final typing = TypingInLowWindow.of(context);
+    final noRoom = FiltersOutOfRoom.of(context);
     final anyChip = filter.genre != null || mine || favourites;
     return Column(
       children: [
@@ -130,7 +130,7 @@ class _HighlightsPageState extends ConsumerState<HighlightsPage> {
         ),
         // kept, with its scroll position, while it is out of the way
         Visibility(
-          visible: !typing,
+          visible: !noRoom,
           maintainState: true,
           child: ChipRow(
             children: [
@@ -168,7 +168,7 @@ class _HighlightsPageState extends ConsumerState<HighlightsPage> {
             ],
           ),
         ),
-        if (!typing && (searching || anyChip))
+        if (!noRoom && (searching || anyChip))
           CountLine(
             text: plural(results.length, 'highlight'),
             link: inOngLog > 0 ? '${formatCount(inOngLog)} in the Ong Log' : null,
