@@ -120,10 +120,11 @@ enum PlayFlag {
   };
 }
 
-/// A calendar date without time zone, as written in the sheets.
+/// A calendar date without time zone, as written in the sheets (the dates of
+/// the Ong Log are US Eastern ones).
 ///
-/// Never converted between time zones: [toDateTime] is midnight UTC of that
-/// day, only meant for formatting.
+/// Never converted between time zones: dates are shown as written, for every
+/// viewer. [toDateTime] is midnight UTC of that day, only meant for formatting.
 final class CalendarDate implements Comparable<CalendarDate> {
   const CalendarDate._(this.epochDay);
 
@@ -164,8 +165,9 @@ final class CalendarDate implements Comparable<CalendarDate> {
   /// Parses a sheet cell: `2024-03-05`, `2024/3/5 21:07`, `3/5/2024 9:07`
   /// (month first), optionally followed by a time. Anything after the time,
   /// such as seconds, is ignored. Returns null when the cell is not a date.
-  /// The time, when present, is `HH:MM`.
-  static ({CalendarDate date, String time})? parseCell(String cell) {
+  /// [minute] is the time of day in minutes (0–1439), null when the cell has
+  /// no time or one that is not a time of day (`24:05`, `9:60`).
+  static ({CalendarDate date, int? minute})? parseCell(String cell) {
     // Scans what `^(\d{4})[-/](\d{1,2})[-/](\d{1,2})` or `^(\d{1,2})/(\d{1,2})/(\d{4})`, then
     // `(?:\s+(\d{1,2}):(\d{2}))?` match, without regular expressions (one cell per row: they are slow on native
     // platforms). Every `\d{1,2}` is followed by a separator or by nothing, so taking digits greedily is exact.
@@ -196,9 +198,11 @@ final class CalendarDate implements Comparable<CalendarDate> {
     }
     final hours = i > end ? _digits(text, i, 2) : 0;
     if (hours == 0 || !_hasAt(text, i + hours, 0x3A) || _digits(text, i + hours + 1, 2) != 2) {
-      return (date: date, time: '');
+      return (date: date, minute: null);
     }
-    return (date: date, time: '${hours == 1 ? '0' : ''}${text.substring(i, i + hours + 3)}');
+    final hour = _number(text, i, hours);
+    final minute = _number(text, i + hours + 1, 2);
+    return (date: date, minute: hour < 24 && minute < 60 ? hour * 60 + minute : null);
   }
 
   /// Whether `text[i]` is the code unit [unit].
@@ -362,7 +366,7 @@ final class Play {
   /// Creates a play; normally only the parser does this.
   const Play({
     required this.id,
-    required this.time,
+    required this.loggedMinute,
     required this.rowDate,
     required this.titleId,
     required this.title,
@@ -378,11 +382,17 @@ final class Play {
   /// Index in `Catalogue.plays` (sheet order, oldest first).
   final int id;
 
-  /// Time of day written on the row, `HH:MM`, or empty.
-  final String time;
+  /// The instant the row was logged, in minutes since 1970-01-01 00:00 UTC:
+  /// the date and time written on the row, read in the zone of the sheet (US
+  /// Eastern, `SheetZone`). Null when the row has no time.
+  ///
+  /// The wall time of the sheet is not kept: the time of a play is shown in
+  /// the zone of the viewer. Its date is shown as written: see [rowDate].
+  final int? loggedMinute;
 
-  /// The date written on the row. Songs played after midnight carry the next
-  /// day: display the stream's date (`Catalogue.streamOf(play).date`) instead.
+  /// The date written on the row (US Eastern). Songs played after midnight
+  /// carry the next day: display the stream's date
+  /// (`Catalogue.streamOf(play).date`) instead, as written.
   final CalendarDate rowDate;
 
   /// Index in `Catalogue.titles` (distinct titles as written).
@@ -415,8 +425,14 @@ final class Play {
   /// Track part of [title] (see [splitTitle]).
   String get track => splitTitle(title).track;
 
+  /// [loggedMinute] as a UTC instant, null when the row has no time. Always
+  /// within the range of `DateTime`: the year of a sheet cell has four digits.
+  DateTime? get loggedAt => loggedMinute == null
+      ? null
+      : DateTime.fromMillisecondsSinceEpoch(loggedMinute! * Duration.millisecondsPerMinute, isUtc: true);
+
   @override
-  String toString() => 'Play#$id($rowDate $time $title, $genre, $type)';
+  String toString() => 'Play#$id($rowDate ${loggedAt ?? '-'} $title, $genre, $type)';
 }
 
 /// A live stream: a contiguous run of plays after a "Stream Start" row.
@@ -434,7 +450,9 @@ final class LiveStream {
   /// Index in `Catalogue.streams` (oldest first).
   final int id;
 
-  /// The day the stream started.
+  /// The day the stream started, as written in the sheet (US Eastern), and
+  /// shown so to every viewer: the notes of the highlights and the videos
+  /// quote it. Only the times of its plays are shown in the viewer's zone.
   final CalendarDate date;
 
   /// Id of its first play; its plays are `firstPlayId .. firstPlayId + playCount - 1`.

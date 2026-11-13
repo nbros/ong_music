@@ -1,6 +1,13 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ong_music/src/data/model.dart';
+import 'package:ong_music/src/data/sheet_zone.dart';
 import 'package:ong_music/src/ui/format.dart';
+
+import 'fixtures.dart';
+
+/// A viewer at the fixed offset [hours] from UTC.
+WallTime _utcPlus(int hours) =>
+    (instant) => instant.toUtc().add(Duration(hours: hours));
 
 void main() {
   test('formatCount', () {
@@ -59,5 +66,43 @@ void main() {
     expect(formatDayFrom(DateTime(2027, 1, 1, 9), now), 'Fri 1 Jan 2027');
     // UTC times are shown on the local calendar
     expect(formatDayFrom(DateTime(2026, 11, 14, 9).toUtc(), now.toUtc()), 'Sat 14 Nov');
+  });
+
+  group('the time of a play, in the zone of the viewer', () {
+    // the sheet writes US Eastern time: a song at 01:39 on 13 November 2026, 06:39 UTC
+    final c = catalogueOf(
+      songs: [
+        start('2026/11/12 21:34'),
+        sRow(date: '2026/11/13 01:39', uptime: '4:05:00', title: 'LGTM Looks Good to Me - Claude Opus 5.5'),
+        sRow(date: '2026/11/13', title: 'No time'),
+        sRow(date: '2026/11/13 24:10', title: 'Not a time of day'),
+      ],
+    );
+
+    test('24-hour, zero padded, in the zone given', () {
+      final lgtm = c.plays[0];
+      expect(formatPlayTime(lgtm, SheetZone.wallTime), '01:39');
+      expect(formatPlayTime(lgtm, _utcPlus(1)), '07:39');
+      expect(formatPlayTime(lgtm, _utcPlus(-8)), '22:39');
+      expect(formatPlayTime(lgtm, _utcPlus(11)), '17:39');
+      expect(formatPlayTime(lgtm, _utcPlus(-6)), '00:39');
+    });
+
+    test('– without a time, or with one that is not a time of day', () {
+      expect(c.plays.skip(1).map((p) => formatPlayTime(p, _utcPlus(1))), ['–', '–']);
+    });
+
+    test('the zone is asked for each instant: the viewer\'s own daylight saving applies', () {
+      // a viewer whose clock moves forward at 2026-03-29 01:00 UTC (Paris)
+      DateTime paris(DateTime t) => t.toUtc().add(Duration(hours: t.isBefore(DateTime.utc(2026, 3, 29, 1)) ? 1 : 2));
+      final c = catalogueOf(
+        songs: [
+          start('2026/03/28 20:00'),
+          sRow(date: '2026/03/28 20:30', title: 'a'),
+          sRow(date: '2026/03/28 21:30', title: 'b'),
+        ],
+      );
+      expect(c.plays.map((p) => formatPlayTime(p, paris)), ['01:30', '03:30']);
+    });
   });
 }

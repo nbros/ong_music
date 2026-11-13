@@ -63,6 +63,15 @@ final clockProvider = Provider<DateTime Function()>(
       () => DateTime.now().toUtc(),
 );
 
+/// The wall time of the device at an instant: the zone the time of a play is shown in (the sheet writes it in US
+/// Eastern time; its dates are shown as written). Only the fields of the result (year … minute) are read, never its
+/// instant, so a replacement may return a UTC `DateTime` carrying another zone's wall time. Called per instant:
+/// nothing keeps an offset, the device's own daylight saving applies to each time.
+final wallTimeProvider = Provider<DateTime Function(DateTime instant)>(
+  (ref) =>
+      (instant) => instant.toLocal(),
+);
+
 /// Cache and network access.
 final catalogueRepositoryProvider = Provider<CatalogueRepository>(
   (ref) => CatalogueRepository(
