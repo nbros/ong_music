@@ -7,8 +7,10 @@ import 'package:flutter/services.dart';
 import 'package:web/web.dart' as web;
 
 import '../logger.dart';
+import 'embedded_video.dart';
 import 'fullscreen.dart';
 import 'install_hint.dart';
+import 'youtube_web.dart';
 
 /// The browser, or null outside a browser (native apps).
 BrowserEnvironment? currentBrowser() {
@@ -47,6 +49,9 @@ PageFullscreen? pageFullscreen() {
   if (!offersFullscreen(currentBrowser(), enabled: isEnabled)) return null;
   return _BrowserFullscreen(root, names);
 }
+
+/// Where videos play inside the app: YouTube's embedded player.
+VideoEmbedder? videoEmbedder() => YouTubeEmbedder();
 
 /// The names of one version of the Fullscreen API.
 enum _FullscreenNames {

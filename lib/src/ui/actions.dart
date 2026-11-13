@@ -11,6 +11,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../data/model.dart';
 import '../logger.dart';
+import 'video_preview.dart';
 
 /// Opens a URL outside the app (browser or the site's app; a new tab on web).
 typedef UrlOpener = Future<bool> Function(Uri uri);
@@ -58,9 +59,12 @@ Future<void> openLink(BuildContext context, WidgetRef ref, String url) async {
 /// `https://youtu.be/<id>`.
 String shortVideoUrl(String youtubeId) => 'https://youtu.be/$youtubeId';
 
-/// Opens the video of [highlight] (it must have a YouTube id).
-Future<void> openVideo(BuildContext context, WidgetRef ref, Highlight highlight) =>
-    openLink(context, ref, highlight.url);
+/// Opens the video of [highlight] (it must have a YouTube id) on YouTube,
+/// stopping first the video playing inside the app, if any: never two sounds.
+Future<void> openVideo(BuildContext context, WidgetRef ref, Highlight highlight) {
+  ref.read(inPlaceVideosProvider).stop();
+  return openLink(context, ref, highlight.url);
+}
 
 /// What "Share" and "Copy" give for [highlight]: `"<title> — https://youtu.be/<id>"`,
 /// or the title alone without video.

@@ -23,6 +23,7 @@ import 'format.dart';
 import 'layout.dart';
 import 'rows.dart';
 import 'theme.dart';
+import 'video_preview.dart';
 import 'view_state.dart';
 import 'widgets.dart';
 
@@ -207,12 +208,17 @@ Future<void> showSongSheet(BuildContext context, Catalogue catalogue, Song song,
 Future<void> showStreamSheet(BuildContext context, Catalogue catalogue, LiveStream stream, {Play? play}) =>
     showFiche(context, StreamFiche(catalogue, stream, play: play));
 
-/// Starts the video of [highlight] (it must have one): the large preview of
-/// its fiche, and Enter on the Highlights tab of an expanded window.
+/// Starts the video of [highlight] (it must have one) from the keyboard: Enter
+/// on the Highlights tab of an expanded window.
 ///
-/// Opens it on YouTube for now: the one place to change for a video played in
-/// the fiche itself.
-Future<void> startVideo(BuildContext context, WidgetRef ref, Highlight highlight) => openVideo(context, ref, highlight);
+/// In place of the preview of its fiche in the pane, as a tap on the preview
+/// does, where videos play inside the app ([InPlaceVideos]); on YouTube
+/// otherwise: the native apps, a video YouTube refused before, or another
+/// fiche over the highlight's in the pane.
+Future<void> startVideo(BuildContext context, WidgetRef ref, Highlight highlight) async {
+  if (ref.read(inPlaceVideosProvider).playInPane(AppTab.highlights, highlight)) return;
+  return openVideo(context, ref, highlight);
+}
 
 /// Searches the requests of [requester] in the Ong Log, closing the sheet
 /// first (a fiche in the pane stays).
@@ -537,37 +543,8 @@ class HighlightSheet extends ConsumerWidget {
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
-              // for the eye and the finger only: screen readers get the "Watch on YouTube" button below,
-              // which does the same
-              child: ExcludeSemantics(
-                child: GestureDetector(
-                  onTap: () => startVideo(context, ref, h),
-                  child: MouseRegion(
-                    cursor: SystemMouseCursors.click,
-                    child: LayoutBuilder(
-                      builder: (context, constraints) => Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          Thumbnail(
-                            youtubeId: h.youtubeId,
-                            // As wide as the sheet, unless that makes it higher than two fifths of the window: on a
-                            // phone held sideways it would fill the sheet, the title and the buttons out of sight.
-                            width: math.min(constraints.maxWidth, MediaQuery.sizeOf(context).height * 0.4 * 16 / 9),
-                            big: true,
-                            radius: 16,
-                          ),
-                          Container(
-                            width: 56,
-                            height: 56,
-                            decoration: const BoxDecoration(color: Color(0xAA000000), shape: BoxShape.circle),
-                            child: const Icon(Icons.play_arrow, size: 32, color: Colors.white),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
+              // a video of its own for each video: another one starts from its preview
+              child: VideoPreview(key: ValueKey(h.youtubeId), highlight: h),
             ),
           ),
         SliverPadding(

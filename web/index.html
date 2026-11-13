@@ -14,6 +14,9 @@
   <title>Ong Music</title>
   <meta name="description" content="Jonathan Ong's highlights and the Ong Log: every song he played on stream, searchable.">
   <meta name="color-scheme" content="light dark">
+  <!-- the browsers' default, said here so that no server header can take it away: YouTube's embedded player refuses
+       to play for a page that does not give its address (player error 153) -->
+  <meta name="referrer" content="strict-origin-when-cross-origin">
   <!-- browser bars; the app updates them when the theme is changed in its settings -->
   <meta name="theme-color" content="#fff8f4" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#15110e" media="(prefers-color-scheme: dark)">

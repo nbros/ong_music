@@ -20,7 +20,9 @@ import 'package:ong_music/src/ui/fullscreen_button.dart';
 import 'package:ong_music/src/ui/install_banner.dart';
 import 'package:ong_music/src/ui/layout.dart';
 import 'package:ong_music/src/ui/nav_rail.dart';
+import 'package:ong_music/src/ui/video_preview.dart';
 import 'package:ong_music/src/ui/widgets.dart';
+import 'package:ong_music/src/web/embedded_video.dart';
 import 'package:ong_music/src/web/fullscreen.dart';
 import 'package:ong_music/src/web/install_hint.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -219,6 +221,9 @@ class TestApp {
 /// The pointer follows the pointer events from the guess of the platform, as
 /// in the app, unless [pointer] pins it (whatever the test taps with: a tap of
 /// a test is a touch).
+///
+/// Videos open on YouTube, as in the native apps, unless [videos] plays them
+/// in place, as the web app does.
 Future<TestApp> pumpApp(
   WidgetTester tester, {
   CatalogueState? state,
@@ -233,6 +238,7 @@ Future<TestApp> pumpApp(
   bool startsInBackground = false,
   PageFullscreen? fullscreen,
   PointerKind? pointer,
+  VideoEmbedder? videos,
 }) async {
   // before the size: setting it makes MediaQuery read the clock format again
   tester.platformDispatcher.alwaysUse24HourFormatTestValue = alwaysUse24HourFormat;
@@ -268,6 +274,7 @@ Future<TestApp> pumpApp(
         installHintProvider.overrideWithValue(installHint),
         startsInBackgroundProvider.overrideWithValue(startsInBackground),
         pageFullscreenProvider.overrideWithValue(fullscreen),
+        videoEmbedderProvider.overrideWithValue(videos),
         if (pointer != null) pointerProvider.overrideWith(() => PinnedPointer(pointer)),
         thumbnailImageProvider.overrideWithValue((url) => MemoryImage(transparentPng)),
         urlOpenerProvider.overrideWithValue((uri) async {
@@ -438,4 +445,75 @@ void expectLayout(
     Rect.fromCenter(center: Offset(right - column / 2, field.center.dy), width: size.width, height: size.height),
     reason: reason,
   );
+}
+
+/// Plays videos in place, as the web app does, with players the test drives.
+class FakeVideoEmbedder implements VideoEmbedder {
+  /// Every player made, in order.
+  final videos = <FakeVideo>[];
+
+  @override
+  FakeVideo play(String youtubeId) {
+    final video = FakeVideo(youtubeId);
+    videos.add(video);
+    return video;
+  }
+
+  /// The players not disposed: those that can be heard.
+  List<FakeVideo> get alive => [
+    for (final v in videos)
+      if (!v.disposed) v,
+  ];
+
+  /// The one player alive.
+  FakeVideo get only => alive.single;
+}
+
+/// A player of [FakeVideoEmbedder]: its state is set by the test.
+class FakeVideo implements EmbeddedVideo {
+  FakeVideo(this.youtubeId);
+
+  final String youtubeId;
+  final _state = ValueNotifier(EmbeddedVideoState.loading);
+  bool disposed = false;
+
+  /// How many times its view was put on screen: more than once, the web app
+  /// would have loaded the player again.
+  int mounts = 0;
+
+  @override
+  Widget get view => FakePlayerView(video: this);
+
+  @override
+  ValueListenable<EmbeddedVideoState> get state => _state;
+
+  /// What YouTube's player does.
+  set playerState(EmbeddedVideoState value) => _state.value = value;
+
+  @override
+  void dispose() {
+    expect(disposed, isFalse, reason: 'disposed twice');
+    disposed = true;
+  }
+}
+
+/// What a [FakeVideo] shows: a black box.
+class FakePlayerView extends StatefulWidget {
+  const FakePlayerView({super.key, required this.video});
+
+  final FakeVideo video;
+
+  @override
+  State<FakePlayerView> createState() => _FakePlayerViewState();
+}
+
+class _FakePlayerViewState extends State<FakePlayerView> {
+  @override
+  void initState() {
+    super.initState();
+    widget.video.mounts++;
+  }
+
+  @override
+  Widget build(BuildContext context) => const ColoredBox(color: Colors.black);
 }

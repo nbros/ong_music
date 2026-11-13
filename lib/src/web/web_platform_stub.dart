@@ -1,5 +1,6 @@
 import 'dart:ui' show Color;
 
+import 'embedded_video.dart';
 import 'fullscreen.dart';
 import 'install_hint.dart';
 
@@ -9,6 +10,10 @@ BrowserEnvironment? currentBrowser() => null;
 /// The full screen mode of the whole page, or null where the browser offers
 /// none (see `offersFullscreen`); always null outside a browser.
 PageFullscreen? pageFullscreen() => null;
+
+/// Where videos play inside the app; null outside a browser, where they open
+/// on YouTube.
+VideoEmbedder? videoEmbedder() => null;
 
 /// Registers the fonts that the web build needs and does not get by itself.
 Future<void> loadWebFonts() async {}

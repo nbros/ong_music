@@ -22,6 +22,8 @@ The lists show the Twitch names of the viewers who requested songs, as they are 
 
 When you open the About tab, and every few minutes while it stays open, the app asks Twitch (api.twitch.tv and static-cdn.jtvnw.net) for Jonathan Ong's public stream schedule and for the preview image of his channel, to show whether he is live and when his next stream starts. Nothing about you is sent beyond what any web request reveals (for example your IP address, the app's or browser's user agent and, in the web version, your browser's language and the address of this site).
 
+In the web version, a highlight's video can also play inside the app: when you tap its large picture, the app opens YouTube's embedded player, in its privacy-enhanced mode, in a frame from youtube-nocookie.com; the app itself contacts no other address of YouTube for it. The player then loads what it needs from Google's servers (the video, its pictures and fonts, and Google's checks against abuse, from addresses such as googlevideo.com, ytimg.com, ggpht.com, gstatic.com, google.com and googleapis.com), and Google receives what it receives from any website showing an embedded YouTube video: your IP address, your browser's details, the address of this site, the cookies your browser already holds for Google's sites (where your browser sends them to embedded content), and what the player records while you watch (see [Google's privacy policy](https://policies.google.com/privacy)). Nothing of YouTube's player is loaded before you start a video: until then the app only downloads the thumbnails. The Android and Windows apps open videos in YouTube instead.
+
 ## Data Storage
 As **Ong Music** does not collect any personal data, none is stored by us. The app can store, **only on your device**:
 
