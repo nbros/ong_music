@@ -95,12 +95,24 @@ jobs:
       - name: Run tests
         run: flutter test
 
-      # --no-web-resources-cdn: CanvasKit and the Roboto font served from this site, not from gstatic.com.
-      # --web-content-hash: main.dart.<hash>.js and assets/*.<hash>.*, so that a deployment never mixes with files
+      # In Chrome too, under both compilers: the site is what these tests are about, and this workflow does not wait
+      # for flutter_ci.yml (nor does a deployment by hand run it).
+      - name: Run browser tests
+        run: bash tool/browser_tests.sh
+
+      - name: Run browser tests (WebAssembly)
+        run: bash tool/browser_tests.sh --wasm
+
+      # --wasm: the app compiled twice, to WebAssembly (main.dart.<hash>.wasm and .mjs, drawn by Skwasm), which recent
+      # Chromium browsers run, and to JavaScript (main.dart.<hash>.js, drawn by CanvasKit) for every other browser;
+      # the loader picks one at the start (web/flutter_bootstrap.js).
+      # --no-web-resources-cdn: CanvasKit, Skwasm and the Roboto font served from this site, not from gstatic.com.
+      # --web-content-hash: main.dart.<hash>.* and assets/*.<hash>.*, so that a deployment never mixes with files
       # of the previous one in browser caches (web/index.html revalidates flutter_bootstrap.js, which names them).
       - name: Build web app
         run: >-
           flutter build web --release
+          --wasm
           --base-href /
           --no-web-resources-cdn
           --web-content-hash
@@ -123,6 +135,10 @@ jobs:
           # what the site must have: the app, and the privacy policy the Play Store listing links to
           test -f _site/index.html
           test -f _site/flutter_bootstrap.js
+          # both builds of the app, and the engine of each, from this site
+          ls _site/main.dart.*.wasm _site/main.dart.*.mjs _site/main.dart.*.js > /dev/null
+          test -f _site/canvaskit/skwasm.wasm
+          test -f _site/canvaskit/chromium/canvaskit.wasm
           test -f _site/privacy-policy.html || test -f _site/privacy-policy/index.html
 
       # Excludes dotfiles (only build/web/.last_build_id, which is not needed).

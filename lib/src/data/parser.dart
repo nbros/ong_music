@@ -112,12 +112,15 @@ final _youtube = RegExp(r'(?:youtu\.be/|v=)([\w-]{11})');
 final _requestedBy = RegExp(r'requested by "?([^"\s,.;]+)"?', caseSensitive: false);
 final _digits = RegExp(r'^\d+$');
 
+/// Beyond it an uptime is not one (over a century), and its minutes would not be exact in every build.
+const _maxUptimeHours = 999999;
+
 int _uptimeMinutes(String cell) {
   final m = _uptime.firstMatch(cell.trim());
   if (m == null) return 0;
-  // tryParse: an absurdly long number must not reject the whole sheet (int.parse throws on native)
-  final hours = int.tryParse(m[1]!);
-  return hours == null ? 0 : hours * 60 + int.parse(m[2]!);
+  // an absurdly long number must not reject the whole sheet (int.parse throws on native), and gives 0 in every build
+  final hours = tryParseExactInt(m[1]!);
+  return hours == null || hours > _maxUptimeHours ? 0 : hours * 60 + int.parse(m[2]!);
 }
 
 /// The instant of a date cell with a time, in minutes since the epoch (see `Play.loggedMinute`), or null.
@@ -450,7 +453,7 @@ class _Builder {
     for (var i = from; i < to; i++) {
       final row = hRows[i];
       final order = _cell(row, _hOrder).trim();
-      if (_digits.hasMatch(order)) seq = int.tryParse(order) ?? seq;
+      if (_digits.hasMatch(order)) seq = tryParseExactInt(order) ?? seq;
       final title = collapseSpaces(_cell(row, _hTitle));
       final upload = _cell(row, _hUpload).trim();
       if (title.isEmpty || upload.isEmpty || upload == 'Premiere') continue;

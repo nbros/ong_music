@@ -108,6 +108,24 @@ void main() {
       expect(c.highlights.map((h) => h.seq), [7, 7]);
       expect(c.streams.single.durationMinutes, 0);
     });
+
+    test('a number beyond what every build holds exactly counts for nothing, nor an uptime of a century', () {
+      final c = catalogueOf(
+        highlights: [
+          hRow(title: 'First', order: '7'),
+          // 2^53 + 1: a 64-bit integer natively and under WebAssembly, a rounded number under JavaScript
+          hRow(title: 'Second', order: '9007199254740993'),
+        ],
+        songs: [
+          start('2024-01-01'),
+          sRow(date: '2024-01-01 20:00:00', title: 'a', uptime: '999999:59:00'),
+          start('2024-01-02'),
+          sRow(date: '2024-01-02 20:00:00', title: 'b', uptime: '1000000:00:00'),
+        ],
+      );
+      expect(c.highlights.map((h) => h.seq), [7, 7]);
+      expect(c.streams.map((s) => s.durationMinutes), [999999 * 60 + 59, 0]);
+    });
   });
 
   group('invalid payloads', () {

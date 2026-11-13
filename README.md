@@ -31,11 +31,18 @@ flutter test
 # The app shows the version given by APP_VERSION (optional for local builds).
 flutter build appbundle --dart-define=APP_VERSION=1.6.0   # Android (release signing needs android/key.properties)
 flutter build windows --release --dart-define=APP_VERSION=1.6.0
-flutter build web --release --no-web-resources-cdn --web-content-hash --dart-define=APP_VERSION=1.6.0   # output in build/web
+flutter build web --release --wasm --no-web-resources-cdn --web-content-hash --dart-define=APP_VERSION=1.6.0   # output in build/web
+
+# The tests that run in a browser (Chrome), under both compilers.
+tool/browser_tests.sh
+tool/browser_tests.sh --wasm
 ```
 
-To try the web app locally: `flutter run -d chrome`. A `build/web` is made to be served at the root of a site
-(`--base-href /`, the default).
+To try the web app locally: `flutter run -d chrome` (`--wasm` for the WebAssembly build). A `build/web` is made to be
+served at the root of a site (`--base-href /`, the default). It holds the app twice: compiled to WebAssembly, which
+recent Chromium browsers (Chrome, Edge, Opera, Brave, Samsung Internet) run, and to JavaScript for all the others
+(Safari and every iPhone browser, Firefox); the choice is made in the browser at each start
+([`web/flutter_bootstrap.js`](web/flutter_bootstrap.js)).
 
 ### Releases
 

@@ -1,4 +1,4 @@
-/// Text folding, song keys, query tokens and match ranges.
+/// Text folding, song keys, query tokens and match ranges, and the numbers read in the sheets.
 ///
 /// Pure Dart: usable from isolates, `dart run` scripts and unit tests.
 library;
@@ -307,4 +307,15 @@ typedef SplitTitle = ({String artist, String track});
 SplitTitle splitTitle(String title) {
   final i = title.indexOf(' - ');
   return i < 0 ? (artist: '', track: title) : (artist: title.substring(0, i), track: title.substring(i + 3));
+}
+
+/// The largest integer that every build holds exactly: 2^53 - 1. The web app compiled to JavaScript keeps its
+/// integers in JavaScript numbers (doubles), native code and WebAssembly in 64-bit integers.
+const int maxExactInt = 9007199254740991;
+
+/// [int.tryParse], with the same result in every build: null for a number beyond ±[maxExactInt] too. Without it, an
+/// absurdly long number gives null natively and under WebAssembly (beyond 2^63) or a rounded number under JavaScript.
+int? tryParseExactInt(String text) {
+  final n = int.tryParse(text);
+  return n == null || n > maxExactInt || n < -maxExactInt ? null : n;
 }
