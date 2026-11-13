@@ -17,6 +17,7 @@ import '../data/repository.dart';
 import '../data/sheet_cache.dart';
 import '../data/sheet_prefetch.dart';
 import '../data/sheets.dart';
+import '../data/slices.dart';
 import '../logger.dart';
 import 'settings_state.dart';
 
@@ -51,11 +52,27 @@ final sheetCacheProvider = Provider<SheetCache>((ref) => createSheetCache());
 /// [discardPrefetchedSheets]).
 final prefetchDiscarderProvider = Provider<void Function()>((ref) => discardPrefetchedSheets);
 
-/// Parses sheets: on a background isolate on native platforms, inline on web.
+/// Whether the catalogue is loaded on the calling thread in slices, between which it does its other work: the web,
+/// where `compute` has no other thread to run on, and would parse in one go. Elsewhere it is loaded on a background
+/// isolate. Overridden by the tests of that choice.
+final loadsInSlicesProvider = Provider<bool>((ref) => kIsWeb);
+
+/// Parses sheets: on a background isolate on native platforms ([parseInBackground]), in slices between frames on
+/// web ([parseInSlices]).
 final catalogueParserProvider = Provider<CatalogueParser>(
-  (ref) =>
-      (sheets) => compute(parseCatalogueRecord, sheets.toRecord(), debugLabel: 'parse catalogue'),
+  (ref) => ref.watch(loadsInSlicesProvider) ? parseInSlices : parseInBackground,
 );
+
+/// Fingerprints sheets: at once on native platforms ([fingerprintAtOnce]), in slices on web
+/// ([fingerprintInSlices]).
+final sheetsFingerprintProvider = Provider<SheetsFingerprinter>(
+  (ref) => ref.watch(loadsInSlicesProvider) ? fingerprintInSlices : fingerprintAtOnce,
+);
+
+/// Parses on a background isolate (`compute`). [isAbandoned] is not asked: the isolate runs to its end, and the
+/// result is dropped. [background] changes nothing: the thread of the UI is free anyway.
+Future<Catalogue> parseInBackground(RawSheets sheets, {bool Function()? isAbandoned, bool background = false}) =>
+    compute(parseCatalogueRecord, sheets.toRecord(), debugLabel: 'parse catalogue');
 
 /// The current time, UTC.
 final clockProvider = Provider<DateTime Function()>(
@@ -78,6 +95,7 @@ final catalogueRepositoryProvider = Provider<CatalogueRepository>(
     fetcher: ref.watch(sheetFetcherProvider),
     cache: ref.watch(sheetCacheProvider),
     parse: ref.watch(catalogueParserProvider),
+    fingerprint: ref.watch(sheetsFingerprintProvider),
     clock: ref.watch(clockProvider),
   ),
 );
@@ -201,7 +219,9 @@ class CatalogueNotifier extends Notifier<CatalogueState> {
     if (generation != _generation) return;
     LoadedCatalogue? cached;
     try {
-      cached = await _repo.loadCached();
+      cached = await _repo.loadCached(isAbandoned: () => generation != _generation);
+    } on LoadAbandoned {
+      return;
     } catch (e, st) {
       logger.w('Cannot load the cached catalogue', error: e, stackTrace: st);
     }
@@ -248,7 +268,12 @@ class CatalogueNotifier extends Notifier<CatalogueState> {
     state = state._refreshing();
     _attemptAt = ref.read(clockProvider)();
     try {
-      final loaded = await _repo.fetch(current: compareWithCurrent ? _loaded : null);
+      final loaded = await _repo.fetch(
+        current: compareWithCurrent ? _loaded : null,
+        isAbandoned: () => generation != _generation,
+        // a catalogue on the screen: the list may be scrolled meanwhile, its frames come first
+        background: state.catalogue != null,
+      );
       if (generation != _generation) return;
       final unchanged = identical(loaded.catalogue, state.catalogue);
       logger.i(
@@ -259,6 +284,9 @@ class CatalogueNotifier extends Notifier<CatalogueState> {
       _loaded = loaded;
       _failures = 0;
       state = CatalogueState(catalogue: loaded.catalogue, fetchedAt: loaded.fetchedAt);
+    } on LoadAbandoned {
+      // superseded (the provider was rebuilt or disposed): the generation that asked for it has gone
+      return;
     } catch (e, st) {
       logger.w('Catalogue download failed', error: e, stackTrace: st);
       if (generation != _generation) return;

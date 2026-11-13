@@ -2,10 +2,10 @@
 library;
 
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import 'page_thread.dart';
 import 'sheet_prefetch.dart';
 
 /// Tells whether two downloads have the same content, without keeping the
@@ -34,6 +34,46 @@ final class RawSheets {
 
   /// The record form taken by `parseCatalogueRecord`.
   ({String highlightsCsv, String songsCsv}) toRecord() => (highlightsCsv: highlightsCsv, songsCsv: songsCsv);
+}
+
+/// A hash of a text computed a piece at a time ([add]), for the fingerprint of the sheets on the web
+/// (`fingerprintInSlices`): `String.hashCode` is a loop over the code units there, a dozen milliseconds for the
+/// Songs sheet, too long for one task of the page.
+///
+/// The same [value] on every platform. Its function is the one dart2js gives `String.hashCode` (a browser test checks
+/// they agree under dart2js); the VM and dart2wasm hash otherwise. Nothing relies on that: a fingerprint is never
+/// stored, and both sides of every comparison come from the same function (`CatalogueRepository.fingerprint`).
+final class TextHash {
+  /// The hash of [_text], nothing added yet.
+  TextHash(this._text);
+
+  final String _text;
+  int _i = 0, _hash = 0;
+
+  /// Adds [units] (at least 1) more code units of the text, or what is left of it. Returns whether there is more to
+  /// add.
+  bool add(int units) {
+    assert(units > 0, 'a step of nothing would never end');
+    final text = _text;
+    final stop = units >= text.length - _i ? text.length : _i + units;
+    var hash = _hash;
+    for (var i = _i; i < stop; i++) {
+      hash = 0x1fffffff & (hash + text.codeUnitAt(i));
+      hash = 0x1fffffff & (hash + ((0x0007ffff & hash) << 10));
+      hash ^= hash >> 6;
+    }
+    _hash = hash;
+    _i = stop;
+    return stop < text.length;
+  }
+
+  /// The hash of the whole text, once [add] returned false.
+  int get value {
+    if (_i < _text.length) throw StateError('The text is not hashed yet');
+    var hash = 0x1fffffff & (_hash + ((0x03ffffff & _hash) << 3));
+    hash ^= hash >> 11;
+    return 0x1fffffff & (hash + ((0x00003fff & hash) << 15));
+  }
 }
 
 /// [RawSheets] with the time they were downloaded.
@@ -148,6 +188,6 @@ final class HttpSheetFetcher implements SheetFetcher {
     }
     // a silence throws into the stream, which toBytes then stops listening to
     final bytes = await http.ByteStream(response.stream.timeout(timeout)).toBytes();
-    return sheetCsv(utf8.decode(bytes, allowMalformed: true), uri);
+    return sheetCsv(decodeUtf8(bytes), uri);
   }
 }
