@@ -315,6 +315,44 @@ void main() {
       expect((s.eventCount, s.skippedCount), (2, 0));
     });
 
+    test('absurdly long numbers: the event skipped, or a lone occurrence, the same in every build', () {
+      const good = ['SUMMARY:good', 'DTSTART:20261113T000000Z', 'DURATION:PT1H'];
+      const huge = '123456789012345678901234567890';
+      for (final bad in [
+        ['DTSTART:20261114T000000Z', 'DURATION:P${huge}W'],
+        ['DTSTART:20261114T000000Z', 'DURATION:PT${huge}H'],
+        ['DTSTART:20261114T000000Z', 'DURATION:PT1000000H'],
+        ['DTSTART:20261114T000000Z', 'DURATION:PT1H', 'RRULE:FREQ=WEEKLY;COUNT=$huge'],
+        ['DTSTART:20261114T000000Z', 'DURATION:PT1H', 'RRULE:FREQ=WEEKLY;INTERVAL=$huge'],
+      ]) {
+        final s = parseSchedule(calendar([good, bad]));
+        expect((s.eventCount, s.skippedCount), (1, 1), reason: bad.last);
+        expect(span(s.statusAt(utc(2026, 11, 12)).next), '2026-11-13T00:00:00.000Z – 2026-11-13T01:00:00.000Z');
+      }
+      // the longest part read: 999,999 hours (PT1000000H above is skipped)
+      final long = parseSchedule(
+        calendar([
+          ['DTSTART:20261114T000000Z', 'DURATION:PT999999H'],
+        ]),
+      );
+      expect((long.eventCount, long.skippedCount), (1, 0));
+      expect(span(long.statusAt(utc(2026, 11, 13)).next), '2026-11-14T00:00:00.000Z – 2140-12-12T15:00:00.000Z');
+      // within the numbers every build holds: a single occurrence, the next one is centuries away
+      for (final interval in ['9007199254740991', '20000', '10001']) {
+        final s = parseSchedule(
+          calendar([
+            ['DTSTART:20261114T000000Z', 'DURATION:PT1H', 'RRULE:FREQ=WEEKLY;INTERVAL=$interval'],
+          ]),
+        );
+        expect(s.eventCount, 1, reason: interval);
+        expect(
+          [for (final o in s.occurrencesBetween(utc(2026, 1, 1), utc(2040, 1, 1))) o.start.toIso8601String()],
+          ['2026-11-14T00:00:00.000Z'],
+          reason: interval,
+        );
+      }
+    });
+
     test('a byte-order mark before the first line', () {
       final s = parseSchedule(
         '\uFEFF${calendar([

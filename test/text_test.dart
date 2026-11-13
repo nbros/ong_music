@@ -32,6 +32,28 @@ void main() {
     });
   });
 
+  group('tryParseExactInt', () {
+    test('int.tryParse within ±2^53 - 1', () {
+      expect(tryParseExactInt('42'), 42);
+      expect(tryParseExactInt('-7'), -7);
+      expect(tryParseExactInt('x'), isNull);
+      expect(tryParseExactInt('9007199254740991'), maxExactInt);
+      expect(tryParseExactInt('-9007199254740991'), -maxExactInt);
+    });
+
+    test('null beyond, the same in every build (native and WebAssembly: 64-bit; JavaScript: doubles)', () {
+      for (final text in [
+        '9007199254740992',
+        '-9007199254740992',
+        '9223372036854775807',
+        '-9223372036854775808',
+        '123456789012345678901234567890',
+      ]) {
+        expect(tryParseExactInt(text), isNull, reason: text);
+      }
+    });
+  });
+
   group('songKey', () {
     test('folds and turns punctuation runs into one space', () {
       expect(songKey('The Legend of Zelda - Song of Storms!'), 'the legend of zelda song of storms');

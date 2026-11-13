@@ -148,7 +148,8 @@
         if (e.target && e.target.tagName === 'SCRIPT') failed();
       }
       window.addEventListener('error', scriptFailed, true);
-      // the loader fetches CanvasKit ahead and leaves a failure of it unhandled, and the engine then waits for ever
+      // the loader fetches the engine (CanvasKit or Skwasm) ahead and leaves a failure of it unhandled, and the engine
+      // then waits for ever
       window.addEventListener('unhandledrejection', failed);
       window.addEventListener('flutter-first-frame', function () {
         clearTimeout(slow);
@@ -158,9 +159,9 @@
         setTimeout(function () { loading.remove(); }, 300);
       });
 
-      // flutter_bootstrap.js names the content-hashed main.dart.<hash>.js and assets of its build. GitHub Pages
-      // lets browsers reuse any file for 10 minutes without asking, so a cached bootstrap could point to the
-      // files of a previous deployment. Revalidating it (cheap: 304 when unchanged) keeps the whole app from
+      // flutter_bootstrap.js names the content-hashed main.dart.<hash>.js (.wasm, .mjs) and assets of its build.
+      // GitHub Pages lets browsers reuse any file for 10 minutes without asking, so a cached bootstrap could point to
+      // the files of a previous deployment. Revalidating it (cheap: 304 when unchanged) keeps the whole app from
       // the current deployment. Offline or on error: the plain script tag (browser cache).
       var bootstrapText = null;
       function run(code) {

@@ -39,8 +39,13 @@ Future<void> settle([Duration time = const Duration(milliseconds: 50)]) => Futur
 
 /// Puts [video] in the page, as its platform view does, and waits for its frame to load.
 Future<web.HTMLIFrameElement> attach(YouTubeVideo video) async {
-  web.document.body!.append(video.host);
   final frame = frameOf(video)!;
+  // Under --wasm the test page is served with Cross-Origin-Embedder-Policy (always, even with
+  // --no-cross-origin-isolation), which blocks a frame of the test server without that header: the frame would be
+  // the browser's error page, of another origin. A credentialless frame may load anyway. Only there: the site
+  // sends no such header, and the app's frames need nothing of the kind.
+  if (const bool.fromEnvironment('dart.tool.dart2wasm')) frame.setAttribute('credentialless', '');
+  web.document.body!.append(video.host);
   for (var i = 0; i < 100; i++) {
     final document = frame.contentDocument;
     if (document != null && document.URL.contains('/embed/') && document.readyState == 'complete') break;

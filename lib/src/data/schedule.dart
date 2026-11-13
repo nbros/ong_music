@@ -13,10 +13,13 @@
 /// Call [loadTimeZones] once before [parseSchedule].
 library;
 
+import 'dart:math' as math;
+
 import 'package:timezone/data/latest_10y.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
 
 import '../logger.dart';
+import 'text.dart';
 
 // ------------------------------------------------------------ time zones
 
@@ -655,6 +658,10 @@ _Value _parseValue(_Property p, _Zone floating) {
   return _Value(zone, wall.millisecondsSinceEpoch, isDate: isDate);
 }
 
+/// The largest number of weeks, days, hours, minutes or seconds of a DURATION: a million hours stay exact in
+/// microseconds in every build (below 2^53).
+const _maxDurationPart = 999999;
+
 final _durationPattern = RegExp(r'^([+-])?P(?:(\d+)W|(\d+D)?(?:T(\d+H)?(\d+M)?(\d+S)?)?)$');
 
 _Length _parseDuration(String text) {
@@ -663,7 +670,11 @@ _Length _parseDuration(String text) {
   if (m[1] == '-') throw _Skip('negative DURATION "$text"');
   int part(int group) {
     final s = m[group];
-    return s == null ? 0 : int.parse(s.replaceAll(RegExp(r'\D'), ''));
+    if (s == null) return 0;
+    // an absurdly long number: the same outcome in every build (int.parse throws natively, rounds under JavaScript)
+    final n = tryParseExactInt(s.replaceAll(RegExp(r'\D'), ''));
+    if (n == null || n > _maxDurationPart) throw _Skip('DURATION out of range "$text"');
+    return n;
   }
 
   final days = part(2) * 7 + part(3);
@@ -686,12 +697,15 @@ _Rule _parseRule(String text, _Value start, _Zone zone) {
   final freq = parts.remove('FREQ');
   if (freq != 'WEEKLY') throw _Skip('RRULE FREQ=$freq not supported');
   int positive(String? value, String name) {
-    final n = value == null ? null : int.tryParse(value);
+    final n = value == null ? null : tryParseExactInt(value);
     if (n == null || n < 1) throw _Skip('invalid RRULE $name "$value"');
     return n;
   }
 
-  final interval = parts.containsKey('INTERVAL') ? positive(parts.remove('INTERVAL'), 'INTERVAL') : 1;
+  // An interval above 10,001 weeks (192 years) is read as 10,001: the second occurrence is out of reach either way,
+  // and the days the interval adds stay exact in every build, where a huge one would overflow 64-bit integers
+  // (native code, WebAssembly) but not JavaScript's numbers.
+  final interval = parts.containsKey('INTERVAL') ? math.min(positive(parts.remove('INTERVAL'), 'INTERVAL'), 10001) : 1;
   final count = parts.containsKey('COUNT') ? positive(parts.remove('COUNT'), 'COUNT') : null;
   _Value? until;
   final untilText = parts.remove('UNTIL');
