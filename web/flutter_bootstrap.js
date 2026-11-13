@@ -1,8 +1,8 @@
 {{flutter_js}}
 // The build config ends with the feature test of the WebAssembly build, which throws in a browser without
 // WebAssembly at all (JavaScript JIT turned off: iOS Lockdown Mode, some company policies). Neither build runs there
-// (CanvasKit is WebAssembly too): the loader then fails below, and the loading screen shows its error at once
-// (the one of a failed download), instead of "Still loading…" after 20 seconds.
+// (CanvasKit is WebAssembly too): index.html says so and does not load this script. Should it run all the same,
+// the loader fails below and the loading screen shows its error, instead of "Still loading…" after 20 seconds.
 try {
 {{flutter_build_config}}
 } catch (e) {}

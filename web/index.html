@@ -99,6 +99,9 @@
     #loading .failed-text, #loading.failed .slow-text { display: none; }
     #loading.failed .failed-text { display: inline; }
     #loading.failed .spinner { visibility: hidden; }
+    #loading .unsupported, #loading.unsupported .message { display: none; }
+    #loading.unsupported .unsupported { display: block; max-width: 280px; text-align: center; font-size: 14px; font-weight: 400; }
+    #loading.unsupported .spinner { visibility: hidden; }
     #loading button {
       margin-top: 12px; padding: 8px 20px; border: 0; border-radius: 20px;
       background: var(--brand); color: #2b1200; font: inherit; font-weight: 500;
@@ -112,6 +115,7 @@
     <div class="spinner" aria-hidden="true"></div>
     <div>Ong Music</div>
     <div class="message"><span class="slow-text">Still loading…</span><span class="failed-text">Couldn’t load the app.</span> Check your connection.<br><button type="button" onclick="location.reload()">Reload</button></div>
+    <div class="unsupported">This browser can’t run Ong Music because WebAssembly is not available.</div>
     <!-- without JavaScript nothing ever loads: say so, in place of a spinner that would turn for ever -->
     <noscript>
       <style>#loading .spinner { display: none; }</style>
@@ -135,6 +139,12 @@
       } catch (e) {}
 
       var loading = document.getElementById('loading');
+      // Without WebAssembly (the JavaScript compilers turned off: iOS Lockdown Mode, some company policies) neither
+      // build of the app runs, as both engines are WebAssembly: say so, load nothing, and offer no reload.
+      if (typeof WebAssembly !== 'object' || typeof WebAssembly.instantiate !== 'function') {
+        loading.classList.add('unsupported');
+        return;
+      }
       var slow = setTimeout(function () { loading.classList.add('slow'); }, 20000);
       // A file of the app that does not load (offline, a deployment in progress) stops the start for good: say so
       // at once rather than after the delay above. Called by flutter_bootstrap.js too, when the engine fails.
