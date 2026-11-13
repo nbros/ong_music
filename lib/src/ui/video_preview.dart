@@ -12,6 +12,7 @@ import '../data/model.dart';
 import '../web/embedded_video.dart';
 import '../web/web_platform.dart';
 import 'actions.dart';
+import 'instant_feedback.dart';
 import 'outside_link.dart';
 import 'sheets.dart';
 import 'theme.dart';
@@ -311,11 +312,14 @@ class _Refused extends ConsumerWidget {
                 label: 'Watch on YouTube',
                 builder: (context, open) => FilledButton.icon(
                   onPressed: open,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: ong.brand,
-                    foregroundColor: ong.onBrand,
-                    minimumSize: const Size(0, 40),
-                    textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                  style: platformButtonStyle(
+                    context,
+                    FilledButton.styleFrom(
+                      backgroundColor: ong.brand,
+                      foregroundColor: ong.onBrand,
+                      minimumSize: const Size(0, 40),
+                      textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                    ),
                   ),
                   icon: const Icon(Icons.open_in_new, size: 18),
                   label: const Text('Watch on YouTube'),

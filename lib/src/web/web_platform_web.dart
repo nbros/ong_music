@@ -27,10 +27,15 @@ BrowserEnvironment? currentBrowser() {
       (iosStandalone.isA<JSBoolean>() && (iosStandalone as JSBoolean).toDart) ||
       web.window.matchMedia('(display-mode: standalone)').matches ||
       web.window.matchMedia('(display-mode: fullscreen)').matches;
+  // navigator.userAgentData: Chromium-based browsers only
+  final hints = (navigator as JSObject).getProperty<JSAny?>('userAgentData'.toJS);
+  final hinted = hints.isA<JSObject>() ? (hints as JSObject).getProperty<JSAny?>('platform'.toJS) : null;
   return BrowserEnvironment(
     userAgent: navigator.userAgent,
     maxTouchPoints: navigator.maxTouchPoints,
     standalone: standalone,
+    platform: navigator.platform,
+    clientHintsPlatform: hinted.isA<JSString>() ? (hinted as JSString).toDart : null,
   );
 }
 

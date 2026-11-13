@@ -20,10 +20,12 @@ import '../state/catalogue_state.dart';
 import '../state/settings_state.dart';
 import 'actions.dart';
 import 'format.dart';
+import 'instant_feedback.dart';
 import 'layout.dart';
 import 'outside_link.dart';
 import 'rows.dart';
 import 'theme.dart';
+import 'top_bar.dart';
 import 'video_preview.dart';
 import 'view_state.dart';
 import 'widgets.dart';
@@ -71,14 +73,19 @@ Future<void> _showSheet(BuildContext context, Fiche fiche) {
       constraints: const BoxConstraints(maxWidth: maxFicheWidth),
       // no slide when the system asks for less motion
       sheetAnimationStyle: MediaQuery.disableAnimationsOf(host) ? AnimationStyle.noAnimation : null,
-      // At most nine tenths of the window, drag handle included: read at each layout, not once on opening, for a
-      // window that is turned or resized under the sheet.
-      builder: (context) => ConstrainedBox(
-        constraints: BoxConstraints(
-          maxHeight: math.max(0, MediaQuery.sizeOf(context).height * 0.9 - kMinInteractiveDimension),
-        ),
-        child: ficheContent(fiche),
-      ),
+      // At most nine tenths of the window, drag handle included, and never over the top bar of the desktop look
+      // (in a window lower than ten times the bar): read at each layout, not once on opening, for a window that is
+      // turned or resized under the sheet.
+      builder: (context) {
+        final height = MediaQuery.sizeOf(context).height;
+        final bar = AppLayout.navigationOf(context) == AppNavigation.topBar ? topBarHeight : 0.0;
+        return ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: math.max(0, math.min(height * 0.9, height - bar) - kMinInteractiveDimension),
+          ),
+          child: ficheContent(fiche),
+        );
+      },
     ),
   );
 }
@@ -124,7 +131,8 @@ class DetailPaneScope extends InheritedWidget {
 
 /// The route of a detail sheet: a modal bottom sheet ([showModalBottomSheet]
 /// with the arguments above) centred on the content beside the navigation
-/// rail, not on the window, when there is a rail. The scrim covers the whole
+/// rail, not on the window, when there is a rail; on the window under the top
+/// bar of the desktop look, never over the bar. The scrim covers the whole
 /// window.
 ///
 /// When the window becomes expanded, the fiche of the sheet moves into the
@@ -150,7 +158,7 @@ class _DetailSheetRoute extends ModalBottomSheetRoute<void> {
 
   @override
   Widget buildPage(BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation) =>
-      _BesideRail(onExpanded: _moveToPane, child: super.buildPage(context, animation, secondaryAnimation));
+      _OverContent(onExpanded: _moveToPane, child: super.buildPage(context, animation, secondaryAnimation));
 
   void _moveToPane() {
     if (_moving) return;
@@ -171,10 +179,12 @@ class _DetailSheetRoute extends ModalBottomSheetRoute<void> {
   }
 }
 
-/// Lays [child] out right of the navigation rail, followed live (a window
-/// resized under the sheet), with the safe area on the left taken by the rail.
-class _BesideRail extends StatelessWidget {
-  const _BesideRail({required this.onExpanded, required this.child});
+/// Lays [child] out over the content: right of the navigation rail, with the
+/// safe area on the left taken by the rail, or across the window with a bottom
+/// bar or the top bar of the desktop look ([AppLayout.contentLeftOf]); followed
+/// live (a window resized under the sheet).
+class _OverContent extends StatelessWidget {
+  const _OverContent({required this.onExpanded, required this.child});
 
   /// Called when the window is expanded (there is a detail pane).
   final VoidCallback onExpanded;
@@ -410,7 +420,7 @@ class _Fact extends StatelessWidget {
         ? MergeSemantics(child: body)
         : Semantics(
             button: true,
-            child: InkWell(onTap: onTap, child: body),
+            child: AppInkWell(onTap: onTap, child: body),
           );
   }
 }
@@ -576,11 +586,14 @@ class HighlightSheet extends ConsumerWidget {
                                 label: 'Watch on YouTube',
                                 builder: (context, open) => FilledButton.icon(
                                   onPressed: open,
-                                  style: FilledButton.styleFrom(
-                                    backgroundColor: ong.brand,
-                                    foregroundColor: ong.onBrand,
-                                    minimumSize: const Size(0, 40),
-                                    textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                                  style: platformButtonStyle(
+                                    context,
+                                    FilledButton.styleFrom(
+                                      backgroundColor: ong.brand,
+                                      foregroundColor: ong.onBrand,
+                                      minimumSize: const Size(0, 40),
+                                      textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                                    ),
                                   ),
                                   icon: const Icon(Icons.play_arrow, size: 20),
                                   label: const Text('Watch on YouTube'),
@@ -757,7 +770,7 @@ class SongSheet extends ConsumerWidget {
                         // the ink well's own action goes with its semantics
                         onTap: open,
                         excludeSemantics: true,
-                        child: InkWell(
+                        child: AppInkWell(
                           borderRadius: BorderRadius.circular(10),
                           onTap: open,
                           child: SizedBox(

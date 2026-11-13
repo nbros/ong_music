@@ -24,6 +24,7 @@ import 'package:ong_music/src/ui/install_banner.dart';
 import 'package:ong_music/src/ui/layout.dart';
 import 'package:ong_music/src/ui/nav_rail.dart';
 import 'package:ong_music/src/ui/outside_link.dart';
+import 'package:ong_music/src/ui/top_bar.dart';
 import 'package:ong_music/src/ui/video_preview.dart';
 import 'package:ong_music/src/ui/widgets.dart';
 import 'package:ong_music/src/web/embedded_video.dart';
@@ -249,6 +250,8 @@ class TestApp {
 /// the downloads (default: none ends), [fontKitRegistration] receives the
 /// registrations, and [fontPause] lets the collection of the characters go on
 /// (default: a timer of zero).
+/// The app has the phone and tablet look, whatever the platform of the test,
+/// unless [desktop] gives it the desktop look (top bar, instant feedback).
 Future<TestApp> pumpApp(
   WidgetTester tester, {
   CatalogueState? state,
@@ -271,6 +274,7 @@ Future<TestApp> pumpApp(
   FontKitDownload? fontKitDownload,
   FontKitRegistration? fontKitRegistration,
   Future<void> Function()? fontPause,
+  bool desktop = false,
 }) async {
   // before the size: setting it makes MediaQuery read the clock format again
   tester.platformDispatcher.alwaysUse24HourFormatTestValue = alwaysUse24HourFormat;
@@ -324,6 +328,7 @@ Future<TestApp> pumpApp(
         fontKitDownloadProvider.overrideWithValue(fontKitDownload ?? (kit) => Completer<Uint8List>().future),
         fontKitRegistrationProvider.overrideWithValue(fontKitRegistration ?? (fonts) async {}),
         fontWarmUpPauseProvider.overrideWithValue(fontPause ?? () => Future<void>.delayed(Duration.zero)),
+        desktopLookProvider.overrideWithValue(desktop),
         if (pointer != null) pointerProvider.overrideWith(() => PinnedPointer(pointer)),
         thumbnailImageProvider.overrideWithValue((url) => MemoryImage(transparentPng)),
         urlOpenerProvider.overrideWithValue((uri) async {
@@ -516,8 +521,8 @@ class PinnedPointer extends PointerNotifier {
   void saw(PointerDeviceKind kind) {}
 }
 
-/// The navigation: the bottom bar of a compact window, or the rail of the others.
-Finder navigation() => find.byWidgetPredicate((w) => w is NavigationBar || w is AppNavigationRail);
+/// The navigation: the bottom bar of a compact window, the rail of the others, or the top bar of the desktop look.
+Finder navigation() => find.byWidgetPredicate((w) => w is NavigationBar || w is AppNavigationRail || w is AppTopBar);
 
 /// Taps the navigation destination [label] (of the bar or of the rail).
 Future<void> goToTab(WidgetTester tester, String label) async {
@@ -527,7 +532,9 @@ Future<void> goToTab(WidgetTester tester, String label) async {
 
 /// The index of the selected navigation destination.
 int selectedTab(WidgetTester tester) => switch (tester.widget(navigation())) {
-  NavigationBar(:final selectedIndex) || AppNavigationRail(:final selectedIndex) => selectedIndex,
+  NavigationBar(:final selectedIndex) ||
+  AppNavigationRail(:final selectedIndex) ||
+  AppTopBar(:final selectedIndex) => selectedIndex,
   _ => throw StateError('no navigation'),
 };
 

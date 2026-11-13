@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../data/model.dart';
+import 'instant_feedback.dart';
 
 /// The design tokens that have no [ColorScheme] slot.
 @immutable
@@ -172,9 +173,10 @@ const Map<Genre, Color> genreColors = {
 
 const _noSpacing = TextStyle(letterSpacing: 0);
 
-/// The app theme for [brightness]. [fontFamilyFallback], when given, is the fallback of every text of the theme: on the
-/// web, the fonts of the rare characters (see `fontFallbackProvider` in `ui/font_warm_up.dart`).
-ThemeData buildTheme(Brightness brightness, {List<String>? fontFamilyFallback}) {
+/// The app theme for [brightness], in the desktop look when [desktop] (see [_desktopTheme]). [fontFamilyFallback],
+/// when given, is the fallback of every text of the theme: on the web, the fonts of the rare characters (see
+/// `fontFallbackProvider` in `ui/font_warm_up.dart`).
+ThemeData buildTheme(Brightness brightness, {bool desktop = false, List<String>? fontFamilyFallback}) {
   final dark = brightness == Brightness.dark;
   final scheme = dark ? darkScheme : lightScheme;
   final ong = dark ? OngColors.dark : OngColors.light;
@@ -189,7 +191,7 @@ ThemeData buildTheme(Brightness brightness, {List<String>? fontFamilyFallback}) 
     fontFamilyFallback: fontFamilyFallback,
   );
   final text = base.textTheme;
-  return base.copyWith(
+  final theme = base.copyWith(
     scaffoldBackgroundColor: scheme.surface,
     canvasColor: scheme.surface,
     extensions: [ong],
@@ -295,6 +297,75 @@ ThemeData buildTheme(Brightness brightness, {List<String>? fontFamilyFallback}) 
           ),
         )
         .apply(bodyColor: scheme.onSurface, displayColor: scheme.onSurface),
+  );
+  return desktop ? _desktopTheme(theme) : theme;
+}
+
+/// [theme] in the desktop look: no ink ripple anywhere, and the states of the
+/// controls shown at once (see `instant_feedback.dart`):
+/// - the buttons paint their own state layer ([instantButtonStyle]);
+/// - the chips and the segments of the segmented button take the tint of
+///   their state in their colour, which changes at once (Material's hover
+///   highlight fades in); the segments their keyboard focus too, which their
+///   transparent overlay no longer shows (the chips keep Material's);
+/// - what uses the theme's ink presses with [InstantInk], without the grey
+///   highlight that fades in and out; the selected row of a list tile (the
+///   packages of the licences page) keeps that grey as its own colour.
+ThemeData _desktopTheme(ThemeData theme) {
+  final scheme = theme.colorScheme;
+  // the tints of the states of a control of [content] over its [base]; the focus only while the keyboard moves it,
+  // as Material shows it (the control is built again when its focus changes, after the mode has changed)
+  Color layer(Set<WidgetState> states, Color base, Color content) {
+    if (states.contains(WidgetState.disabled)) return base;
+    final tint = stateTint(
+      hovered: states.contains(WidgetState.hovered),
+      focused:
+          states.contains(WidgetState.focused) && FocusManager.instance.highlightMode == FocusHighlightMode.traditional,
+      pressed: states.contains(WidgetState.pressed),
+      hover: content.withValues(alpha: hoverStateOpacity),
+      focus: content.withValues(alpha: focusStateOpacity),
+      press: content.withValues(alpha: pressStateOpacity),
+    );
+    if (tint == null) return base;
+    return base.a == 0 ? tint : Color.alphaBlend(tint, base);
+  }
+
+  final segments = theme.segmentedButtonTheme.style!;
+  return theme.copyWith(
+    splashFactory: InstantInk.splashFactory,
+    splashColor: scheme.onSurface.withValues(alpha: pressStateOpacity),
+    highlightColor: Colors.transparent,
+    listTileTheme: theme.listTileTheme.copyWith(selectedTileColor: theme.highlightColor),
+    textButtonTheme: TextButtonThemeData(style: instantButtonStyle),
+    filledButtonTheme: FilledButtonThemeData(style: instantButtonStyle),
+    outlinedButtonTheme: OutlinedButtonThemeData(style: instantButtonStyle),
+    elevatedButtonTheme: ElevatedButtonThemeData(style: instantButtonStyle),
+    iconButtonTheme: IconButtonThemeData(style: instantButtonStyle),
+    // (the segments are text buttons that do not take the background builder of the theme)
+    segmentedButtonTheme: SegmentedButtonThemeData(
+      style: segments.copyWith(
+        overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+        splashFactory: NoSplash.splashFactory,
+        backgroundColor: WidgetStateProperty.resolveWith((states) {
+          final selected = states.contains(WidgetState.selected);
+          return layer(
+            states,
+            selected ? scheme.secondaryContainer : Colors.transparent,
+            selected ? scheme.onSecondaryContainer : scheme.onSurface,
+          );
+        }),
+      ),
+    ),
+    // a press shows with the theme's ink, over the colour of the state
+    chipTheme: theme.chipTheme.copyWith(
+      color: WidgetStateProperty.resolveWith(
+        (states) => layer(
+          states.difference(const {WidgetState.pressed, WidgetState.focused}),
+          states.contains(WidgetState.selected) ? scheme.secondaryContainer : Colors.transparent,
+          scheme.onSurface,
+        ),
+      ),
+    ),
   );
 }
 

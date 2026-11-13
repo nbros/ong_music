@@ -20,6 +20,7 @@ import 'layout.dart';
 import 'nav_rail.dart';
 import 'ong_log_page.dart';
 import 'theme.dart';
+import 'top_bar.dart';
 import 'view_state.dart';
 import 'widgets.dart';
 
@@ -45,13 +46,14 @@ const List<NavDestination> _destinations = [
   (icon: Icons.person, label: 'About'),
 ];
 
-/// The light and dark themes with [fontFamilyFallback] (see [fontFallbackProvider]).
-typedef _Themes = ({List<String>? fallback, ThemeData light, ThemeData dark});
+/// The light and dark themes of a look with [fontFamilyFallback] (see [fontFallbackProvider]).
+typedef _Themes = ({bool desktop, List<String>? fallback, ThemeData light, ThemeData dark});
 
-_Themes _buildThemes(List<String>? fallback) => (
+_Themes _buildThemes({required bool desktop, required List<String>? fallback}) => (
+  desktop: desktop,
   fallback: fallback,
-  light: buildTheme(Brightness.light, fontFamilyFallback: fallback),
-  dark: buildTheme(Brightness.dark, fontFamilyFallback: fallback),
+  light: buildTheme(Brightness.light, desktop: desktop, fontFamilyFallback: fallback),
+  dark: buildTheme(Brightness.dark, desktop: desktop, fontFamilyFallback: fallback),
 );
 
 // web only (null in the native apps, where the system setting reaches Flutter)
@@ -104,11 +106,14 @@ class _OngMusicAppState extends ConsumerState<OngMusicApp> {
   Widget build(BuildContext context) {
     // start loading the catalogue at once, whatever the first tab
     ref.watch(catalogueProvider.select((s) => s.hasData));
+    final desktop = ref.watch(desktopLookProvider);
     final fallback = ref.watch(fontFallbackProvider);
     // the fallback changes at once (a text whose style is halfway through a theme animation keeps the old one);
     // a change of theme mode animates as before
     final fallbackChanged = _themes != null && !listEquals(_themes!.fallback, fallback);
-    final themes = _themes != null && !fallbackChanged ? _themes! : _themes = _buildThemes(fallback);
+    final themes = _themes != null && !fallbackChanged && _themes!.desktop == desktop
+        ? _themes!
+        : _themes = _buildThemes(desktop: desktop, fallback: fallback);
     return MaterialApp.router(
       title: 'Ong Music',
       debugShowCheckedModeBanner: false,
@@ -139,9 +144,10 @@ final startsInBackgroundProvider = Provider<bool>((ref) {
   return state == AppLifecycleState.hidden || state == AppLifecycleState.paused || pageIsHidden();
 });
 
-/// The navigation (a bar at the bottom of a compact window, a rail on the
-/// left of the others) and the three tabs, each one kept alive with its query,
-/// filters and scroll position, whatever the window mode.
+/// The navigation (on phones and tablets, a bar at the bottom of a compact
+/// window, a rail on the left of the others; in the desktop look, a bar at
+/// the top of every window) and the three tabs, each one kept alive with its
+/// query, filters and scroll position, whatever the window mode.
 class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key});
 
@@ -154,7 +160,10 @@ class _AppShellState extends ConsumerState<AppShell> {
   final _pages = {for (final tab in AppTab.values) tab: GlobalKey(debugLabel: tab.name)};
 
   void _select(int index) {
-    FocusManager.instance.primaryFocus?.unfocus();
+    // (the search field of the tab left keeps no focus: it would bring up the keyboard on a phone, and take the
+    // keys of the next tab) but a link of the top bar activated from the keyboard keeps it, for the next Tab
+    final focus = FocusManager.instance.primaryFocus;
+    if (focus?.context?.findAncestorWidgetOfExactType<AppTopBar>() == null) focus?.unfocus();
     ref.read(selectedTabProvider.notifier).select(AppTab.values[index]);
   }
 
@@ -162,7 +171,8 @@ class _AppShellState extends ConsumerState<AppShell> {
   Widget build(BuildContext context) {
     final tab = ref.watch(selectedTabProvider);
     final mode = AppLayout.modeOf(context);
-    final rail = mode.hasRail;
+    final navigation = AppLayout.navigationOf(context);
+    final rail = navigation == AppNavigation.rail;
     final theme = Theme.of(context);
     // web: theme-color tags of index.html, color-scheme and page background in the app theme, which may
     // differ from the system one (no-op in the native apps)
@@ -189,39 +199,44 @@ class _AppShellState extends ConsumerState<AppShell> {
         // on web, the engine turns statusBarColor into the page's theme-color (Safari's bars, the iOS
         // status bar of the installed app): the app background there, transparent (edge to edge) elsewhere
         value: kIsWeb ? systemBarsStyle(theme).copyWith(statusBarColor: surface) : systemBarsStyle(theme),
-        child: TypingInLowWindow(
+        child: FiltersOutOfRoom(
           // read here: under the scaffold, the keyboard is no longer in the media query
           value:
-              MediaQuery.viewInsetsOf(context).bottom > 0 &&
-              MediaQuery.sizeOf(context).height < InstallBanner.minHeight,
+              (MediaQuery.viewInsetsOf(context).bottom > 0 &&
+                  MediaQuery.sizeOf(context).height < InstallBanner.minHeight) ||
+              (navigation == AppNavigation.topBar &&
+                  MediaQuery.sizeOf(context).height - MediaQuery.paddingOf(context).top - topBarHeight <
+                      listHeadHeight),
           child: Scaffold(
-            body: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (rail)
-                  _Region(
-                    // expanded: the rail, the list pane, the detail pane, in that order for the Tab key
-                    enabled: mode == WindowMode.expanded,
-                    child: AppNavigationRail(
-                      destinations: _destinations,
-                      selectedIndex: tab.index,
-                      onDestinationSelected: _select,
-                    ),
+            body: navigation == AppNavigation.topBar
+                ? _topBarBody(tab, mode)
+                : Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (rail)
+                        _Region(
+                          // expanded: the rail, the list pane, the detail pane, in that order for the Tab key
+                          enabled: mode == WindowMode.expanded,
+                          child: AppNavigationRail(
+                            destinations: _destinations,
+                            selectedIndex: tab.index,
+                            onDestinationSelected: _select,
+                          ),
+                        ),
+                      Expanded(
+                        // the rail takes the safe area on the left (a camera cutout of a phone held sideways)
+                        child: MediaQuery.removePadding(
+                          context: context,
+                          removeLeft: rail,
+                          child: SafeArea(
+                            bottom: false,
+                            child: mode == WindowMode.expanded ? _expandedContent(tab) : _content(tab, rail),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                Expanded(
-                  // the rail takes the safe area on the left (a camera cutout of a phone held sideways)
-                  child: MediaQuery.removePadding(
-                    context: context,
-                    removeLeft: rail,
-                    child: SafeArea(
-                      bottom: false,
-                      child: mode == WindowMode.expanded ? _expandedContent(tab) : _content(tab, rail),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            bottomNavigationBar: rail
+            bottomNavigationBar: navigation != AppNavigation.bottomBar
                 ? null
                 : ColoredBox(
                     color: theme.colorScheme.surfaceContainer,
@@ -247,9 +262,42 @@ class _AppShellState extends ConsumerState<AppShell> {
     );
   }
 
-  /// The install banner over the tab on screen, each tab in its column.
-  Widget _content(AppTab tab, bool rail) {
-    final listWidth = rail ? maxListColumnWidth : maxContentWidth;
+  /// The desktop look: the top bar across the window, the tabs under it as in
+  /// a window of the same size without it, the bar first for the Tab key and
+  /// for screen readers.
+  Widget _topBarBody(AppTab tab, WindowMode mode) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      _Region(
+        child: AppTopBar(
+          destinations: _destinations,
+          addresses: [
+            // the tab's own address, which the browser shows and opens in another tab
+            for (final t in AppTab.values) Uri.base.replace(fragment: AppAddress(t).uri.toString()),
+          ],
+          selectedIndex: tab.index,
+          onDestinationSelected: _select,
+        ),
+      ),
+      Expanded(
+        // the bar takes the safe area at the top
+        child: MediaQuery.removePadding(
+          context: context,
+          removeTop: true,
+          child: SafeArea(
+            bottom: false,
+            child: mode == WindowMode.expanded ? _expandedContent(tab) : _content(tab, mode != WindowMode.compact),
+          ),
+        ),
+      ),
+    ],
+  );
+
+  /// The install banner over the tab on screen, each tab in its column: the
+  /// column of a phone in a compact window, a wider one in a [wide] (medium)
+  /// window.
+  Widget _content(AppTab tab, bool wide) {
+    final listWidth = wide ? maxListColumnWidth : maxContentWidth;
     return Column(
       children: [
         // as wide as the lists, whatever the tab: it does not change size when the tab changes
@@ -289,11 +337,14 @@ class _AppShellState extends ConsumerState<AppShell> {
 
   /// An expanded window: the install banner over the tab on screen, a list
   /// tab as a list pane and its detail pane, About across both; at most
-  /// [maxExpandedWidth] wide, centred.
+  /// [maxExpandedWidth] wide, centred. Under the top bar of the desktop look,
+  /// the list pane begins 8 px lower, away from the line of the bar (the
+  /// detail pane is 12 px from it, as from the other edges).
   Widget _expandedContent(AppTab tab) => LayoutBuilder(
     builder: (context, constraints) {
       final width = constraints.maxWidth < maxExpandedWidth ? constraints.maxWidth : maxExpandedWidth;
       final listWidth = listPaneWidth(constraints.maxWidth);
+      final listTop = AppLayout.desktopOf(context) ? 8.0 : 0.0;
       return Center(
         child: SizedBox(
           width: width,
@@ -318,6 +369,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                                     SizedBox(
                                       width: listWidth,
                                       child: _Region(
+                                        top: listTop,
                                         child: KeyedSubtree(
                                           key: _pages[t],
                                           child: t == AppTab.highlights ? const HighlightsPage() : const OngLogPage(),
@@ -342,18 +394,30 @@ class _AppShellState extends ConsumerState<AppShell> {
   );
 }
 
-/// A region of an expanded window (the rail, the list pane, the detail pane),
-/// gone through as a whole by the Tab key and by screen readers: side by side,
-/// they would otherwise be read row by row across the three.
+/// A region of the window gone through as a whole by the Tab key and by screen
+/// readers: in an expanded window, the rail, the list pane and the detail pane
+/// (side by side, they would otherwise be read row by row across the three);
+/// in the desktop look, the top bar (first, before the content), and the
+/// panes of an expanded window. [top] is space above it.
 class _Region extends StatelessWidget {
-  const _Region({this.enabled = true, required this.child});
+  const _Region({this.enabled = true, this.top = 0, required this.child});
 
   final bool enabled;
+  final double top;
   final Widget child;
 
   @override
-  Widget build(BuildContext context) =>
-      enabled ? FocusTraversalGroup(child: Semantics(container: true, explicitChildNodes: true, child: child)) : child;
+  Widget build(BuildContext context) {
+    final region = enabled
+        ? FocusTraversalGroup(child: Semantics(container: true, explicitChildNodes: true, child: child))
+        : child;
+    return top == 0
+        ? region
+        : Padding(
+            padding: EdgeInsets.only(top: top),
+            child: region,
+          );
+  }
 }
 
 /// A column centred and at most [maxWidth] wide.

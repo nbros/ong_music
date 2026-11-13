@@ -1,16 +1,22 @@
 /// What the layout adapts to: the window mode (from the size of the window)
-/// and the pointer (from the latest pointer event), both followed live.
+/// and the pointer (from the latest pointer event), both followed live, and
+/// the look of the platform (desktop, or phone and tablet), decided once.
 ///
-/// Neither is derived from the platform once and for all: a window is resized,
-/// a phone turned, a mouse plugged into a tablet, a touch screen laptop
-/// touched. [AppLayout] (above the navigator, so the sheets see it too) gives
-/// both to the whole UI.
+/// Neither the window mode nor the pointer is derived from the platform once
+/// and for all: a window is resized, a phone turned, a mouse plugged into a
+/// tablet, a touch screen laptop touched. The look is: a computer keeps the
+/// look of a computer in a narrow window or under a finger, a tablet keeps the
+/// look of a tablet with a mouse. [AppLayout] (above the navigator, so the
+/// sheets see it too) gives all three to the whole UI.
 library;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
+
+import '../web/install_hint.dart';
+import '../web/web_platform.dart';
 
 /// The layout of the window, from its logical size.
 enum WindowMode {
@@ -42,9 +48,48 @@ enum WindowMode {
     return expanded;
   }
 
-  /// Whether the navigation is a rail on the left instead of a bar at the bottom.
+  /// Whether the navigation is a rail on the left instead of a bar at the
+  /// bottom, in the phone and tablet look (the desktop look has a bar at the
+  /// top in every mode, see [AppNavigation]).
   bool get hasRail => this != compact;
 }
+
+/// Where the navigation between the three tabs is.
+enum AppNavigation {
+  /// The phone and tablet look in a [WindowMode.compact] window.
+  bottomBar,
+
+  /// The phone and tablet look in a [WindowMode.medium] or
+  /// [WindowMode.expanded] window.
+  rail,
+
+  /// The desktop look, in a window of any size: text links in a bar across
+  /// the top of the window.
+  topBar,
+}
+
+/// Whether [platform] gets the desktop look: the browsers of macOS, Windows,
+/// Linux and ChromeOS (which Flutter reports as Linux), and the Windows app.
+/// Android and iOS keep the phone and tablet look in their apps and in their
+/// browsers, installed or not, whatever the size of the device.
+///
+/// [browser] (null outside a browser) tells the tablets and phones whose
+/// browser asks for desktop sites, which Flutter reports as computers: an
+/// iPad that claims to be a Mac (Flutter already reports it as iOS when it has
+/// more than two touch points, [isIPad] from more than one), an Android device
+/// that claims to be a Linux computer ([isAndroid]).
+bool isDesktopPlatform(TargetPlatform platform, BrowserEnvironment? browser) => switch (platform) {
+  TargetPlatform.windows ||
+  TargetPlatform.macOS ||
+  TargetPlatform.linux => browser == null || !(isIPad(browser) || isAndroid(browser)),
+  TargetPlatform.android || TargetPlatform.iOS || TargetPlatform.fuchsia => false,
+};
+
+/// Whether the app has the desktop look: a top bar of text links instead of
+/// the rail and the bottom bar, no ink ripple, hover and press states shown at
+/// once. Decided once, from the platform (see [isDesktopPlatform]): not from
+/// the size of the window, nor from the pointer. Overridden in tests.
+final desktopLookProvider = Provider<bool>((ref) => isDesktopPlatform(defaultTargetPlatform, currentBrowser()));
 
 /// What the user points with.
 ///
@@ -120,6 +165,16 @@ class AppLayout extends ConsumerWidget {
       context.getInheritedWidgetOfExactType<_LayoutScope>()?.mode ??
       WindowMode.of(MediaQuery.maybeSizeOf(context) ?? Size.zero);
 
+  /// Whether the app has the desktop look (see [desktopLookProvider]); false
+  /// without an [AppLayout] above.
+  static bool desktopOf(BuildContext context) =>
+      InheritedModel.inheritFrom<_LayoutScope>(context, aspect: _Aspect.desktop)?.desktop ?? false;
+
+  /// Where the navigation is in the window of [context].
+  static AppNavigation navigationOf(BuildContext context) => desktopOf(context)
+      ? AppNavigation.topBar
+      : (modeOf(context).hasRail ? AppNavigation.rail : AppNavigation.bottomBar);
+
   /// The pointer ([PointerKind.guess] without an [AppLayout] above).
   static PointerKind pointerOf(BuildContext context) =>
       InheritedModel.inheritFrom<_LayoutScope>(context, aspect: _Aspect.pointer)?.pointer ?? PointerKind.guess;
@@ -129,9 +184,10 @@ class AppLayout extends ConsumerWidget {
 
   /// How far from the left edge of the window the content begins: the rail
   /// and the safe area on its left (a phone held sideways with its camera on
-  /// that side), or nothing in [WindowMode.compact].
+  /// that side), or nothing without a rail (a bottom bar, or the top bar of
+  /// the desktop look).
   static double contentLeftOf(BuildContext context) =>
-      modeOf(context).hasRail ? MediaQuery.paddingOf(context).left + railWidth : 0;
+      navigationOf(context) == AppNavigation.rail ? MediaQuery.paddingOf(context).left + railWidth : 0;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -146,25 +202,29 @@ class AppLayout extends ConsumerWidget {
       child: _LayoutScope(
         mode: WindowMode.of(MediaQuery.sizeOf(context)),
         pointer: ref.watch(pointerProvider),
+        desktop: ref.watch(desktopLookProvider),
         child: child,
       ),
     );
   }
 }
 
-enum _Aspect { mode, pointer }
+enum _Aspect { mode, pointer, desktop }
 
 class _LayoutScope extends InheritedModel<_Aspect> {
-  const _LayoutScope({required this.mode, required this.pointer, required super.child});
+  const _LayoutScope({required this.mode, required this.pointer, required this.desktop, required super.child});
 
   final WindowMode mode;
   final PointerKind pointer;
+  final bool desktop;
 
   @override
-  bool updateShouldNotify(_LayoutScope oldWidget) => mode != oldWidget.mode || pointer != oldWidget.pointer;
+  bool updateShouldNotify(_LayoutScope oldWidget) =>
+      mode != oldWidget.mode || pointer != oldWidget.pointer || desktop != oldWidget.desktop;
 
   @override
   bool updateShouldNotifyDependent(_LayoutScope oldWidget, Set<_Aspect> dependencies) =>
       (dependencies.contains(_Aspect.mode) && mode != oldWidget.mode) ||
-      (dependencies.contains(_Aspect.pointer) && pointer != oldWidget.pointer);
+      (dependencies.contains(_Aspect.pointer) && pointer != oldWidget.pointer) ||
+      (dependencies.contains(_Aspect.desktop) && desktop != oldWidget.desktop);
 }
