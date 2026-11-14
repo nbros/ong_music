@@ -30,10 +30,10 @@ import 'widgets.dart';
 class HighlightRow extends StatelessWidget {
   const HighlightRow({
     super.key,
-    required this.catalogue,
     required this.highlight,
+    required this.requester,
+    required this.own,
     required this.tokens,
-    required this.me,
     required this.currentYear,
     required this.onTap,
     this.onMore,
@@ -41,15 +41,17 @@ class HighlightRow extends StatelessWidget {
     this.onThumbnail,
   });
 
-  final Catalogue catalogue;
   final Highlight highlight;
+
+  /// The name of its requester, or null.
+  final String? requester;
+
+  /// Whether [requester] is the user (their Twitch name), shown in orange.
+  final bool own;
   final List<String> tokens;
 
   /// Dates of this year are shown without it.
   final int currentYear;
-
-  /// The folded Twitch name of the user, whose name is highlighted.
-  final String me;
   final VoidCallback onTap;
 
   /// The ⋮ button, which shows the details; none when null.
@@ -75,7 +77,7 @@ class HighlightRow extends StatelessWidget {
         ? Thumbnail(youtubeId: h.youtubeId, width: ListMetrics.thumbnailWidth, label: '#${h.seq}')
         : _ThumbnailLink(youtubeId: h.youtubeId!, url: h.url, label: '#${h.seq}', onTap: onThumbnail);
     final artist = h.artist;
-    final requester = catalogue.requester(h.requesterId);
+    final requester = this.requester;
     final date = formatShortDate(h.date, currentYear: currentYear);
     final meta = [h.genre.label, if (date.isNotEmpty) date].join(' · ');
     final row = SizedBox(
@@ -123,12 +125,7 @@ class HighlightRow extends StatelessWidget {
                             if (requester != null) ...[
                               const TextSpan(text: ' · '),
                               personIcon(ong.on3),
-                              ...requesterSpans(
-                                context,
-                                requester.name,
-                                tokens,
-                                own: catalogue.isRequester(requester.id, me),
-                              ),
+                              ...requesterSpans(context, requester, tokens, own: own),
                             ],
                           ],
                         ),

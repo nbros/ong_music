@@ -665,7 +665,7 @@ void main() {
   group('an address opened', () {
     testWidgets('cold: its tab and its search, as soon as the catalogue is there', (tester) async {
       final browser = FakeBrowser('/log?q=zelda');
-      final app = await pumpApp(tester, browser: browser, state: const CatalogueState(), settle: false);
+      final app = await pumpApp(tester, browser: browser, state: CatalogueState(), settle: false);
       expect(selectedTab(tester), 1);
       app.notifier.emit(CatalogueState(catalogue: testCatalogue(), fetchedAt: testNow));
       await tester.pumpAndSettle();

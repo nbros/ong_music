@@ -3,6 +3,8 @@ library;
 
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -37,6 +39,9 @@ class _HighlightsPageState extends ConsumerState<HighlightsPage> implements List
   HighlightFilter? _shownFilter;
   Catalogue? _shownCatalogue;
   double _shownRowExtent = 0;
+
+  /// Whether the first frame of the list was reported ([SongsTrigger.highlightsShown]).
+  bool _listShown = false;
 
   @override
   void initState() {
@@ -154,6 +159,13 @@ class _HighlightsPageState extends ConsumerState<HighlightsPage> implements List
     });
     final catalogue = ref.watch(currentCatalogueProvider);
     if (catalogue == null) return const CatalogueStatusView();
+    if (!_listShown) {
+      _listShown = true;
+      // the list is on the screen after this frame: the Songs sheet may come now (songsWanted)
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) ref.read(catalogueProvider.notifier).songsWanted(SongsTrigger.highlightsShown);
+      });
+    }
     final filter = ref.watch(highlightFilterProvider);
     final results = ref.watch(highlightResultsProvider(filter))!;
     _keepPosition(catalogue, results, filter, ListMetrics.of(context).highlightRow);
@@ -250,18 +262,46 @@ class _HighlightsPageState extends ConsumerState<HighlightsPage> implements List
   }
 }
 
-class _HighlightList extends ConsumerWidget {
+class _HighlightList extends ConsumerStatefulWidget {
   const _HighlightList({required this.catalogue, required this.results});
 
   final Catalogue catalogue;
   final HighlightResults results;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_HighlightList> createState() => _HighlightListState();
+}
+
+/// What a row shows, and the widget built for it.
+typedef _BuiltRow = ({
+  Highlight highlight,
+  String? requester,
+  bool own,
+  List<String> tokens,
+  int currentYear,
+  bool expanded,
+  bool mouse,
+  Widget widget,
+});
+
+class _HighlightListState extends ConsumerState<_HighlightList> {
+  /// The rows built for the list as it was last built, and since, by row key. A row whose highlight (the same
+  /// object) and everything else it shows are the same is given back as it was: Flutter builds nothing of it again.
+  /// So when the Songs sheet completes the catalogue (the same highlights), only the rows whose requester's name it
+  /// spells otherwise are built again, and the same for a refresh that changes nothing of a row.
+  Map<String, _BuiltRow> _previous = const {}, _current = {};
+
+  @override
+  Widget build(BuildContext context) {
+    final catalogue = widget.catalogue;
+    final results = widget.results;
     final me = ref.watch(myRequesterKeyProvider);
     final currentYear = ref.watch(clockProvider)().toLocal().year;
     final expanded = AppLayout.modeOf(context) == WindowMode.expanded;
     final mouse = expanded && AppLayout.mouseOf(context);
+    // every row in the list was built since the last build (then, or while scrolling): the others are gone from it
+    _previous = _current;
+    _current = {};
     return SliverFixedExtentList(
       itemExtent: ListMetrics.of(context).highlightRow,
       delegate: SliverChildBuilderDelegate(
@@ -272,35 +312,73 @@ class _HighlightList extends ConsumerWidget {
             key is ValueKey<String> ? _orNull(rowOfKey(catalogue, results, key.value)) : null,
         (context, i) {
           final h = catalogue.highlights[results.ids[i]];
+          final key = highlightRowKey(catalogue, h);
+          // named as in the Highlights sheet from the first frame on: the Songs sheet would spell some otherwise
+          // when it comes (the Ong Log and the fiches take the spellings of both)
+          final requester = catalogue.highlightsOnly.requester(h.requesterId);
+          final name = requester?.name;
+          final own = requester != null && catalogue.isRequester(requester.id, me);
+          final built = _current[key] ?? _previous[key];
+          if (built != null &&
+              identical(built.highlight, h) &&
+              built.requester == name &&
+              built.own == own &&
+              listEquals(built.tokens, results.tokens) &&
+              built.currentYear == currentYear &&
+              built.expanded == expanded &&
+              built.mouse == mouse) {
+            _current[key] = built;
+            return built.widget;
+          }
+          // a row kept from an earlier catalogue with the same highlights (before the Songs sheet came) opens its fiche
+          // with the current one
+          Catalogue now() {
+            final current = ref.read(currentCatalogueProvider);
+            return current != null && identical(current.highlights, catalogue.highlights) ? current : catalogue;
+          }
+
+          final Widget row;
           if (expanded) {
             // a row shows its fiche in the pane; only the rows whose state changes are built again when the
             // selection changes
-            return Consumer(
-              key: ValueKey(highlightRowKey(catalogue, h)),
+            row = Consumer(
+              key: ValueKey(key),
               builder: (context, ref, _) => HighlightRow(
-                catalogue: catalogue,
                 highlight: h,
+                requester: name,
+                own: own,
                 tokens: results.tokens,
-                me: me,
                 currentYear: currentYear,
                 selected: ref.watch(
                   detailPaneProvider(AppTab.highlights).select((stack) => selectedHighlightId(stack) == h.id),
                 ),
-                onTap: () => showHighlightSheet(context, catalogue, h),
+                onTap: () => showHighlightSheet(context, now(), h),
                 onThumbnail: mouse ? () => openVideo(context, ref, h) : null,
               ),
             );
+          } else {
+            row = HighlightRow(
+              key: ValueKey(key),
+              highlight: h,
+              requester: name,
+              own: own,
+              tokens: results.tokens,
+              currentYear: currentYear,
+              onTap: () => h.youtubeId == null ? showHighlightSheet(context, now(), h) : openVideo(context, ref, h),
+              onMore: () => showHighlightSheet(context, now(), h),
+            );
           }
-          return HighlightRow(
-            key: ValueKey(highlightRowKey(catalogue, h)),
-            catalogue: catalogue,
+          _current[key] = (
             highlight: h,
+            requester: name,
+            own: own,
             tokens: results.tokens,
-            me: me,
             currentYear: currentYear,
-            onTap: () => h.youtubeId == null ? showHighlightSheet(context, catalogue, h) : openVideo(context, ref, h),
-            onMore: () => showHighlightSheet(context, catalogue, h),
+            expanded: expanded,
+            mouse: mouse,
+            widget: row,
           );
+          return row;
         },
       ),
     );
@@ -314,7 +392,8 @@ int? _orNull(int index) => index < 0 ? null : index;
 /// again over rows already there): once per result.
 final _rowsByKey = Expando<Map<String, int>>('rows by key');
 
-/// The row keys of the highlights of each catalogue, by id, made when first needed: once per catalogue.
+/// The row keys of the highlights of each catalogue, by id, made when first needed: once per list of highlights,
+/// which a catalogue completed with the Songs sheet shares with the one of its highlights alone.
 final _rowKeys = Expando<List<String>>('row keys');
 
 /// What tells the row of [highlight] from every other one and stays the same after a refresh: its
@@ -322,7 +401,7 @@ final _rowKeys = Expando<List<String>>('row keys');
 /// other when the list is built again), followed for the second and later ones, counted from the oldest so that
 /// new highlights change nothing, by their rank among them.
 String highlightRowKey(Catalogue catalogue, Highlight highlight) {
-  final keys = _rowKeys[catalogue] ??= () {
+  final keys = _rowKeys[catalogue.highlights] ??= () {
     final seen = <String, int>{};
     return [
       for (final h in catalogue.highlights)

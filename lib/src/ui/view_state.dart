@@ -352,11 +352,19 @@ class DetailPaneNotifier extends Notifier<List<Fiche>> {
     final follows = _pickedOnSnapshot && !snapshot && previous.length == 1;
     if (!snapshot) _pickedOnSnapshot = false;
     if (previous.isNotEmpty && !follows) {
+      // the fiche the app opened by itself without the Songs sheet completes with it, as part of the page finishing
+      // to load; the others keep the layout they were opened with (see HighlightSheet)
+      final completes = _pickedWithoutSongs && previous.length == 1;
+      if (catalogue.hasSongs) _pickedWithoutSongs = false;
       // a refresh: each fiche on the new catalogue, up to the first one whose item is gone (no fiche ever shows
-      // the items of two catalogues, nor a link to an item that is not there)
+      // the items of two catalogues, nor a link to an item that is not there); a fiche of a highlight stays as it
+      // was opened while the highlights are the same
       final kept = <Fiche>[];
       for (final fiche in previous) {
-        final same = fiche.translate(catalogue);
+        final same =
+            !completes && fiche is HighlightFiche && identical(fiche.catalogue.highlights, catalogue.highlights)
+            ? fiche
+            : fiche.translate(catalogue);
         if (same == null) break;
         kept.add(same);
       }
@@ -369,11 +377,15 @@ class DetailPaneNotifier extends Notifier<List<Fiche>> {
       if (kept != null) return [kept];
     }
     _pickedOnSnapshot = snapshot && first != null;
+    _pickedWithoutSongs = first != null && !catalogue.hasSongs;
     return first == null ? const [] : [first];
   }
 
   /// The single fiche of the pane is the app's own pick, made over the daily copy of the sheets.
   bool _pickedOnSnapshot = false;
+
+  /// The single fiche of the pane is the app's own pick, made before the Songs sheet came: it completes with it.
+  bool _pickedWithoutSongs = false;
 
   Fiche? _firstFiche(Catalogue catalogue) {
     switch (tab) {
@@ -410,6 +422,7 @@ class DetailPaneNotifier extends Notifier<List<Fiche>> {
   void choose(Fiche fiche) {
     final current = _current(fiche);
     _pickedOnSnapshot = false;
+    _pickedWithoutSongs = false;
     if (current != null) state = [current];
   }
 
@@ -417,6 +430,7 @@ class DetailPaneNotifier extends Notifier<List<Fiche>> {
   void push(Fiche fiche) {
     final current = _current(fiche);
     _pickedOnSnapshot = false;
+    _pickedWithoutSongs = false;
     if (current != null) state = [...state, current];
   }
 

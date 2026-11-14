@@ -200,7 +200,9 @@ class _OngLogPageState extends ConsumerState<OngLogPage> implements ListModel {
       if (_scroll.hasClients) _scroll.jumpTo(0);
     });
     final catalogue = ref.watch(currentCatalogueProvider);
-    if (catalogue == null) return const CatalogueStatusView();
+    if (catalogue == null) return const CatalogueStatusView(ongLog: true);
+    // the highlights are there, the Songs sheet not yet: the Ong Log waits for it as the app waits for both
+    if (!catalogue.hasSongs) return const CatalogueStatusView(songs: true);
     final filter = ref.watch(playFilterProvider);
     final results = ref.watch(playResultsProvider(filter))!;
     final notifier = ref.read(playFilterProvider.notifier);
@@ -266,6 +268,7 @@ class _OngLogPageState extends ConsumerState<OngLogPage> implements ListModel {
           child: ListFrame(
             controller: _scroll,
             keyboard: _keyboard,
+            songs: true,
             overlay: results.isEmpty
                 ? null
                 : _PinnedHeader(controller: _scroll, layout: layout, catalogue: catalogue, results: results),

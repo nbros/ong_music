@@ -15,6 +15,7 @@ import 'package:ong_music/src/state/catalogue_state.dart';
 
 import 'catalogue_dump.dart';
 import 'fixtures.dart';
+import 'sheet_fakes.dart';
 
 /// Runs [load] to its end with [runInSlices], pausing at once (no event loop turn), and returns its catalogue.
 Future<Catalogue> runLoad(CatalogueLoad load, {Duration budget = Duration.zero}) async {
@@ -37,7 +38,13 @@ class FakeFetcher implements SheetFetcher {
   RawSheets sheets;
 
   @override
-  Future<RawSheets> fetch() async => sheets;
+  Future<String> fetch(Sheet sheet) async => sheets[sheet];
+}
+
+/// Both sheets parsed by [parser]: the highlights, then the songs against them.
+Future<Catalogue> parseBoth(SheetParser parser, RawSheets sheets, {bool background = false}) async {
+  final highlights = await parser.highlights(sheets.highlightsCsv, background: background);
+  return highlights.withSongs(await parser.songs(highlights, sheets.songsCsv, background: background));
 }
 
 void main() {
@@ -93,7 +100,7 @@ void main() {
       final c = parseCatalogue(sheets.highlightsCsv, sheets.songsCsv);
       expect(c.playCount, greaterThan(1500));
       expect(c.streamCount, greaterThan(40));
-      expect(c.highlights.where((h) => h.playId != null), isNotEmpty);
+      expect(c.highlights.where((h) => c.playOf(h) != null), isNotEmpty);
       expect(c.requesters.map((r) => r.name), containsAll(['Alice', 'Bob', 'Zoé', 'Chloë']));
       expect(c.requesters.length, 4, reason: 'spellings merged, decomposed accents composed');
       expect(c.plays.where((p) => p.loggedMinute == null), isNotEmpty);
@@ -363,22 +370,159 @@ void main() {
       expect(called, isFalse, reason: 'abandoned before it started');
     });
 
-    test('parseInSlices lets the event loop run between slices, and gives the one-shot catalogue', () async {
+    test('ParseInSlices lets the event loop run between slices, and gives the one-shot catalogue', () async {
       final sheets = generatedSheets(6, plays: 3000);
       var ticks = 0;
       final timer = Timer.periodic(Duration.zero, (_) => ticks++);
       try {
         // every read of the clock is a millisecond of work: dozens of slices, whatever the machine
         var now = 0;
-        final catalogue = await parseInSlices(sheets, clock: () => now += 1000);
+        final catalogue = await parseBoth(ParseInSlices(clock: () => now += 1000), sheets);
         expect(ticks, greaterThan(20), reason: 'timers ran while it parsed');
         expect(dumpCatalogue(catalogue), dumpCatalogue(parseCatalogue(sheets.highlightsCsv, sheets.songsCsv)));
+        // in the background: in the idle time of the thread, one step at least each time
+        ticks = 0;
+        var idles = 0;
+        final idle = await parseBoth(
+          ParseInSlices(
+            idle: () async {
+              idles++;
+              await Future<void>.delayed(Duration.zero);
+              var left = 3;
+              return () => --left * 1000;
+            },
+          ),
+          sheets,
+          background: true,
+        );
+        expect(idles, greaterThan(20));
+        expect(ticks, greaterThan(20), reason: 'timers ran while it parsed');
+        expect(dumpCatalogue(idle), dumpCatalogue(catalogue));
       } finally {
         timer.cancel();
       }
     });
 
-    group('a load the user waits for may lengthen its slices; one in the background keeps them short', () {
+    test('in the idle time: a step starts only where it fits, and the work still ends', () async {
+      final sheets = generatedSheets(2, plays: 1500);
+      final load = CatalogueLoad(sheets.highlightsCsv, sheets.songsCsv, rowsPerStep: 16, unitsPerStep: 2000);
+      // each step takes 300 µs; each idle period is 0 to 6 ms long
+      final rng = Random(3);
+      var now = 0, stepsInSlice = 0, pauses = 0;
+      final slices = <({int length, int period, int steps})>[];
+      int? deadline, sliceStart, period;
+      await runWhenIdle(
+        () {
+          now += 300;
+          stepsInSlice++;
+          return load.step();
+        },
+        idle: () async {
+          if (sliceStart != null) slices.add((length: now - sliceStart!, period: period!, steps: stepsInSlice));
+          period = rng.nextInt(6000);
+          deadline = now + period!;
+          sliceStart = now;
+          stepsInSlice = 0;
+          return () => deadline! - now;
+        },
+        pause: () async => pauses++,
+        clock: () => now,
+      );
+      expect(slices.length, greaterThan(20));
+      expect(pauses, 0, reason: 'all of it in the idle time');
+      for (final s in slices) {
+        expect(s.length, lessThanOrEqualTo(s.period), reason: 'a slice never runs past its idle period: $s');
+      }
+      expect(slices.where((s) => s.period < 1000).every((s) => s.steps == 0), isTrue, reason: 'too short');
+      expect(dumpCatalogue(load.catalogue), dumpCatalogue(parseCatalogue(sheets.highlightsCsv, sheets.songsCsv)));
+      await expectLater(
+        runWhenIdle(
+          () => true,
+          idle: () async =>
+              () => 0,
+          pause: () async {},
+          isAbandoned: () => true,
+        ),
+        throwsA(isA<LoadAbandoned>()),
+      );
+    }, timeout: const Timeout(Duration(seconds: 20)));
+
+    test('in the idle time: a step longer than an idle period is not started in one', () async {
+      // steps of 3 ms; idle periods of 2 ms, then 8 ms, in turn
+      var now = 0, steps = 0, overruns = 0, n = 0;
+      int? deadline;
+      await runWhenIdle(
+        () {
+          now += 3000;
+          if (deadline! - now < 0) overruns++;
+          return ++steps < 60;
+        },
+        idle: () async {
+          deadline = now + ((n++).isEven ? 2000 : 8000);
+          return () => deadline! - now;
+        },
+        pause: () async {},
+        clock: () => now,
+      );
+      expect(steps, 60);
+      expect(overruns, lessThanOrEqualTo(1), reason: 'once at most: before the length of a step is known');
+    }, timeout: const Timeout(Duration(seconds: 20)));
+
+    test('no idle time at all (a list scrolled without a pause): after the patience, between frames', () async {
+      var now = 0, steps = 0, pauses = 0, stepsBefore = -1;
+      await runWhenIdle(
+        () {
+          now += 300;
+          return ++steps < 200;
+        },
+        // a frame of 16 ms each time, and nothing left after it (a turn of the event loop: a test that never ends
+        // fails at its timeout)
+        idle: () async {
+          await Future<void>.delayed(Duration.zero);
+          now += 16000;
+          return () => 0;
+        },
+        pause: () async {
+          if (pauses++ == 0) stepsBefore = steps;
+          now += 16000;
+        },
+        clock: () => now,
+        patience: const Duration(seconds: 1),
+      );
+      expect(stepsBefore, 0, reason: 'no step in idle periods of nothing');
+      expect(now, greaterThanOrEqualTo(1000000));
+      expect(steps, 200);
+      expect(pauses, lessThan(20), reason: 'slices of a frame budget: ${sliceBudget.inMilliseconds} ms of work each');
+    }, timeout: const Timeout(Duration(seconds: 20)));
+
+    test('in a hurry (the Ong Log waits for it): between frames at once', () async {
+      var now = 0, steps = 0, pauses = 0, periods = 0;
+      var hurry = false;
+      await runWhenIdle(
+        () {
+          now += 300;
+          return ++steps < 200;
+        },
+        idle: () async {
+          await Future<void>.delayed(Duration.zero);
+          if (++periods == 5) hurry = true;
+          now += 16000;
+          return () => 0;
+        },
+        pause: () async {
+          pauses++;
+          now += 16000;
+        },
+        hurry: () => hurry,
+        clock: () => now,
+        patience: const Duration(hours: 1),
+      );
+      expect(periods, 5);
+      expect(steps, 200);
+      expect(pauses, greaterThan(0));
+    }, timeout: const Timeout(Duration(seconds: 20)));
+
+    group('a load the user waits for may lengthen its slices', () {
       /// The slices of [run] (but the last), in µs, when every read of the clock costs [readCost] µs of work and
       /// every pause 30 ms (costly frames).
       Future<List<int>> slicesOf(
@@ -396,31 +540,57 @@ void main() {
       }
 
       final sheets = generatedSheets(8, plays: 6000);
-      final texts = RawSheets(highlightsCsv: 'h' * 3000000, songsCsv: 's' * 3000000);
-      Future<List<int>> parse(bool background) => slicesOf(
-        (pause, clock) => parseInSlices(sheets, background: background, pause: pause, clock: clock),
-        readCost: 400,
-      );
-      Future<List<int>> fingerprint(bool background) => slicesOf(
-        (pause, clock) => fingerprintInSlices(texts, background: background, pause: pause, clock: clock),
-        readCost: 2000,
-      );
+      final text = 's' * 6000000;
+      Future<List<int>> parse() =>
+          slicesOf((pause, clock) => parseBoth(ParseInSlices(pause: pause, clock: clock), sheets), readCost: 400);
+      Future<List<int>> fingerprint() =>
+          slicesOf((pause, clock) => fingerprintInSlices(text, pause: pause, clock: clock), readCost: 2000);
 
       test('parse', () async {
-        final background = await parse(true), waited = await parse(false);
-        expect(background.length, greaterThan(15));
-        expect(background.reduce(max), lessThanOrEqualTo(sliceBudget.inMicroseconds + 1200));
+        final waited = await parse();
         expect(waited.reduce(max), greaterThanOrEqualTo(longestSlice.inMicroseconds));
         expect(waited.reduce(max), lessThanOrEqualTo(longestSlice.inMicroseconds + 1200));
       });
 
       test('fingerprint', () async {
-        final background = await fingerprint(true), waited = await fingerprint(false);
-        expect(background.length, greaterThan(10));
-        expect(background.reduce(max), lessThanOrEqualTo(sliceBudget.inMicroseconds + 6000));
+        final waited = await fingerprint();
         expect(waited.reduce(max), greaterThanOrEqualTo(longestSlice.inMicroseconds));
         expect(waited.reduce(max), lessThanOrEqualTo(longestSlice.inMicroseconds + 6000));
       });
+
+      test(
+        'in the background, parse and fingerprint run in the idle time, then between frames past the patience',
+        () async {
+          var periods = 0, pauses = 0;
+          Future<IdleDeadline> idle() async {
+            periods++;
+            return () => 20000;
+          }
+
+          Future<void> pause() async => pauses++;
+          await ParseInSlices(
+            idle: idle,
+            pause: pause,
+          ).songs(parseHighlights(sheets.highlightsCsv), sheets.songsCsv, background: true);
+          expect((periods > 0, pauses), (true, 0));
+          periods = 0;
+          await fingerprintInSlices('x' * 300000, background: true, idle: idle, pause: pause);
+          expect((periods > 0, pauses), (true, 0));
+          // no idle time, no patience left: between frames
+          periods = 0;
+          await ParseInSlices(
+            // a turn of the event loop each time: a test that never ends fails at its timeout
+            idle: () async {
+              await Future<void>.delayed(Duration.zero);
+              return () => 0;
+            },
+            pause: pause,
+            patience: Duration.zero,
+          ).songs(parseHighlights(sheets.highlightsCsv), sheets.songsCsv, background: true);
+          expect(pauses, greaterThan(0));
+        },
+        timeout: const Timeout(Duration(seconds: 20)),
+      );
     });
 
     test('a step of nothing is refused: the load would never end', () {
@@ -457,18 +627,18 @@ void main() {
       expect(() => TextHash('abc').value, throwsStateError);
     });
 
-    test('equal sheets give equal fingerprints, a change of one character in either sheet another one', () async {
+    test('equal texts give equal fingerprints, a change of one character another one', () async {
       final a = generatedSheets(2, plays: 400);
-      final b = RawSheets(highlightsCsv: a.highlightsCsv, songsCsv: a.songsCsv.replaceFirst('Zelda', 'Zeldb'));
-      final fa = await fingerprintInSlices(a), fb = await fingerprintInSlices(b);
-      expect(await fingerprintInSlices(RawSheets(highlightsCsv: a.highlightsCsv, songsCsv: a.songsCsv)), fa);
-      expect(fb.songsLength, fa.songsLength);
-      expect(fb, isNot(fa));
-      final c = RawSheets(highlightsCsv: a.highlightsCsv.replaceFirst('Zelda', 'Zeldb'), songsCsv: a.songsCsv);
-      final fc = await fingerprintInSlices(c);
-      expect(fc.highlightsLength, fa.highlightsLength);
-      expect(fc, isNot(fa), reason: 'a change in the highlights only');
-      await expectLater(fingerprintInSlices(a, isAbandoned: () => true), throwsA(isA<LoadAbandoned>()));
+      for (final sheet in Sheet.values) {
+        final text = a[sheet];
+        final changed = text.replaceFirst('Zelda', 'Zeldb');
+        expect(changed, isNot(text));
+        final fa = await fingerprintInSlices(text), fb = await fingerprintInSlices(changed);
+        expect(await fingerprintInSlices(String.fromCharCodes(text.codeUnits)), fa);
+        expect(fb.length, fa.length);
+        expect(fb, isNot(fa));
+        await expectLater(fingerprintInSlices(text, isAbandoned: () => true), throwsA(isA<LoadAbandoned>()));
+      }
     });
   });
 
@@ -476,32 +646,36 @@ void main() {
     test('native platforms parse on a background isolate, the web in slices', () {
       final native = ProviderContainer.test();
       expect(native.read(loadsInSlicesProvider), isFalse, reason: 'the VM is not the web');
-      expect(identical(native.read(catalogueParserProvider), parseInBackground), isTrue);
-      expect(identical(native.read(sheetsFingerprintProvider), fingerprintAtOnce), isTrue);
+      expect(native.read(sheetParserProvider), isA<ParseInBackground>());
+      expect(identical(native.read(textFingerprintProvider), fingerprintAtOnce), isTrue);
       final web = ProviderContainer.test(
         overrides: [
           loadsInSlicesProvider.overrideWithValue(true),
           sheetCacheProvider.overrideWithValue(MemorySheetCache()),
         ],
       );
-      expect(identical(web.read(catalogueParserProvider), parseInSlices), isTrue);
-      expect(identical(web.read(sheetsFingerprintProvider), fingerprintInSlices), isTrue);
+      expect(web.read(sheetParserProvider), isA<ParseInSlices>());
+      expect(identical(web.read(textFingerprintProvider), fingerprintInSlices), isTrue);
       final repository = web.read(catalogueRepositoryProvider);
-      expect(identical(repository.parse, parseInSlices), isTrue);
+      expect(repository.parser, isA<ParseInSlices>());
       expect(identical(repository.fingerprint, fingerprintInSlices), isTrue);
     });
 
-    test('the parse on a background isolate gives the one-shot catalogue', () async {
+    test('the parse on a background isolate gives the one-shot catalogue, sharing the highlights', () async {
       final sheets = generatedSheets(3);
-      expect(
-        dumpCatalogue(await parseInBackground(sheets)),
-        dumpCatalogue(parseCatalogue(sheets.highlightsCsv, sheets.songsCsv)),
-      );
+      const parser = ParseInBackground();
+      final highlights = await parser.highlights(sheets.highlightsCsv);
+      final complete = highlights.withSongs(await parser.songs(highlights, sheets.songsCsv));
+      expect(dumpCatalogue(complete), dumpCatalogue(parseCatalogue(sheets.highlightsCsv, sheets.songsCsv)));
+      expect(identical(complete.highlights, highlights.highlights), isTrue, reason: 'no copy came back');
     });
 
-    test('the state, loaded in slices: cache shown, refreshes found unchanged keep its instance', () async {
+    test('the state, loaded in slices: kept copies shown, refreshes found unchanged keep its instance', () async {
       final sheets = generatedSheets(4, plays: 3000);
-      final cache = MemorySheetCache(CachedSheets(sheets: sheets, fetchedAt: DateTime.utc(2000)));
+      final cache = MemorySheetCache(
+        highlights: CachedSheet(text: sheets.highlightsCsv, fetchedAt: DateTime.utc(2000)),
+        songs: CachedSheet(text: sheets.songsCsv, fetchedAt: DateTime.utc(2000)),
+      );
       final container = ProviderContainer.test(
         overrides: [
           loadsInSlicesProvider.overrideWithValue(true),
@@ -514,33 +688,31 @@ void main() {
       container.listen(catalogueProvider, (_, next) {
         if (next.catalogue != null) shownCatalogues.add(next.catalogue!);
       });
+      container.read(catalogueProvider.notifier).songsWanted(SongsTrigger.ongLog);
       await container.read(catalogueProvider.notifier).idle;
-      expect(shownCatalogues, hasLength(1), reason: 'the download matched the fingerprint of the cache: kept');
+      expect(shownCatalogues, hasLength(2), reason: 'the highlights, then with the songs: both downloads matched');
       final state = container.read(catalogueProvider);
       expect(state.lastError, isNull);
+      expect(state.songsError, isNull);
       expect(state.fetchedAt, isNot(DateTime.utc(2000)), reason: 'the stale cache was refreshed');
+      expect(state.songsFetchedAt, isNot(DateTime.utc(2000)));
       expect(dumpCatalogue(state.catalogue!), dumpCatalogue(parseCatalogue(sheets.highlightsCsv, sheets.songsCsv)));
       final shown = state.catalogue;
       await container.read(catalogueProvider.notifier).refresh();
-      expect(identical(container.read(catalogueProvider).catalogue, shown), isTrue, reason: 'same fingerprint');
+      expect(identical(container.read(catalogueProvider).catalogue, shown), isTrue, reason: 'same fingerprints');
     });
 
     test('a load the state no longer wants is told so: rebuilt or disposed, its parse is abandoned', () async {
       final asked = <bool Function()?>[];
       final backgrounds = <bool>[];
       final release = Completer<void>();
-      Future<Catalogue> parser(RawSheets sheets, {bool Function()? isAbandoned, bool background = false}) async {
-        asked.add(isAbandoned);
-        backgrounds.add(background);
-        await release.future;
-        if (isAbandoned?.call() ?? false) throw const LoadAbandoned();
-        return parseCatalogue(sheets.highlightsCsv, sheets.songsCsv);
-      }
-
-      final cache = MemorySheetCache(CachedSheets(sheets: sampleSheets(), fetchedAt: DateTime.utc(2000)));
+      final parser = _GatedParser(release.future, asked, backgrounds);
+      final cache = MemorySheetCache(
+        highlights: CachedSheet(text: sampleSheets().highlightsCsv, fetchedAt: DateTime.utc(2000)),
+      );
       final container = ProviderContainer.test(
         overrides: [
-          catalogueParserProvider.overrideWithValue(parser),
+          sheetParserProvider.overrideWithValue(parser),
           sheetFetcherProvider.overrideWithValue(FakeFetcher(sampleSheets(tag: 'new'))),
           sheetCacheProvider.overrideWithValue(cache),
           prefetchDiscarderProvider.overrideWithValue(() {}),
@@ -558,48 +730,86 @@ void main() {
       expect(asked.last!(), isFalse);
       release.complete();
       await container.read(catalogueProvider.notifier).idle;
-      expect(cache.clears, 0, reason: 'an abandoned load is not a broken cache');
+      expect(cache.removes, isEmpty, reason: 'an abandoned load is not a broken cache');
       expect(container.read(catalogueProvider).lastError, isNull);
       expect(container.read(catalogueProvider).catalogue!.highlights.single.title, 'Video new');
       final download = asked.last!;
       container.dispose();
       expect(download(), isTrue, reason: 'disposed: the download is abandoned too');
-      // the cache (twice), then the download that replaces the cached catalogue on the screen
+      // the cache (twice), then the download that replaces the kept highlights on the screen
       expect(backgrounds, [false, false, true]);
     });
 
-    test('an abandoned load of the cache keeps the cache and throws LoadAbandoned', () async {
-      final cache = MemorySheetCache(CachedSheets(sheets: sampleSheets(), fetchedAt: DateTime.utc(2000)));
+    test('an abandoned read of the cache or download keeps the cache and throws LoadAbandoned', () async {
+      final cache = MemorySheetCache(
+        highlights: CachedSheet(text: sampleSheets().highlightsCsv, fetchedAt: DateTime.utc(2000)),
+      );
       final repository = CatalogueRepository(
         fetcher: FakeFetcher(sampleSheets()),
         cache: cache,
-        parse: parseInSlices,
+        parser: const ParseInSlices(),
         fingerprint: fingerprintInSlices,
       );
-      await expectLater(repository.loadCached(isAbandoned: () => true), throwsA(isA<LoadAbandoned>()));
-      await expectLater(repository.fetch(isAbandoned: () => true), throwsA(isA<LoadAbandoned>()));
-      expect((cache.clears, cache.writes), (0, 0));
-      expect((await repository.loadCached())!.catalogue.playCount, 1);
+      await expectLater(repository.readCache(highlights, isAbandoned: () => true), throwsA(isA<LoadAbandoned>()));
+      await expectLater(repository.download(songs, isAbandoned: () => true), throwsA(isA<LoadAbandoned>()));
+      await expectLater(
+        repository.parseHighlights(sampleSheets().highlightsCsv, isAbandoned: () => true),
+        throwsA(isA<LoadAbandoned>()),
+      );
+      expect(cache.clears, 0);
+      expect(cache.removes, isEmpty);
+      expect(cache.writes, isEmpty);
+      final kept = (await repository.readCache(highlights))!;
+      expect((await repository.parseHighlights(kept.text)).highlightCount, 1);
     });
 
-    test('the repository hands the fingerprint what it hands the parser', () async {
+    test('the repository hands the fingerprint what it is handed', () async {
       final asked = <(bool Function()?, bool)>[];
-      Future<SheetsFingerprint> fingerprint(RawSheets sheets, {bool Function()? isAbandoned, bool background = false}) {
+      Future<TextFingerprint> fingerprint(String text, {bool Function()? isAbandoned, bool background = false}) {
         asked.add((isAbandoned, background));
-        return fingerprintInSlices(sheets);
+        return fingerprintInSlices(text);
       }
 
       final repository = CatalogueRepository(
         fetcher: FakeFetcher(sampleSheets(tag: 'new')),
-        cache: MemorySheetCache(CachedSheets(sheets: sampleSheets(), fetchedAt: DateTime.utc(2000))),
-        parse: parseOnCurrentIsolate,
+        cache: MemorySheetCache(
+          highlights: CachedSheet(text: sampleSheets().highlightsCsv, fetchedAt: DateTime.utc(2000)),
+        ),
+        parser: const ParseOnCurrentIsolate(),
         fingerprint: fingerprint,
       );
       bool cacheAbandoned() => false;
       bool fetchAbandoned() => false;
-      await repository.loadCached(isAbandoned: cacheAbandoned);
-      await repository.fetch(isAbandoned: fetchAbandoned, background: true);
+      await repository.readCache(highlights, isAbandoned: cacheAbandoned);
+      await repository.download(songs, isAbandoned: fetchAbandoned, background: true);
       expect(asked, [(cacheAbandoned, false), (fetchAbandoned, true)]);
     });
   });
+}
+
+/// A parser that waits for [_release], recording what it is handed.
+class _GatedParser implements SheetParser {
+  _GatedParser(this._release, this.asked, this.backgrounds);
+
+  final Future<void> _release;
+  final List<bool Function()?> asked;
+  final List<bool> backgrounds;
+
+  @override
+  Future<Catalogue> highlights(String csv, {bool Function()? isAbandoned, bool background = false}) async {
+    asked.add(isAbandoned);
+    backgrounds.add(background);
+    await _release;
+    if (isAbandoned?.call() ?? false) throw const LoadAbandoned();
+    return parseHighlights(csv);
+  }
+
+  @override
+  Future<SongsPart> songs(
+    Catalogue highlights,
+    String csv, {
+    bool Function()? isAbandoned,
+    bool background = false,
+    bool Function()? hurry,
+  }) => const ParseOnCurrentIsolate().songs(highlights, csv);
 }

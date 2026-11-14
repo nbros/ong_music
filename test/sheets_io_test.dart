@@ -7,6 +7,8 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:ong_music/src/data/sheet_cache_io.dart';
 import 'package:ong_music/src/data/sheets.dart';
+
+import 'sheet_fakes.dart';
 import 'package:path/path.dart' as p;
 
 void main() {
@@ -20,39 +22,91 @@ void main() {
     });
     tearDown(() => tmp.deleteSync(recursive: true));
 
-    test('round trip, overwrite, clear', () async {
-      expect(await cache.read(), isNull);
+    CachedSheet sheet(String text, [DateTime? at]) => CachedSheet(text: text, fetchedAt: at ?? DateTime.utc(2026));
+    String file(String name) => p.join(tmp.path, 'sheets', name);
+    List<String> files() =>
+        [for (final e in Directory(p.join(tmp.path, 'sheets')).listSync()) p.basename(e.path)]..sort();
+
+    test('round trip, overwrite, clear, each sheet on its own', () async {
+      expect(await cache.read(highlights), isNull);
       final at = DateTime.utc(2026, 1, 2, 3, 4, 5);
-      await cache.write(
-        CachedSheets(
-          sheets: const RawSheets(highlightsCsv: 'h1 é', songsCsv: 's1 ♪'),
-          fetchedAt: at,
-        ),
-      );
-      var read = (await cache.read())!;
-      expect((read.sheets.highlightsCsv, read.sheets.songsCsv, read.fetchedAt), ('h1 é', 's1 ♪', at));
-      await cache.write(
-        CachedSheets(
-          sheets: const RawSheets(highlightsCsv: 'h2', songsCsv: 's2'),
-          fetchedAt: at.add(const Duration(days: 1)),
-        ),
-      );
-      read = (await cache.read())!;
-      expect((read.sheets.highlightsCsv, read.fetchedAt.day), ('h2', 3));
+      await cache.write(highlights, sheet('h1 é', at));
+      expect(await cache.read(songs), isNull, reason: 'the other sheet is not written with it');
+      await cache.write(songs, sheet('s1 ♪', at.add(const Duration(hours: 1))));
+      var h = (await cache.read(highlights))!, s = (await cache.read(songs))!;
+      expect((h.text, h.fetchedAt, s.text, s.fetchedAt), ('h1 é', at, 's1 ♪', at.add(const Duration(hours: 1))));
+      await cache.write(highlights, sheet('h2', at.add(const Duration(days: 1))));
+      h = (await cache.read(highlights))!;
+      s = (await cache.read(songs))!;
+      expect((h.text, h.fetchedAt.day, s.text, s.fetchedAt), ('h2', 3, 's1 ♪', at.add(const Duration(hours: 1))));
+      expect(files(), ['highlights.csv', 'highlights_fetched_at.txt', 'songs.csv', 'songs_fetched_at.txt']);
+      await cache.remove(songs);
+      expect(await cache.read(songs), isNull);
+      expect((await cache.read(highlights))!.text, 'h2');
       await cache.clear();
-      expect(await cache.read(), isNull);
+      expect(await cache.read(highlights), isNull);
       await cache.clear(); // twice is fine
+      await cache.remove(highlights); // and nothing to remove
     });
 
-    test('an incomplete cache reads as none', () async {
-      await cache.write(
-        CachedSheets(
-          sheets: const RawSheets(highlightsCsv: 'h', songsCsv: 's'),
-          fetchedAt: DateTime.utc(2026),
-        ),
-      );
-      File(p.join(tmp.path, 'sheets', 'songs.csv')).deleteSync();
-      expect(await cache.read(), isNull);
+    test('an incomplete copy of a sheet reads as none, the other sheet as it is', () async {
+      await cache.write(highlights, sheet('h'));
+      await cache.write(songs, sheet('s'));
+      File(file('songs.csv')).deleteSync();
+      expect(await cache.read(songs), isNull);
+      expect((await cache.read(highlights))!.text, 'h');
+    });
+
+    group('the cache of the versions up to 2.0.0', () {
+      // what FileSheetCache of 2.0.0 wrote: both texts, then the time of both
+      final kept = DateTime.utc(2026, 11, 10, 8, 30);
+      void legacy({bool songsText = true}) {
+        Directory(p.join(tmp.path, 'sheets')).createSync();
+        File(file('highlights.csv')).writeAsStringSync('old h');
+        if (songsText) File(file('songs.csv')).writeAsStringSync('old s');
+        File(file('fetched_at.txt')).writeAsStringSync(kept.toIso8601String());
+      }
+
+      test('both sheets read with its one time: nothing downloaded again for it', () async {
+        legacy();
+        final h = (await cache.read(highlights))!, s = (await cache.read(songs))!;
+        expect((h.text, h.fetchedAt, s.text, s.fetchedAt), ('old h', kept, 'old s', kept));
+        expect(files(), ['fetched_at.txt', 'highlights.csv', 'songs.csv'], reason: 'reading changes nothing');
+      });
+
+      test('the first write gives each sheet that time, then drops it: the other sheet keeps its age', () async {
+        legacy();
+        final now = DateTime.utc(2026, 11, 14);
+        await cache.write(highlights, sheet('new h', now));
+        expect(files(), ['highlights.csv', 'highlights_fetched_at.txt', 'songs.csv', 'songs_fetched_at.txt']);
+        final h = (await cache.read(highlights))!, s = (await cache.read(songs))!;
+        expect((h.text, h.fetchedAt, s.text, s.fetchedAt), ('new h', now, 'old s', kept));
+      });
+
+      test('a sheet removed: the other one keeps that time', () async {
+        legacy();
+        await cache.remove(highlights);
+        expect(await cache.read(highlights), isNull);
+        expect((await cache.read(songs))!.fetchedAt, kept);
+        expect(files(), ['songs.csv', 'songs_fetched_at.txt']);
+      });
+
+      test('two writes at once (both sheets downloaded together): both kept, whichever splits the time', () async {
+        legacy();
+        final h = DateTime.utc(2026, 11, 14, 1), so = DateTime.utc(2026, 11, 14, 2);
+        await Future.wait([cache.write(highlights, sheet('new h', h)), cache.write(songs, sheet('new s', so))]);
+        final rh = (await cache.read(highlights))!, rs = (await cache.read(songs))!;
+        expect((rh.text, rh.fetchedAt, rs.text, rs.fetchedAt), ('new h', h, 'new s', so));
+        expect(files(), ['highlights.csv', 'highlights_fetched_at.txt', 'songs.csv', 'songs_fetched_at.txt']);
+      });
+
+      test('a sheet missing from it is not given a time', () async {
+        legacy(songsText: false);
+        expect(await cache.read(songs), isNull);
+        await cache.write(highlights, sheet('new h'));
+        expect(files(), ['highlights.csv', 'highlights_fetched_at.txt']);
+        expect(await cache.read(songs), isNull);
+      });
     });
 
     test('temporary files of a write that never finished are deleted by a later write', () async {
@@ -61,44 +115,24 @@ void main() {
       final orphan = File(p.join(dir.path, 'songs.csv.4242-7.tmp'))..writeAsStringSync('half a sheet');
       orphan.setLastModifiedSync(DateTime.now().subtract(const Duration(hours: 1)));
       final running = File(p.join(dir.path, 'songs.csv.4343-0.tmp'))..writeAsStringSync('being written');
-      await cache.write(
-        CachedSheets(
-          sheets: const RawSheets(highlightsCsv: 'h1', songsCsv: 's1'),
-          fetchedAt: DateTime.utc(2026),
-        ),
-      );
+      await cache.write(songs, sheet('s1'));
       expect(orphan.existsSync(), isFalse);
       expect(running.existsSync(), isTrue, reason: 'a recent temporary file may belong to a write still running');
-      expect((await cache.read())!.sheets.songsCsv, 's1');
+      expect((await cache.read(songs))!.text, 's1');
     });
 
-    test('a write that fails half-way reads as no cache, never as sheets of two downloads', () async {
-      await cache.write(
-        CachedSheets(
-          sheets: const RawSheets(highlightsCsv: 'h1', songsCsv: 's1'),
-          fetchedAt: DateTime.utc(2026),
-        ),
-      );
-      // songs.csv cannot be replaced (disk full, file locked...): the write stops after highlights.csv
-      final songs = p.join(tmp.path, 'sheets', 'songs.csv');
-      File(songs).deleteSync();
-      Directory(songs).createSync();
-      File(p.join(songs, 'locked')).createSync();
-      await cache.write(
-        CachedSheets(
-          sheets: const RawSheets(highlightsCsv: 'h2', songsCsv: 's2'),
-          fetchedAt: DateTime.utc(2026, 2),
-        ),
-      );
-      expect(File(p.join(tmp.path, 'sheets', 'highlights.csv')).readAsStringSync(), 'h2');
-      expect(await cache.read(), isNull);
-      expect(
-        Directory(
-          p.join(tmp.path, 'sheets'),
-        ).listSync().map((e) => p.basename(e.path)).where((n) => n.endsWith('.tmp')),
-        isEmpty,
-        reason: 'no temporary file left behind',
-      );
+    test('a write that fails half-way reads as no copy of its sheet, never as the time of another download', () async {
+      await cache.write(highlights, sheet('h1'));
+      await cache.write(songs, sheet('s1'));
+      // songs.csv cannot be replaced (disk full, file locked...): the write stops before its time
+      final songsFile = file('songs.csv');
+      File(songsFile).deleteSync();
+      Directory(songsFile).createSync();
+      File(p.join(songsFile, 'locked')).createSync();
+      await cache.write(songs, sheet('s2', DateTime.utc(2026, 2)));
+      expect(await cache.read(songs), isNull);
+      expect((await cache.read(highlights))!.text, 'h1', reason: 'the other sheet untouched');
+      expect(files().where((n) => n.endsWith('.tmp')), isEmpty, reason: 'no temporary file left behind');
     });
 
     test('a write running at the same time (the app started twice) does not mix into the files', () async {
@@ -106,27 +140,17 @@ void main() {
       // the other instance has started writing its highlights to a temporary file, and goes on after ours
       final other = await File(p.join(dir.path, 'highlights.csv.tmp')).open(mode: FileMode.write);
       await other.writeString('OTHER-FIRST-HALF');
-      await cache.write(
-        CachedSheets(
-          sheets: const RawSheets(highlightsCsv: 'highlights of this instance', songsCsv: 'songs'),
-          fetchedAt: DateTime.utc(2026),
-        ),
-      );
+      await cache.write(highlights, sheet('highlights of this instance'));
       await other.writeString('OTHER-SECOND-HALF');
       await other.close();
-      final read = (await cache.read())!;
-      expect(read.sheets.highlightsCsv, 'highlights of this instance');
+      expect((await cache.read(highlights))!.text, 'highlights of this instance');
     });
 
     test('no application directory (path_provider failing): no cache, and nothing throws', () async {
       final broken = FileSheetCache(() async => throw const FileSystemException('No application support directory'));
-      await broken.write(
-        CachedSheets(
-          sheets: const RawSheets(highlightsCsv: 'h', songsCsv: 's'),
-          fetchedAt: DateTime.utc(2026),
-        ),
-      );
-      expect(await broken.read(), isNull);
+      await broken.write(highlights, sheet('h'));
+      expect(await broken.read(highlights), isNull);
+      await broken.remove(songs);
       await broken.clear();
     });
 
@@ -152,20 +176,20 @@ void main() {
           headers: {'content-type': 'text/csv; charset=iso-8859-1'},
         );
       });
-      final sheets = await HttpSheetFetcher(client: client).fetch();
-      expect(sheets.highlightsCsv, 'Youtube Catalogue: Pokémon ♪');
-      expect(sheets.songsCsv, 'Songs: Pokémon ♪');
+      final fetcher = HttpSheetFetcher(client: client);
+      expect(await fetcher.fetch(highlights), 'Youtube Catalogue: Pokémon ♪');
+      expect(await fetcher.fetch(songs), 'Songs: Pokémon ♪');
     });
 
     test('a non-200 answer throws', () async {
       final client = MockClient((request) async => http.Response('nope', 503));
-      expect(HttpSheetFetcher(client: client).fetch(), throwsA(isA<SheetHttpException>()));
+      expect(HttpSheetFetcher(client: client).fetch(highlights), throwsA(isA<SheetHttpException>()));
     });
 
     test('times out', () async {
       final client = MockClient((request) => Completer<http.Response>().future);
       expect(
-        HttpSheetFetcher(client: client, timeout: const Duration(milliseconds: 10)).fetch(),
+        HttpSheetFetcher(client: client, timeout: const Duration(milliseconds: 10)).fetch(songs),
         throwsA(isA<TimeoutException>()),
       );
     });
@@ -176,8 +200,9 @@ void main() {
           final songs = request.url.queryParameters['sheet'] == 'Songs';
           return http.Response.bytes(utf8.encode(songs ? page : '"Title"\n"a < b"'), 200);
         });
+        expect(await HttpSheetFetcher(client: client).fetch(highlights), '"Title"\n"a < b"');
         await expectLater(
-          HttpSheetFetcher(client: client).fetch(),
+          HttpSheetFetcher(client: client).fetch(songs),
           throwsA(
             isA<SheetNotCsvException>()
                 .having((e) => e.uri, 'uri', SheetUrls.songs)
@@ -238,19 +263,20 @@ void main() {
       }
 
       test('arrives, however long it takes, while the server keeps sending', () async {
-        final sheets = HttpSheetFetcher(client: client, timeout: silence).fetch();
+        final fetcher = HttpSheetFetcher(client: client, timeout: silence);
+        final sheets = Future.wait([fetcher.fetch(highlights), fetcher.fetch(songs)]);
         // more than twice the limit on silence
         await pieces(12);
         for (final body in bodies) {
           unawaited(body.close());
         }
-        expect((await sheets).songsCsv, 'é' * 12);
-        expect((await sheets).highlightsCsv, 'é' * 12);
+        expect(await sheets, ['é' * 12, 'é' * 12]);
       });
 
       test('is given up after a silence of the server', () async {
         final watch = Stopwatch()..start();
-        final sheets = HttpSheetFetcher(client: client, timeout: silence).fetch();
+        final fetcher = HttpSheetFetcher(client: client, timeout: silence);
+        final sheets = Future.wait([fetcher.fetch(highlights), fetcher.fetch(songs)]);
         unawaited(pieces(3));
         await expectLater(sheets, throwsA(isA<TimeoutException>()));
         // after the last piece, not after the start
@@ -260,7 +286,8 @@ void main() {
 
       test('is given up after the longest time allowed', () async {
         final watch = Stopwatch()..start();
-        final sheets = HttpSheetFetcher(client: client, timeout: silence, maxDuration: pace * 3).fetch();
+        final fetcher = HttpSheetFetcher(client: client, timeout: silence, maxDuration: pace * 3);
+        final sheets = Future.wait([fetcher.fetch(highlights), fetcher.fetch(songs)]);
         unawaited(pieces(20));
         await expectLater(sheets, throwsA(isA<TimeoutException>()));
         expect(watch.elapsed, lessThan(pace * 15));

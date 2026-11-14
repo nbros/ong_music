@@ -1,8 +1,10 @@
 /// Persistent cache of the raw sheets, behind a tiny interface.
 ///
-/// Only the raw CSV text and the download time are cached: parsing fixes then
-/// apply to already-cached data, and there is no schema to migrate.
+/// Only the raw CSV text and the download time of each sheet are cached: parsing fixes then apply to already-cached
+/// data, and there is no schema to migrate (the time of both sheets of the versions up to 2.0.0 is read too).
 library;
+
+import 'dart:async';
 
 import 'sheets.dart';
 
@@ -11,20 +13,37 @@ import 'sheet_cache_stub.dart'
     if (dart.library.js_interop) 'sheet_cache_web.dart'
     as platform;
 
-/// Stores the last good download of both sheets.
+/// Stores the last good download of each sheet, with its time: each sheet is read, written and refreshed on its own
+/// (the Highlights list starts from its sheet alone).
+///
+/// Data kept by versions up to 2.0.0 has one time for both sheets, written last after both texts: it reads as the
+/// time of each of them until a sheet is written again, which first gives each sheet that time of its own
+/// ([legacyTimeName]).
 ///
 /// Implementations never throw: a storage failure reads as "no cache" and a
 /// failed write or clear is logged and ignored.
 abstract interface class SheetCache {
-  /// The cached sheets, or null when there is none (or it is unreadable).
-  Future<CachedSheets?> read();
+  /// The kept copy of [sheet], or null when there is none (or it is unreadable).
+  Future<CachedSheet?> read(Sheet sheet);
 
-  /// Replaces the cached sheets.
-  Future<void> write(CachedSheets sheets);
+  /// Replaces the kept copy of [sheet].
+  Future<void> write(Sheet sheet, CachedSheet value);
 
-  /// Deletes the cached sheets.
+  /// Deletes the kept copy of [sheet] (it no longer parses); the other one stays.
+  Future<void> remove(Sheet sheet);
+
+  /// Deletes both.
   Future<void> clear();
 }
+
+/// The name of the text of [sheet] in a cache: `highlights.csv`, `songs.csv`.
+String sheetTextName(Sheet sheet) => '${sheet.name}.csv';
+
+/// The name of the time of [sheet] in a cache: `highlights_fetched_at.txt`, `songs_fetched_at.txt`.
+String sheetTimeName(Sheet sheet) => '${sheet.name}_fetched_at.txt';
+
+/// The name of the time of both sheets in the caches of versions up to 2.0.0.
+const legacyTimeName = 'fetched_at.txt';
 
 /// The cache of this platform: files under the application support directory
 /// on IO platforms, the browser Cache API on web (or no cache when the browser
@@ -41,10 +60,13 @@ final class NoSheetCache implements SheetCache {
   const NoSheetCache();
 
   @override
-  Future<CachedSheets?> read() async => null;
+  Future<CachedSheet?> read(Sheet sheet) async => null;
 
   @override
-  Future<void> write(CachedSheets sheets) async {}
+  Future<void> write(Sheet sheet, CachedSheet value) async {}
+
+  @override
+  Future<void> remove(Sheet sheet) async {}
 
   @override
   Future<void> clear() async {}
@@ -53,21 +75,41 @@ final class NoSheetCache implements SheetCache {
 /// A cache in memory, for tests.
 final class MemorySheetCache implements SheetCache {
   /// Creates the cache, optionally filled.
-  MemorySheetCache([this.value]);
+  MemorySheetCache({CachedSheet? highlights, CachedSheet? songs})
+    : values = {Sheet.highlights: ?highlights, Sheet.songs: ?songs};
 
   /// The current content.
-  CachedSheets? value;
+  final Map<Sheet, CachedSheet> values;
 
-  /// Number of [write] calls.
-  int writes = 0;
+  /// The sheets read, in order.
+  final reads = <Sheet>[];
+
+  /// The sheets written, in order.
+  final writes = <Sheet>[];
+
+  /// When set, [read] waits for it.
+  Completer<void>? gate;
 
   @override
-  Future<CachedSheets?> read() async => value;
+  Future<CachedSheet?> read(Sheet sheet) async {
+    reads.add(sheet);
+    if (gate != null) await gate!.future;
+    return values[sheet];
+  }
 
   @override
-  Future<void> write(CachedSheets sheets) async {
-    writes++;
-    value = sheets;
+  Future<void> write(Sheet sheet, CachedSheet value) async {
+    writes.add(sheet);
+    values[sheet] = value;
+  }
+
+  /// The sheets removed, in order.
+  final removes = <Sheet>[];
+
+  @override
+  Future<void> remove(Sheet sheet) async {
+    removes.add(sheet);
+    values.remove(sheet);
   }
 
   /// Number of [clear] calls.
@@ -76,6 +118,6 @@ final class MemorySheetCache implements SheetCache {
   @override
   Future<void> clear() async {
     clears++;
-    value = null;
+    values.clear();
   }
 }

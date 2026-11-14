@@ -6,9 +6,10 @@ import 'package:ong_music/src/data/model.dart';
 List<String> dumpCatalogue(Catalogue c) {
   String ids(Iterable<int> ids) => ids.join(',');
   final out = <String>[
+    'hasSongs ${c.hasSongs}',
     for (final h in c.highlights)
       'H ${h.id}|${h.seq}|${h.title}|${h.songKey}|${h.genre}|${h.link}|${h.youtubeId}|${h.requesterId}|'
-          '${h.streamDate}|${h.uploadDate}|${h.vocals}|${h.notes}|${h.playId}|${h.key}',
+          '${h.streamDate}|${h.uploadDate}|${h.vocals}|${h.notes}|${c.playOf(h)?.id}|${h.key}',
     for (final p in c.plays)
       'P ${p.id}|${p.loggedMinute}|${p.rowDate}|${p.titleId}|${p.title}|${p.songKey}|${p.genre}|${p.type}|'
           '${p.requesterId}|${p.flag}|${p.streamId}|${p.highlightId}',

@@ -26,7 +26,7 @@ void main(List<String> args) {
   c = parseCatalogue(highlightsCsv, songsCsv);
   warm.stop();
 
-  final linked = c.highlights.where((h) => h.playId != null).length;
+  final linked = c.highlights.where((h) => c.playOf(h) != null).length;
   print('highlights            ${c.highlightCount}');
   print('  linked to a play    $linked');
   print('  with a YouTube id   ${c.highlights.where((h) => h.youtubeId != null).length}');

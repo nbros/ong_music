@@ -829,7 +829,7 @@ void main() {
       await goToTab(tester, 'About');
       await tester.scrollUntilVisible(find.text('Clear downloaded data'), 200, scrollable: aboutScrollable());
       expect(find.text('Updated 2 hours ago'), findsOneWidget);
-      expect(find.text('3 highlights · 4 songs · 2 streams'), findsOneWidget);
+      expect(find.text('4 songs · 2 streams'), findsOneWidget);
       expect(find.textContaining('at most every 6 hours'), findsOneWidget);
       await tester.tap(find.text('Refresh'));
       expect(app.notifier.refreshes, 1);
@@ -918,7 +918,7 @@ void main() {
 
   group('Loading', () {
     testWidgets('first download: progress', (tester) async {
-      await pumpApp(tester, state: const CatalogueState(isRefreshing: true), settle: false);
+      await pumpApp(tester, state: CatalogueState(isRefreshing: true), settle: false);
       expect(find.byType(CircularProgressIndicator), findsWidgets);
       expect(find.text('Downloading the highlights and the Ong Log…').hitTestable(), findsOneWidget);
     });

@@ -159,6 +159,26 @@ class _AppShellState extends ConsumerState<AppShell> {
   // Each page keeps its state (search field, scroll positions) wherever a mode change puts it.
   final _pages = {for (final tab in AppTab.values) tab: GlobalKey(debugLabel: tab.name)};
 
+  @override
+  void initState() {
+    super.initState();
+    // the tab the app opens on (the address of the web app) may need the Songs sheet: after the first frame, which
+    // must not wait for it
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _songsFor(ref.read(selectedTabProvider));
+    });
+  }
+
+  /// The tabs that need the Songs sheet ask for it when they come on the screen, however they are reached.
+  void _songsFor(AppTab tab) {
+    final trigger = switch (tab) {
+      AppTab.highlights => null,
+      AppTab.ongLog => SongsTrigger.ongLog,
+      AppTab.about => SongsTrigger.about,
+    };
+    if (trigger != null) ref.read(catalogueProvider.notifier).songsWanted(trigger);
+  }
+
   void _select(int index) {
     // (the search field of the tab left keeps no focus: it would bring up the keyboard on a phone, and take the
     // keys of the next tab) but a link of the top bar activated from the keyboard keeps it, for the next Tab
@@ -169,6 +189,7 @@ class _AppShellState extends ConsumerState<AppShell> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(selectedTabProvider, (_, tab) => _songsFor(tab));
     final tab = ref.watch(selectedTabProvider);
     final mode = AppLayout.modeOf(context);
     final navigation = AppLayout.navigationOf(context);

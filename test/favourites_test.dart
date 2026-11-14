@@ -23,7 +23,7 @@ class _Fetcher implements SheetFetcher {
   RawSheets sheets;
 
   @override
-  Future<RawSheets> fetch() async => sheets;
+  Future<String> fetch(Sheet sheet) async => sheets[sheet];
 }
 
 /// Three highlights: #1 and #2, and a row without number after #2, which
@@ -52,7 +52,7 @@ void main() {
         sheetFetcherProvider.overrideWithValue(fetcher),
         snapshotFetcherProvider.overrideWithValue(const NoSnapshot()),
         sheetCacheProvider.overrideWithValue(MemorySheetCache()),
-        catalogueParserProvider.overrideWithValue(parseOnCurrentIsolate),
+        sheetParserProvider.overrideWithValue(const ParseOnCurrentIsolate()),
         clockProvider.overrideWithValue(() => now),
       ],
     );

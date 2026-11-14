@@ -368,7 +368,18 @@ class _Title extends StatelessWidget {
 /// A line of facts: icon, text with an optional small line, chevron when it
 /// leads somewhere.
 class _Fact extends StatelessWidget {
-  const _Fact({required this.icon, required this.text, this.after = const [], this.detail, this.onTap});
+  const _Fact({
+    required this.icon,
+    required this.text,
+    this.after = const [],
+    this.detail,
+    this.onTap,
+    this.chevronRoom = false,
+  });
+
+  /// Whether the room of the chevron is kept when it is not tappable: a fact that is tappable in another fiche of
+  /// the same item takes the same width for its text.
+  final bool chevronRoom;
 
   final IconData icon;
   final String text;
@@ -413,7 +424,10 @@ class _Fact extends StatelessWidget {
                 ],
               ),
             ),
-            if (onTap != null) Icon(Icons.chevron_right, size: 20, color: on3),
+            if (onTap != null)
+              Icon(Icons.chevron_right, size: 20, color: on3)
+            else if (chevronRoom)
+              const SizedBox(width: 20),
           ],
         ),
       ),
@@ -532,6 +546,12 @@ class _FavouriteButton extends ConsumerWidget {
 
 /// Details of a highlight: big thumbnail, actions, stream, requester, other
 /// plays, vocals and notes.
+///
+/// What comes from the Songs sheet (the play of the stream, the requests of the requester, the other plays) is
+/// there when the fiche is opened with a catalogue that has it. The facts it shows, and which are tappable, are
+/// those of the catalogue it was opened with: a fiche on the screen never changes size when the Songs sheet comes,
+/// nor a text its width. Only what has its room kept fills in, from the current catalogue when it completes the one
+/// it was opened with (the same highlights): the requests of the requester, whose line is kept empty until then.
 class HighlightSheet extends ConsumerWidget {
   const HighlightSheet({super.key, required this.catalogue, required this.highlight});
 
@@ -540,6 +560,13 @@ class HighlightSheet extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final catalogue = this.catalogue;
+    // the current catalogue when it completes this one (the same highlights): only for what fills in place
+    final current = ref.watch(
+      currentCatalogueProvider.select(
+        (c) => c != null && identical(c.highlights, catalogue.highlights) ? c : catalogue,
+      ),
+    );
     final me = ref.watch(myRequesterKeyProvider);
     final scheme = Theme.of(context).colorScheme;
     final ong = OngColors.of(context);
@@ -635,6 +662,7 @@ class HighlightSheet extends ConsumerWidget {
                     onTap: play == null
                         ? null
                         : () => showStreamSheet(context, catalogue, catalogue.streamOf(play), play: play),
+                    chevronRoom: true,
                   )
                 else if (uploadDate != null)
                   _Fact(icon: Icons.calendar_today, text: 'Uploaded ${formatFullDate(uploadDate)}'),
@@ -648,7 +676,10 @@ class HighlightSheet extends ConsumerWidget {
                       const [],
                       own: catalogue.isRequester(requester.id, me),
                     ),
-                    detail: '${plural(requester.requestCount, 'request')} in the Ong Log',
+                    // its line kept, empty until the Songs sheet counts the requests: the name does not move then
+                    detail: current.hasSongs
+                        ? '${plural(current.requester(h.requesterId)!.requestCount, 'request')} in the Ong Log'
+                        : '',
                     onTap: () => _showRequester(context, ref, requester),
                   ),
                 if (song != null && song.playIds.length > 1)

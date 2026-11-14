@@ -52,9 +52,21 @@ void main() {
       final atOnce = await framesDuring(() async {
         oneShot = parseCatalogue(large.highlightsCsv, large.songsCsv);
       });
+      Future<Catalogue> parse({required bool background}) async {
+        const parser = ParseInSlices();
+        final highlights = await parser.highlights(large.highlightsCsv, background: background);
+        final songs = await parser.songs(highlights, large.songsCsv, background: background);
+        await fingerprintInSlices(large.songsCsv, background: background);
+        return highlights.withSongs(songs);
+      }
+
       final inSlices = await framesDuring(() async {
-        sliced = await parseInSlices(large);
-        await fingerprintInSlices(large);
+        sliced = await parse(background: false);
+      });
+      // in the background: in the idle time the page leaves between its frames (requestIdleCallback)
+      late final Catalogue idle;
+      final inIdleTime = await framesDuring(() async {
+        idle = await parse(background: true);
       });
       expect(dumpCatalogue(sliced), dumpCatalogue(oneShot));
       expect(atOnce.gap, greaterThan(bound), reason: 'the one-shot parse is long enough to show the difference');
@@ -64,8 +76,25 @@ void main() {
       expect(inSlices.gap, lessThan(atOnce.gap / 3), reason: reason);
       expect(inSlices.gap, lessThan(2 * bound), reason: reason);
       expect(inSlices.frames, greaterThan(5));
+
+      // in the idle time: the same bounds
+      expect(dumpCatalogue(idle), dumpCatalogue(oneShot));
+      final idleReason = '${inIdleTime.gap} ms in ${inIdleTime.frames} frames, against ${atOnce.gap} ms at once';
+      expect(inIdleTime.gap, lessThan(atOnce.gap / 3), reason: idleReason);
+      expect(inIdleTime.gap, lessThan(2 * bound), reason: idleReason);
+      expect(inIdleTime.frames, greaterThan(5));
     },
   );
+
+  test('idle periods come, and say how long they last', () async {
+    final deadlines = <int>[];
+    for (var i = 0; i < 5; i++) {
+      final deadline = await waitForIdle();
+      deadlines.add(deadline());
+    }
+    // at most 5 ms: an input that comes meanwhile waits for no longer
+    expect(deadlines.every((d) => d >= 0 && d <= 5000), isTrue, reason: '$deadlines µs');
+  });
 
   // Strings whose TextHash the VM computes: the web, whatever its compiler, must find the same values.
   final hashed = {
@@ -84,7 +113,7 @@ void main() {
   });
 
   test(
-    'under dart2js, the hash in slices is String.hashCode, the fingerprint in slices RawSheets.fingerprint',
+    'under dart2js, the hash in slices is String.hashCode, the fingerprint in slices the one at once',
     () async {
       for (final text in [...hashed.keys, large.songsCsv.substring(0, 100000)]) {
         final hash = TextHash(text);
@@ -92,7 +121,7 @@ void main() {
         expect(hash.value, text.hashCode, reason: '${text.length} code units');
       }
       final sheets = generatedSheets(2, plays: 2000);
-      expect(await fingerprintInSlices(sheets), sheets.fingerprint);
+      expect(await fingerprintInSlices(sheets.songsCsv), await fingerprintAtOnce(sheets.songsCsv));
     },
     // nothing relies on it (see TextHash): it only shows what its comment says
     skip: const bool.fromEnvironment('dart.tool.dart2wasm') ? 'dart2wasm hashes strings its own way' : false,
@@ -130,7 +159,7 @@ void main() {
   test('the web loads in slices', () {
     final container = ProviderContainer.test();
     expect(container.read(loadsInSlicesProvider), isTrue);
-    expect(identical(container.read(catalogueParserProvider), parseInSlices), isTrue);
-    expect(identical(container.read(sheetsFingerprintProvider), fingerprintInSlices), isTrue);
+    expect(container.read(sheetParserProvider), isA<ParseInSlices>());
+    expect(identical(container.read(textFingerprintProvider), fingerprintInSlices), isTrue);
   });
 }

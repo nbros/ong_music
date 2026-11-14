@@ -4,6 +4,8 @@ library;
 
 import 'dart:typed_data';
 
+import 'slices.dart';
+
 import 'page_thread_stub.dart' if (dart.library.js_interop) 'page_thread_web.dart' as platform;
 
 /// Lets the thread run its other tasks before going on: on the web, a task of its own (a message to the page itself),
@@ -11,6 +13,12 @@ import 'page_thread_stub.dart' if (dart.library.js_interop) 'page_thread_web.dar
 /// nor `setTimeout(0)`, which the browser delays by 4 ms once nested: a load of 40 slices would take a third longer.
 /// Elsewhere, a timer of zero.
 Future<void> yieldToBrowser() => platform.yieldToBrowser();
+
+/// Waits until the thread is idle, and tells for how long ([runWhenIdle]): on the web, an idle period of the page
+/// (`requestIdleCallback`: between two frames, the time left before the next one, at most 5 ms: an input
+/// that comes meanwhile waits for the slice), or after a second if none comes. Where the browser has no idle callbacks (Safari), after a task of its own
+/// as [yieldToBrowser] does, for half a frame of a 120 Hz display. Elsewhere, a timer of zero, then [sliceBudget].
+Future<IdleDeadline> waitForIdle() => platform.waitForIdle();
 
 /// The UTF-8 text of [bytes], malformed sequences replaced by U+FFFD: the text of `utf8.decode` with
 /// `allowMalformed: true`. On the web it is the browser's decoder (`TextDecoder`), which follows the same standard
