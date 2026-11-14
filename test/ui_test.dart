@@ -920,7 +920,7 @@ void main() {
     testWidgets('first download: progress', (tester) async {
       await pumpApp(tester, state: CatalogueState(isRefreshing: true), settle: false);
       expect(find.byType(CircularProgressIndicator), findsWidgets);
-      expect(find.text('Downloading the highlights…').hitTestable(), findsOneWidget);
+      expect(find.text('Loading the highlights…').hitTestable(), findsOneWidget);
     });
 
     testWidgets('first download failed: message and Retry', (tester) async {
@@ -928,7 +928,7 @@ void main() {
         tester,
         state: CatalogueState(lastError: Exception('SocketException: failed host lookup')),
       );
-      expect(find.text('Couldn’t download the songs').hitTestable(), findsOneWidget);
+      expect(find.text('Couldn’t download the highlights').hitTestable(), findsOneWidget);
       expect(
         find.text('Couldn’t reach Google Sheets. Check your connection and try again.').hitTestable(),
         findsOneWidget,

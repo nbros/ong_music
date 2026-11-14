@@ -135,7 +135,7 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
       await tester.tap(find.text('Ong Log').last);
       await tester.pump(const Duration(seconds: 1));
-      expect(find.text('Downloading the Ong Log…').hitTestable(), findsOneWidget);
+      expect(find.text('Loading the Ong Log…').hitTestable(), findsOneWidget);
       expect(find.byType(CircularProgressIndicator).hitTestable(), findsOneWidget);
     });
 
@@ -149,23 +149,23 @@ void main() {
         browser: FakeBrowser('/log'),
       );
       await tester.pump(const Duration(seconds: 1));
-      expect(find.text('Downloading the Ong Log…').hitTestable(), findsOneWidget);
+      expect(find.text('Loading the Ong Log…').hitTestable(), findsOneWidget);
       await tester.tap(find.text('Highlights').last);
       await tester.pump(const Duration(seconds: 1));
-      expect(find.text('Downloading the highlights…').hitTestable(), findsOneWidget);
+      expect(find.text('Loading the highlights…').hitTestable(), findsOneWidget);
     });
 
     testWidgets('not asked for yet (before the first frame of the list asked for it): the same screen', (tester) async {
       await pumpApp(tester, state: highlightsOnly(loading: false), settle: false);
       await tester.tap(find.text('Ong Log').last);
       await tester.pump(const Duration(seconds: 1));
-      expect(find.text('Downloading the Ong Log…').hitTestable(), findsOneWidget);
+      expect(find.text('Loading the Ong Log…').hitTestable(), findsOneWidget);
     });
 
     testWidgets('failed: the failure screen, its Retry downloads the Songs sheet alone', (tester) async {
       final app = await pumpApp(tester, state: highlightsOnly(loading: false, songsError: const SocketException('x')));
       await goToTab(tester, 'Ong Log');
-      expect(find.text('Couldn’t download the songs').hitTestable(), findsOneWidget);
+      expect(find.text('Couldn’t download the Ong Log').hitTestable(), findsOneWidget);
       expect(find.text('Couldn’t reach Google Sheets. Check your connection and try again.'), findsOneWidget);
       await tester.tap(find.text('Retry'));
       await tester.pump();
@@ -179,7 +179,7 @@ void main() {
       app.notifier.emit(withSongs());
       await tester.pumpAndSettle();
       expect(find.byType(PlayRow), findsWidgets);
-      expect(find.text('Downloading the Ong Log…'), findsNothing);
+      expect(find.text('Loading the Ong Log…'), findsNothing);
     });
 
     testWidgets('the Highlights tab shows nothing of it: no bar while it loads, no word of its failure', (

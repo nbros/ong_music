@@ -50,7 +50,7 @@ void main() {
     // the list at once, with the thin bar of a refresh, not the first-download screen
     expect(find.byType(HighlightRow), findsWidgets);
     expect(find.byType(LinearProgressIndicator), findsOneWidget);
-    expect(find.text('Downloading the highlights…'), findsNothing);
+    expect(find.text('Loading the highlights…'), findsNothing);
     listScroll(tester).jumpTo(300);
     await tester.pump(const Duration(seconds: 1));
     final before = rowsShown(tester);
@@ -167,7 +167,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(HighlightRow), findsWidgets);
     expect(find.byType(SnackBar), findsNothing);
-    expect(find.text('Couldn’t download the songs'), findsNothing);
+    expect(find.text('Couldn’t download the highlights'), findsNothing);
     await goToTab(tester, 'About');
     await tester.scrollUntilVisible(find.text('Clear downloaded data'), 200, scrollable: aboutScrollable());
     expect(find.text('Updated 20 hours ago'), findsOneWidget, reason: 'the age of the copy, not "just now"');

@@ -27,8 +27,8 @@ String describeLoadError(Object? error) => switch (error) {
   SheetHttpException(:final statusCode) =>
     'Google Sheets answered with an error (HTTP $statusCode). Try again in a while.',
   SheetNotCsvException() =>
-    'Got a web page instead of the songs. If this network asks you to sign in, do that and try again.',
-  CatalogueFormatException() => 'The spreadsheets came back in an unexpected format. Try again in a while.',
+    'Got a web page instead of the data. If this network asks you to sign in, do that and try again.',
+  CatalogueFormatException() => 'The spreadsheet came back in an unexpected format. Try again in a while.',
   TimeoutException() => 'The download took too long. Check your connection and try again.',
   _ => 'Couldn’t reach Google Sheets. Check your connection and try again.',
 };
@@ -62,7 +62,7 @@ class CatalogueStatusView extends ConsumerWidget {
                   Icon(Icons.cloud_off, size: 40, color: on3),
                   const SizedBox(height: 16),
                   Text(
-                    'Couldn’t download the songs',
+                    songs || ongLog ? 'Couldn’t download the Ong Log' : 'Couldn’t download the highlights',
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: scheme.onSurface),
                   ),
@@ -86,7 +86,7 @@ class CatalogueStatusView extends ConsumerWidget {
                   const CircularProgressIndicator(),
                   const SizedBox(height: 20),
                   Text(
-                    songs || ongLog ? 'Downloading the Ong Log…' : 'Downloading the highlights…',
+                    songs || ongLog ? 'Loading the Ong Log…' : 'Loading the highlights…',
                     textAlign: TextAlign.center,
                     style: TextStyle(color: on3),
                   ),
