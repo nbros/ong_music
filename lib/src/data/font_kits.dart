@@ -133,6 +133,9 @@ const List<String> _textFamilies = ['Noto Sans', 'Noto Sans Symbols 2', 'Noto Sa
 /// when none draws it, or it is not one of theirs.
 String? _textFamilyOf(int c) {
   if (!_isOther(c) && !_isTextSymbol(c)) return null;
+  // the keycap mark draws a keycap emoji with its base: a font of text symbols drawing it alone would hold back the
+  // engine's colour emoji where the emoji kit is not to be had (Safari)
+  if (c == 0x20E3) return null;
   for (final family in _textFamilies) {
     if (notoDraws(family, c)) return family;
   }

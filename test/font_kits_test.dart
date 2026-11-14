@@ -60,6 +60,11 @@ void main() {
         'for a title with → and ☆ only', () {
       expect(planFontKits('→☆'.runes).map((k) => k.family), ['Noto Sans Symbols 2', 'Noto Sans Symbols']);
       expect(planFontKits('שלום'.runes), isEmpty, reason: 'no family here draws Hebrew: left to the engine');
+      expect(
+        planFontKits('\u20E3'.runes).where((k) => k.family != 'Noto Color Emoji'),
+        isEmpty,
+        reason: 'the keycap mark goes with its emoji alone',
+      );
       final all = planFontKits([for (var c = 0x2190; c < 0x2C00; c++) c, for (var c = 0x0100; c < 0x0600; c++) c]);
       for (final kit in all.where((k) => notoRanges.containsKey(k.family))) {
         for (final c in kit.text.runes) {
