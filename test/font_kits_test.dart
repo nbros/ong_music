@@ -20,7 +20,7 @@ void main() {
         final first = planFontKits('あ한'.runes);
         expect([for (final k in first) '${k.name}: ${k.text}'], ['Ong JP 1: あ', 'Ong KR 1: 한']);
         final more = planFontKits('あい한봄東'.runes, planned: first);
-        expect([for (final k in more) '${k.name}: ${k.text}'], ['Ong JP 2: い東', 'Ong KR 2: 봄', 'Ong SC 1: 東']);
+        expect([for (final k in more) '${k.name}: ${k.text}'], ['Ong JP 2: あい東', 'Ong KR 2: 봄한', 'Ong SC 1: 中東']);
         expect(planFontKits('あ한'.runes, planned: first), isEmpty, reason: 'nothing new');
         // never more than kitsPerGroup kits of a family: what does not fit is left to the engine
         final many = [for (var i = 0; i < kitLength * kitsPerGroup; i++) 0x4E00 + i];
@@ -37,7 +37,7 @@ void main() {
     test('kana, CJK punctuation, Han and the shared CJK signs go to Noto Sans JP; Han and the shared signs to Noto '
         'Sans SC too (for those JP lacks)', () {
       expect(textOf(kits, 'Ong JP 1'), '⺀「あアㄅ㈱㎡東铁︐︵');
-      expect(textOf(kits, 'Ong SC 1'), '⺀ㄅ㈱㎡東铁︐︵');
+      expect(textOf(kits, 'Ong SC 1'), '⺀ㄅ㈱㎡中東铁︐︵');
     });
 
     test('Hangul and the shared CJK signs to Noto Sans KR, Arabic to Noto Sans Arabic', () {
@@ -48,15 +48,16 @@ void main() {
     test('what the colour emoji draws to it alone, as the engine gives it (▶ ♥ ✔ ❤ ㊗ too, text by default); the '
         'other symbols to the symbol fonts and Noto Sans', () {
       expect(textOf(kits, 'Ong Emoji 1'), '▶♥✔✨❤㊗\uFE0F🌈');
-      for (final name in ['Ong Symbols 2 1', 'Ong Symbols 1', 'Ong Math 1']) {
+      for (final name in ['Ong Symbols 2 1', 'Ong Symbols 1']) {
         expect(textOf(kits, name), '→☆♪', reason: name);
       }
+      expect(textOf(kits, 'Ong Math 1'), '→∞☆♪', reason: 'with its sure character');
     });
 
     test(
       'anything else (Latin letters Roboto lacks, modifier letters, joiners) to Noto Sans, with the text symbols',
       () {
-        expect(textOf(kits, 'Ong Sans 1'), 'ǐʻ→☆♪\uFE0F');
+        expect(textOf(kits, 'Ong Sans 1'), 'aǐʻ→☆♪\uFE0F', reason: 'with its sure character');
       },
     );
 
@@ -71,12 +72,24 @@ void main() {
       expect(korean, [(name: 'Ong KR 1', family: 'Noto Sans KR', text: '국한')]);
     });
 
+    test('each kit holds a character its family draws, so that the API never refuses it (HTTP 400): a title with '
+        'only symbols Noto Sans lacks', () {
+      final kits = planFontKits('→☆'.runes);
+      expect(textOf(kits, 'Ong Sans 1'), 'a→☆');
+      final all = planFontKits([...kitGroups.expand((g) => g.sure.runes), 0x2192]);
+      for (final group in kitGroups) {
+        for (final kit in all.where((k) => k.family == group.family)) {
+          expect(kit.text, contains(group.sure), reason: kit.name);
+        }
+      }
+    });
+
     test('at most $kitLength characters a kit, at most $kitsPerGroup kits a family', () {
       final hangul = [for (var i = 0; i < kitLength * kitsPerGroup + 10; i++) 0xAC00 + i];
       final split = planFontKits(hangul);
       expect([for (final k in split) k.name], ['Ong KR 1', 'Ong KR 2', 'Ong KR 3']);
       expect([for (final k in split) k.text.runes.length], [kitLength, kitLength, kitLength]);
-      expect(split[1].text.runes.first, 0xAC00 + kitLength);
+      expect(split[1].text.runes.first, 0xAC00 + kitLength - 1, reason: 'each kit has room for the sure character');
     });
 
     test('the family names, in the order of the families; those of some kits, in that order', () {

@@ -25,8 +25,12 @@ import 'package:http/http.dart' as http;
 import 'emoji.g.dart';
 
 /// A family of Google Fonts the rare characters of a kind are asked from: [takes] says whether a character goes to
-/// it, given the characters the texts ask to be drawn as emoji.
-typedef KitGroup = ({String name, String family, bool Function(int codePoint, Set<int> emojiBases) takes});
+/// it, given the characters the texts ask to be drawn as emoji. [sure] is a character the family draws, asked with
+/// every kit of it (empty: none): the API refuses a kit holding no character of its family (HTTP 400, a page without
+/// the CORS headers, so a failed fetch to the app, which would try it again), and the characters a family is sent
+/// may all be ones it lacks (a title with → and ☆ only: Noto Sans has neither). It changes nothing on the screen:
+/// drawn only where the texts hold it, by the family that would draw it anyway.
+typedef KitGroup = ({String name, String family, String sure, bool Function(int codePoint, Set<int> emojiBases) takes});
 
 bool _within(int c, int first, int last) => c >= first && c <= last;
 
@@ -112,20 +116,33 @@ bool _isOther(int c) => !isHangul(c) && !isJapanese(c) && !isArabic(c) && !isSym
 ///
 /// Scripts with no family here (Hebrew, Thai, the scripts of India, Armenian, Georgian, Ethiopic, Khmer, Tibetan…) go
 /// to Noto Sans, which does not draw them: the engine's own fallback draws them, as without kits.
+// the sure characters, written as escapes (they are no characters of the app's own texts): あ 한 中 ا ☆ → ∞
 final List<KitGroup> kitGroups = [
   (
     name: 'Ong Emoji',
     family: 'Noto Color Emoji',
+    // only what the font draws: a colour glyph would weigh a few kilobytes
+    sure: '',
     takes: (c, bases) => isEmoji(c) || isEmojiPart(c) || bases.contains(c),
   ),
-  (name: 'Ong JP', family: 'Noto Sans JP', takes: (c, _) => isJapanese(c) && !isEmoji(c)),
-  (name: 'Ong KR', family: 'Noto Sans KR', takes: (c, _) => (isHangul(c) || isCjkShared(c)) && !isEmoji(c)),
-  (name: 'Ong SC', family: 'Noto Sans SC', takes: (c, _) => (isHan(c) || isCjkShared(c)) && !isEmoji(c)),
-  (name: 'Ong Arabic', family: 'Noto Sans Arabic', takes: (c, _) => isArabic(c) && !isEmoji(c)),
-  (name: 'Ong Sans', family: 'Noto Sans', takes: (c, _) => _isOther(c) || _isTextSymbol(c)),
-  (name: 'Ong Symbols 2', family: 'Noto Sans Symbols 2', takes: (c, _) => _isTextSymbol(c)),
-  (name: 'Ong Symbols', family: 'Noto Sans Symbols', takes: (c, _) => _isTextSymbol(c)),
-  (name: 'Ong Math', family: 'Noto Sans Math', takes: (c, _) => _isTextSymbol(c)),
+  (name: 'Ong JP', family: 'Noto Sans JP', sure: '\u3042', takes: (c, _) => isJapanese(c) && !isEmoji(c)),
+  (
+    name: 'Ong KR',
+    family: 'Noto Sans KR',
+    sure: '\uD55C',
+    takes: (c, _) => (isHangul(c) || isCjkShared(c)) && !isEmoji(c),
+  ),
+  (
+    name: 'Ong SC',
+    family: 'Noto Sans SC',
+    sure: '\u4E2D',
+    takes: (c, _) => (isHan(c) || isCjkShared(c)) && !isEmoji(c),
+  ),
+  (name: 'Ong Arabic', family: 'Noto Sans Arabic', sure: '\u0627', takes: (c, _) => isArabic(c) && !isEmoji(c)),
+  (name: 'Ong Sans', family: 'Noto Sans', sure: 'a', takes: (c, _) => _isOther(c) || _isTextSymbol(c)),
+  (name: 'Ong Symbols 2', family: 'Noto Sans Symbols 2', sure: '\u2606', takes: (c, _) => _isTextSymbol(c)),
+  (name: 'Ong Symbols', family: 'Noto Sans Symbols', sure: '\u2192', takes: (c, _) => _isTextSymbol(c)),
+  (name: 'Ong Math', family: 'Noto Sans Math', sure: '\u221E', takes: (c, _) => _isTextSymbol(c)),
 ];
 
 /// The most characters asked for in one request: the API cuts fonts down up to some 800.
@@ -151,7 +168,7 @@ final List<String> fontKitFamilies = [
 
 /// The kits that draw [codePoints] (rare characters, see `rare_characters.dart`) and [emojiBases] (characters the
 /// texts ask to be drawn as emoji): for each family of [kitGroups], the characters it takes, in ascending order,
-/// [kitLength] at a time, at most [kitsPerGroup] kits.
+/// [kitLength] at a time with its sure character ([KitGroup]), at most [kitsPerGroup] kits.
 ///
 /// With [planned], the kits planned already (for an earlier catalogue: the highlights before the Songs sheet), only
 /// the characters a family takes that its kits planned do not hold, in kits numbered after them, within the same
@@ -171,12 +188,15 @@ List<FontKit> planFontKits(
         ];
         final held = {for (final kit in before) ...kit.text.runes};
         final taken = sorted.where((c) => group.takes(c, emojiBases) && !held.contains(c)).toList();
+        final sure = group.sure.runes;
+        // room for the sure character in each kit
+        final length = kitLength - sure.length;
         return [
-          for (var i = 0; i * kitLength < taken.length && before.length + i < kitsPerGroup; i++)
+          for (var i = 0; i * length < taken.length && before.length + i < kitsPerGroup; i++)
             (
               name: '${group.name} ${before.length + i + 1}',
               family: group.family,
-              text: String.fromCharCodes(taken.skip(i * kitLength).take(kitLength)),
+              text: String.fromCharCodes({...taken.skip(i * length).take(length), ...sure}.toList()..sort()),
             ),
         ];
       }(),
