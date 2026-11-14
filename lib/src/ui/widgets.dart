@@ -1038,20 +1038,123 @@ class _ScrollArrow extends StatelessWidget {
   }
 }
 
+/// A traversal policy making a group one stop of the Tab key: the focused
+/// node when the focus is in the group (the next Tab leaves it), the node of
+/// [entry] when it comes in from elsewhere; nothing when [entry] has none.
+class OneStopTraversalPolicy extends ReadingOrderTraversalPolicy {
+  OneStopTraversalPolicy(this.entry);
+
+  /// Where the focus enters the group.
+  final FocusNode? Function() entry;
+
+  @override
+  Iterable<FocusNode> sortDescendants(Iterable<FocusNode> descendants, FocusNode currentNode) {
+    if (descendants.contains(currentNode)) return [currentNode];
+    final node = entry();
+    return node != null && descendants.contains(node) ? [node] : const [];
+  }
+}
+
 /// A horizontally scrolling row of filter chips, with arrows at its ends for
 /// a mouse.
-class ChipRow extends StatelessWidget {
+///
+/// One stop of the Tab key, which enters it on the first selected chip; ← and
+/// → go from chip to chip, Home and End to the first and the last, the chip
+/// brought into view at once, clear of the arrows. Space and Enter select a
+/// chip as a click does: going through the chips selects none of them (a
+/// filter rebuilds the list, and the chips are toggles, not a choice of one).
+class ChipRow extends StatefulWidget {
   const ChipRow({super.key, required this.children});
 
   final List<Widget> children;
 
   @override
-  Widget build(BuildContext context) => HorizontalScroll(
-    padding: const EdgeInsets.symmetric(horizontal: 16),
-    arrows: true,
-    previousLabel: 'Previous filters',
-    nextLabel: 'More filters',
-    child: Row(spacing: 8, children: children),
+  State<ChipRow> createState() => _ChipRowState();
+}
+
+class _ChipRowState extends State<ChipRow> {
+  /// Above the focus nodes of the chips.
+  final _chips = FocusNode(debugLabel: 'filters', canRequestFocus: false, skipTraversal: true);
+
+  late final _policy = OneStopTraversalPolicy(() {
+    final chips = _nodes();
+    return chips.where(_isSelected).firstOrNull ?? chips.firstOrNull;
+  });
+
+  /// Room left between a chip brought into view and the edge of the row: the
+  /// arrow and its fade, with a mouse, lie over 64 px at each end.
+  static const double _clearance = 64;
+
+  @override
+  void dispose() {
+    _chips.dispose();
+    super.dispose();
+  }
+
+  /// The focus nodes of the chips, from left to right.
+  List<FocusNode> _nodes() => _chips.traversalDescendants.toList()..sort((a, b) => a.rect.left.compareTo(b.rect.left));
+
+  static bool _isSelected(FocusNode node) => node.context?.findAncestorWidgetOfExactType<ListChip>()?.selected ?? false;
+
+  /// Focuses the chip [to] gives for the index of the focused one and the
+  /// number of chips.
+  void _go(int Function(int at, int count) to) {
+    final chips = _nodes();
+    if (chips.isEmpty) return;
+    final at = chips.indexWhere((chip) => chip.hasFocus);
+    final chip = chips[to(at, chips.length).clamp(0, chips.length - 1)];
+    chip.requestFocus();
+    _reveal(chip);
+  }
+
+  /// Scrolls the row, without animation, just enough to show [chip] clear of
+  /// the ends.
+  static void _reveal(FocusNode chip) {
+    final context = chip.context;
+    final box = context?.findRenderObject();
+    if (context == null || box == null || !box.attached) return;
+    final viewport = RenderAbstractViewport.maybeOf(box);
+    final position = Scrollable.maybeOf(context)?.position;
+    if (viewport == null || position == null || !position.hasContentDimensions) return;
+    final before = viewport.getOffsetToReveal(box, 0).offset - _clearance;
+    final after = viewport.getOffsetToReveal(box, 1).offset + _clearance;
+    final pixels = position.pixels;
+    final target = (pixels > before ? before : (pixels < after ? after : pixels)).clamp(
+      position.minScrollExtent,
+      position.maxScrollExtent,
+    );
+    if (target != pixels) position.jumpTo(target);
+  }
+
+  @override
+  Widget build(BuildContext context) => Focus(
+    focusNode: _chips,
+    canRequestFocus: false,
+    skipTraversal: true,
+    includeSemantics: false,
+    onFocusChange: (focused) {
+      // entered with Tab: the chip in view, clear of the arrow (the Tab key shows it, at the very edge)
+      final focus = FocusManager.instance.primaryFocus;
+      if (focused && focus != null) _reveal(focus);
+    },
+    child: FocusTraversalGroup(
+      policy: _policy,
+      child: CallbackShortcuts(
+        bindings: {
+          const SingleActivator(LogicalKeyboardKey.arrowLeft): () => _go((at, count) => at < 0 ? 0 : at - 1),
+          const SingleActivator(LogicalKeyboardKey.arrowRight): () => _go((at, count) => at + 1),
+          const SingleActivator(LogicalKeyboardKey.home): () => _go((at, count) => 0),
+          const SingleActivator(LogicalKeyboardKey.end): () => _go((at, count) => count - 1),
+        },
+        child: HorizontalScroll(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          arrows: true,
+          previousLabel: 'Previous filters',
+          nextLabel: 'More filters',
+          child: Row(spacing: 8, children: widget.children),
+        ),
+      ),
+    ),
   );
 }
 

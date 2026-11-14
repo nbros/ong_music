@@ -12,6 +12,38 @@ import 'text.dart';
 /// A genre and how many rows have it.
 typedef GenreCount = ({Genre genre, int count});
 
+/// The position of [id] in [ids], strictly descending (a result, newest
+/// first: built from the last id to the first), or -1: O(log n).
+int _indexOfDescending(Int32List ids, int id) {
+  var lo = 0, hi = ids.length - 1;
+  while (lo <= hi) {
+    final mid = (lo + hi) >> 1;
+    final at = ids[mid];
+    if (at == id) return mid;
+    if (at > id) {
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return -1;
+}
+
+/// The position of the first id below [bound] in [ids], strictly descending:
+/// `ids.length` when there is none. O(log n).
+int _firstBelowDescending(Int32List ids, int bound) {
+  var lo = 0, hi = ids.length;
+  while (lo < hi) {
+    final mid = (lo + hi) >> 1;
+    if (ids[mid] >= bound) {
+      lo = mid + 1;
+    } else {
+      hi = mid;
+    }
+  }
+  return lo;
+}
+
 /// The highlights matching a query, newest first.
 final class HighlightResults {
   HighlightResults._(this.tokens, this.ids, this.counts);
@@ -28,6 +60,9 @@ final class HighlightResults {
 
   int get length => ids.length;
   bool get isEmpty => ids.isEmpty;
+
+  /// The position of highlight [id] in the result, or -1. O(log n).
+  int indexOf(int id) => _indexOfDescending(ids, id);
 }
 
 /// How many highlights a search would find with one more or one other filter
@@ -69,6 +104,17 @@ final class PlayResults {
 
   /// The play at position [index] of the result.
   Play operator [](int index) => _plays[ids[index]];
+
+  /// The position of play [id] in the result, or -1. O(log n).
+  int indexOf(int id) => _indexOfDescending(ids, id);
+
+  /// The position of the first play of [stream] in the result (its newest),
+  /// or -1 when the result has none of its plays. O(log n): the plays of a
+  /// stream have consecutive ids.
+  int firstOf(LiveStream stream) {
+    final at = _firstBelowDescending(ids, stream.firstPlayId + stream.playCount);
+    return at < ids.length && ids[at] >= stream.firstPlayId ? at : -1;
+  }
 
   /// Whether the row at [index] is the first of its stream in the result, i.e.
   /// whether a list grouped by stream shows a stream header above it.

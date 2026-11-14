@@ -880,10 +880,16 @@ void main() {
       expect(tester.widget<PlayRow>(playRow(2)).selected, isTrue);
     });
 
-    testWidgets('no arrows in a medium window, nor under a sheet', (tester) async {
+    testWidgets('a medium window: ↓ brings the focus to the first row, opens nothing and selects nothing', (
+      tester,
+    ) async {
       await pumpApp(tester, size: medium);
       await press(tester, LogicalKeyboardKey.arrowDown);
       expect(find.byType(BottomSheet), findsNothing);
+      expect(
+        FocusManager.instance.primaryFocus!.context!.findAncestorWidgetOfExactType<HighlightRow>()!.highlight.track,
+        "How Far I'll Go",
+      );
       tester.view.physicalSize = desk;
       await tester.pumpAndSettle();
       expect(paneHighlight(tester), "How Far I'll Go");

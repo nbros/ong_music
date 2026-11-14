@@ -54,11 +54,14 @@ Future<void> showFiche(BuildContext context, Fiche fiche) async {
 /// Shows [fiche] in a bottom sheet. Called from inside a sheet, it replaces that sheet.
 Future<void> _showSheet(BuildContext context, Fiche fiche) {
   final navigator = Navigator.of(context);
-  if (ModalRoute.of(context) is ModalBottomSheetRoute) navigator.pop();
+  // the only bottom sheets are these; not from ModalRoute.of, which would build [context] again each time a sheet
+  // opens or closes (a row of a list, all of them)
+  if (context.findAncestorWidgetOfExactType<_OverContent>() != null) navigator.pop();
   final host = navigator.context;
   // On a phone, the search field may have the focus with its keyboard closed, to read the list: the focus, given
-  // back when the sheet closes, would bring the keyboard up over the list after every sheet.
-  if (_hasScreenKeyboard) FocusManager.instance.primaryFocus?.unfocus();
+  // back when the sheet closes, would bring the keyboard up over the list after every sheet. (The focus of a row,
+  // with a keyboard, comes back to it.)
+  if (_hasScreenKeyboard && isEditingText()) FocusManager.instance.primaryFocus?.unfocus();
   final localizations = MaterialLocalizations.of(host);
   return navigator.push(
     _DetailSheetRoute(
