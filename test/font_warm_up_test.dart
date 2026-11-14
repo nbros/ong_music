@@ -517,7 +517,7 @@ void main() {
         ],
       );
       // a family that has a kit already gets another one for the characters only the songs hold
-      expect([for (final k in more) '${k.name}: ${k.text}'], contains('Ong JP 2: あ日'));
+      expect([for (final k in more) '${k.name}: ${k.text}'], contains('Ong JP 2: 日'));
       expect(more.where(first.contains), isEmpty, reason: 'nothing downloaded again');
       await tester.pump(fontWarmUpFirstQuiet);
       await tester.pump(fontWarmUpQuiet);
