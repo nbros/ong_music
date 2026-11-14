@@ -605,7 +605,12 @@ class HighlightSheet extends ConsumerWidget {
                                 child: const Text('Video unavailable'),
                               ),
                       ),
-                      _TonalIcon(icon: Icons.share, tooltip: 'Share', onPressed: () => shareHighlight(context, ref, h)),
+                      if (ref.watch(canShareProvider))
+                        _TonalIcon(
+                          icon: Icons.share,
+                          tooltip: 'Share',
+                          onPressed: () => shareHighlight(context, ref, h),
+                        ),
                       _CopyButton(highlight: h),
                     ],
                   ),

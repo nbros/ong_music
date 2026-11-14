@@ -35,6 +35,10 @@ Future<void> loadWebFonts() async {}
 /// where the system tells Flutter itself.
 bool? browserUses24HourClock() => null;
 
+/// Whether there is a share sheet to hand a text to: always in the native
+/// apps; in a browser, only where it has the Web Share API.
+bool canShareText() => true;
+
 /// Whether the page is hidden right now (a tab opened behind another one);
 /// false outside a browser.
 bool pageIsHidden() => false;

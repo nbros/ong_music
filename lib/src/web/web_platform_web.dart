@@ -61,6 +61,11 @@ PageFullscreen? pageFullscreen() {
   return _BrowserFullscreen(root, names);
 }
 
+/// Whether the browser has a share sheet: the Web Share API, which some
+/// browsers on a computer lack (Firefox, Chromium on Linux) and which no
+/// browser gives outside a secure context (plain http).
+bool canShareText() => (web.window.navigator as JSObject).getProperty<JSAny?>('share'.toJS).isA<JSFunction>();
+
 /// Where videos play inside the app: YouTube's embedded player.
 VideoEmbedder? videoEmbedder() => YouTubeEmbedder();
 

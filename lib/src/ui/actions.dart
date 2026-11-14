@@ -11,6 +11,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../data/model.dart';
 import '../logger.dart';
+import '../web/web_platform.dart';
 import 'video_preview.dart';
 
 /// Opens a URL outside the app (browser or the site's app; a new tab on web).
@@ -31,6 +32,11 @@ final urlOpenerProvider = Provider<UrlOpener>(
     }
   },
 );
+
+/// Whether "Share" is offered: not where there is no share sheet (most
+/// browsers on a computer), "Copy" beside it doing what is left. Overridden
+/// in tests.
+final canShareProvider = Provider<bool>((ref) => canShareText());
 
 /// Overridden in tests.
 final textSharerProvider = Provider<TextSharer>(

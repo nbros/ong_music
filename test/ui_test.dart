@@ -325,6 +325,17 @@ void main() {
   });
 
   group('Sheets', () {
+    testWidgets('without a share sheet (most browsers on a computer) "Share" is not offered, "Copy" is', (
+      tester,
+    ) async {
+      await pumpApp(tester, canShare: false);
+      await tester.tap(detailsButtons().at(1));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Share'), findsNothing);
+      expect(find.byIcon(Icons.share), findsNothing);
+      expect(find.byTooltip('Copy title and link'), findsOneWidget);
+    });
+
     testWidgets('highlight sheet: facts, actions, links', (tester) async {
       final app = await pumpApp(tester);
       await tester.tap(detailsButtons().at(1)); // I Will Survive

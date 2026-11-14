@@ -275,6 +275,7 @@ Future<TestApp> pumpApp(
   FontKitRegistration? fontKitRegistration,
   Future<void> Function()? fontPause,
   bool desktop = false,
+  bool canShare = true,
 }) async {
   // before the size: setting it makes MediaQuery read the clock format again
   tester.platformDispatcher.alwaysUse24HourFormatTestValue = alwaysUse24HourFormat;
@@ -336,6 +337,7 @@ Future<TestApp> pumpApp(
           effects.opened.add(uri);
           return true;
         }),
+        canShareProvider.overrideWithValue(canShare),
         textSharerProvider.overrideWithValue((text) async {
           if (!effects.shareWorks) return false;
           effects.shared.add(text);
