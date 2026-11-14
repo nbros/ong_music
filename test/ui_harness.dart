@@ -114,6 +114,10 @@ Catalogue testCatalogue({SheetRows moreHighlights = const [], SheetRows moreSong
   ],
 );
 
+/// A state with both sheets of [catalogue] downloaded at [fetchedAt] (the Songs sheet too when it has it).
+CatalogueState loadedState(Catalogue catalogue, DateTime fetchedAt) =>
+    CatalogueState(catalogue: catalogue, fetchedAt: fetchedAt, songsFetchedAt: catalogue.hasSongs ? fetchedAt : null);
+
 /// Rows of a spreadsheet, as the fixtures give them.
 typedef SheetRows = List<List<String>>;
 
@@ -130,7 +134,7 @@ class FakeCatalogueNotifier extends CatalogueNotifier {
   CatalogueState build() => initial;
 
   @override
-  Future<void> refresh() async {
+  Future<void> refresh({bool waitForSongs = true}) async {
     refreshes++;
     if (refreshError case final error?) {
       state = CatalogueState(catalogue: state.catalogue, fetchedAt: state.fetchedAt, lastError: error);
@@ -139,6 +143,18 @@ class FakeCatalogueNotifier extends CatalogueNotifier {
 
   /// When set, [refresh] fails with it.
   Object? refreshError;
+
+  /// The calls of [retrySongs].
+  int songRetries = 0;
+
+  @override
+  Future<void> retrySongs() async => songRetries++;
+
+  /// The triggers given to [songsWanted], in order.
+  final songTriggers = <SongsTrigger>[];
+
+  @override
+  void songsWanted(SongsTrigger trigger) => songTriggers.add(trigger);
 
   @override
   Future<void> clearDownloadedData() async => clears++;
@@ -289,7 +305,7 @@ Future<TestApp> pumpApp(
   SharedPreferences.setMockInitialValues(prefs);
   final preferences = await SharedPreferences.getInstance();
   final notifier = FakeCatalogueNotifier(
-    state ?? CatalogueState(catalogue: testCatalogue(), fetchedAt: testNow.subtract(const Duration(hours: 2))),
+    state ?? loadedState(testCatalogue(), testNow.subtract(const Duration(hours: 2))),
   );
   final effects = Effects();
   tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {

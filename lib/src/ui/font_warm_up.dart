@@ -10,8 +10,10 @@
 /// background, and registers them itself ([FontLoader]) when nothing moves ([FontWarmUp]); once they are registered,
 /// the themes name them in the fallback of every text ([fontFallbackProvider]). Registered, they draw those
 /// characters, and the engine looks for no font of its own for them; it still does, as before, for characters no kit
-/// holds (a kit the API would not cut down for this browser, a refresh that brings new characters: the kits are
-/// planned once per visit).
+/// holds (a kit the API would not cut down for this browser, more than [kitsPerGroup] kits of a family). Each
+/// catalogue shown is planned for in turn: the highlights first, then the Songs sheet when it comes (or a refresh with
+/// new characters) adds kits for the characters the kits planned do not hold, downloaded and registered as the first
+/// ones, which are neither asked for nor registered again.
 library;
 
 import 'dart:async';
@@ -168,7 +170,8 @@ final class FontWarmUp {
 
   final Timer Function(Duration duration, void Function() callback) _startTimer;
 
-  List<FontKit>? _kits;
+  final List<FontKit> _kits = [];
+  bool _planned = false;
   final Set<FontKit> _downloading = {};
   final Map<FontKit, Uint8List> _downloaded = {};
   final Set<FontKit> _registered = {};
@@ -181,16 +184,26 @@ final class FontWarmUp {
   Timer? _timer;
   Timer? _deadline;
 
-  bool get _free => _kits != null && !_disposed && _pressed.isEmpty && !_closed;
+  bool get _free => _planned && !_disposed && _pressed.isEmpty && !_closed;
 
   /// Whether registering would cost more than the kits save: the engine has fonts of its own, and would create them
   /// all again.
   bool get _closed => network.registrationRecreatesFonts && network.engineFontBytes.value > maxRecreatedFontBytes;
 
-  /// The kits to download and register, once the list is on screen; only the first plan counts.
+  /// The kits planned so far, in the order they were.
+  List<FontKit> get planned => List.unmodifiable(_kits);
+
+  /// The kits to download and register: once the list is on screen, then for each catalogue shown after it (the
+  /// Songs sheet). A kit planned already is not asked for again, nor one of a family the API would not cut down for
+  /// this browser ([FontKitUnavailable]): it would give the same answer.
   void plan(List<FontKit> kits) {
-    if (_kits != null) return;
-    _kits = List.unmodifiable(kits);
+    if (_disposed) return;
+    final known = {for (final kit in _kits) kit.name};
+    final refused = {for (final kit in _unavailable) kit.family};
+    for (final kit in kits) {
+      if (!known.contains(kit.name) && !refused.contains(kit.family)) _kits.add(kit);
+    }
+    _planned = true;
     _downloadAll();
   }
 
@@ -246,9 +259,8 @@ final class FontWarmUp {
 
   /// Starts the downloads still to do: not under way, nor done, nor waiting to be tried again, nor given up.
   void _downloadAll() {
-    final kits = _kits;
-    if (kits == null || _disposed || _closed || !network.online.value) return;
-    for (final kit in kits) {
+    if (!_planned || _disposed || _closed || !network.online.value) return;
+    for (final kit in [..._kits]) {
       if (_downloading.contains(kit) ||
           _downloaded.containsKey(kit) ||
           _registered.contains(kit) ||
@@ -417,7 +429,9 @@ class _FontWarmUpScopeState extends ConsumerState<FontWarmUpScope> {
     } on LoadAbandoned {
       return;
     }
-    _warmUp?.plan(planFontKits(characters, emojiBases: emojiBases));
+    final warmUp = _warmUp;
+    // the kits of the characters the kits planned for an earlier catalogue do not hold
+    warmUp?.plan(planFontKits(characters, emojiBases: emojiBases, planned: warmUp.planned));
   }
 
   @override

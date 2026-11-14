@@ -8,12 +8,22 @@ import 'package:http/http.dart' as http;
 import 'page_thread.dart';
 import 'sheet_prefetch.dart';
 
-/// Tells whether two downloads have the same content, without keeping the
-/// megabytes of text around: lengths and `String.hashCode` of both sheets.
-/// Only comparable within one run of the app.
-typedef SheetsFingerprint = ({int highlightsLength, int highlightsHash, int songsLength, int songsHash});
+/// The two sheets of the spreadsheet. Each one is downloaded, kept and refreshed on its own: the Highlights list
+/// needs only [highlights], and [songs] is seven times larger (see `CatalogueNotifier.songsWanted`).
+enum Sheet {
+  /// "Youtube Catalogue": the highlights.
+  highlights,
 
-/// The raw CSV text of both sheets, as downloaded.
+  /// "Songs": the Ong Log.
+  songs,
+}
+
+/// Tells whether two downloads of a sheet have the same content, without keeping the megabytes of text around: its
+/// length and a hash of it. Only comparable within one run of the app, and with fingerprints of the same function.
+typedef TextFingerprint = ({int length, int hash});
+
+/// The raw CSV text of both sheets, as downloaded: the scripts and the tests, which parse them at once
+/// (`parseCatalogue`).
 final class RawSheets {
   /// Bundles the two payloads.
   const RawSheets({required this.highlightsCsv, required this.songsCsv});
@@ -24,16 +34,11 @@ final class RawSheets {
   /// "Songs" sheet (the Ong Log).
   final String songsCsv;
 
-  /// See [SheetsFingerprint].
-  SheetsFingerprint get fingerprint => (
-    highlightsLength: highlightsCsv.length,
-    highlightsHash: highlightsCsv.hashCode,
-    songsLength: songsCsv.length,
-    songsHash: songsCsv.hashCode,
-  );
-
-  /// The record form taken by `parseCatalogueRecord`.
-  ({String highlightsCsv, String songsCsv}) toRecord() => (highlightsCsv: highlightsCsv, songsCsv: songsCsv);
+  /// The text of [sheet].
+  String operator [](Sheet sheet) => switch (sheet) {
+    Sheet.highlights => highlightsCsv,
+    Sheet.songs => songsCsv,
+  };
 }
 
 /// A hash of a text computed a piece at a time ([add]), for the fingerprint of the sheets on the web
@@ -76,21 +81,22 @@ final class TextHash {
   }
 }
 
-/// [RawSheets] with the time they were downloaded.
-final class CachedSheets {
-  /// Bundles sheets and download time.
-  const CachedSheets({required this.sheets, required this.fetchedAt});
+/// The text of a sheet with the time it was downloaded.
+final class CachedSheet {
+  /// Bundles the text and its download time.
+  const CachedSheet({required this.text, required this.fetchedAt});
 
-  final RawSheets sheets;
+  /// The CSV text, as downloaded.
+  final String text;
 
-  /// When the download succeeded (UTC).
+  /// When the download succeeded (UTC); for the daily copy, when the copy was made.
   final DateTime fetchedAt;
 }
 
-/// Downloads both sheets.
+/// Downloads the sheets.
 abstract interface class SheetFetcher {
-  /// Downloads both sheets; throws on any network or HTTP error.
-  Future<RawSheets> fetch();
+  /// Downloads [sheet]; throws on any network or HTTP error.
+  Future<String> fetch(Sheet sheet);
 }
 
 /// Public CSV export (gviz) of the Google spreadsheet.
@@ -107,6 +113,12 @@ abstract final class SheetUrls {
 
   /// "Songs" sheet (the Ong Log).
   static final Uri songs = Uri.parse('${_base}Songs');
+
+  /// The address of [sheet].
+  static Uri of(Sheet sheet) => switch (sheet) {
+    Sheet.highlights => highlights,
+    Sheet.songs => songs,
+  };
 }
 
 /// A non-200 answer of the sheet server.
@@ -142,8 +154,7 @@ String sheetCsv(String text, Uri uri) {
   return text;
 }
 
-/// [SheetFetcher] over HTTP: both sheets in parallel, body decoded as UTF-8
-/// from the bytes whatever the declared charset.
+/// [SheetFetcher] over HTTP: body decoded as UTF-8 from the bytes whatever the declared charset.
 final class HttpSheetFetcher implements SheetFetcher {
   /// Uses [client] (a new one per fetch when null).
   HttpSheetFetcher({
@@ -163,19 +174,15 @@ final class HttpSheetFetcher implements SheetFetcher {
   final Duration maxDuration;
 
   @override
-  Future<RawSheets> fetch() async {
-    // web, first download: the one the page started while the app was loading, if any
-    final prefetched = await takePrefetchedSheets(timeout: timeout).timeout(maxDuration);
+  Future<String> fetch(Sheet sheet) async {
+    // web, first download of the sheet: the one the page started while the app was loading, if any
+    final prefetched = await takePrefetchedSheet(sheet, timeout: timeout).timeout(maxDuration);
     if (prefetched != null) return prefetched;
     final client = _client ?? http.Client();
     try {
-      final results = await Future.wait([
-        getSheetText(client, SheetUrls.highlights, timeout),
-        getSheetText(client, SheetUrls.songs, timeout),
-      ]).timeout(maxDuration);
-      return RawSheets(highlightsCsv: results[0], songsCsv: results[1]);
+      return await getSheetText(client, SheetUrls.of(sheet), timeout).timeout(maxDuration);
     } finally {
-      // also ends the downloads still running after a failure or a timeout
+      // also ends a download still running after a failure or a timeout
       if (_client == null) client.close();
     }
   }

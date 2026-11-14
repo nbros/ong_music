@@ -60,7 +60,7 @@ void main() {
       );
       expect(c.requester(p.requesterId)!.name, 'Bob');
       expect(c.streams.single.durationMinutes, 90);
-      expect(h.playId, p.id);
+      expect(c.playOf(h), same(p));
     });
 
     test('falls back to the historical index when a header is missing', () {
@@ -472,7 +472,7 @@ void main() {
     );
 
     test('a highlight links to the first play of the same song within one day', () {
-      expect(c.highlights.map((h) => h.playId), [0, null, 0, null, null]);
+      expect(c.highlights.map((h) => c.playOf(h)?.id), [0, null, 0, null, null]);
       expect(c.playOf(c.highlights[0])!.id, 0);
     });
 

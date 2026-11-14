@@ -32,14 +32,18 @@
   <link rel="manifest" href="manifest.json">
 
   <script>
-    // First visit or cache older than 6 hours: the app will download the sheets as soon as it runs. Start now,
-    // while the engine and the app load (a second or more); the app takes the responses on its first download
-    // (lib/src/data/sheet_prefetch_web.dart), so nothing is downloaded twice, and nothing when the cache is fresh.
-    // Must match WebSheetCache (cache name, key), SheetUrls and catalogueMaxAge (test/sheet_prefetch_test.dart).
+    // First visit or kept highlights older than 6 hours: the app will download the Highlights sheet as soon as it
+    // runs. Start now, while the engine and the app load (a second or more); the app takes the response on its first
+    // download (lib/src/data/sheet_prefetch_web.dart), so nothing is downloaded twice, and nothing when the kept copy
+    // is fresh. Must match WebSheetCache (cache name, keys: the time of the sheet, else the one of both sheets kept by
+    // versions up to 2.0.0), SheetUrls and catalogueMaxAge (test/sheet_prefetch_test.dart).
     //
-    // First visit only (nothing kept): the daily copy of the sheets too, which the app shows until Google's answer
-    // (lib/src/data/sheet_snapshot.dart), from the default address of SnapshotUrls.base. The app takes it only when it
-    // was built with that same address (the base below); an app built with another one downloads it by itself.
+    // First visit only (nothing kept): the daily copy of the Highlights sheet too, which the app shows until Google's
+    // answer (lib/src/data/sheet_snapshot.dart), from the default address of SnapshotUrls.base. The app takes it only
+    // when it was built with that same address (the base below); an app built with another one downloads it itself.
+    //
+    // Nothing for the Songs sheet (the Ong Log, seven times larger): the Highlights list does not wait for it, and
+    // the app downloads it once the list is on screen (songsWanted in lib/src/state/catalogue_state.dart).
     (function () {
       if (!window.fetch || !window.Promise) return;
       var base = 'https://docs.google.com/spreadsheets/d/14ARzE_zSMNhp0ZQV34ti2741PbA-5wAjsXRAW8EgJ-4/gviz/tq?tqx=out:csv&headers=1&sheet=';
@@ -48,7 +52,9 @@
       function cachedAt() {
         if (!window.caches) return Promise.resolve(null);
         return caches.open('ong-music-sheets-v1').then(function (cache) {
-          return cache.match('ong-music-cache/fetched_at.txt');
+          return cache.match('ong-music-cache/highlights_fetched_at.txt').then(function (response) {
+            return response || cache.match('ong-music-cache/fetched_at.txt');
+          });
         }).then(function (response) { return response ? response.text() : null; });
       }
       function get(url) {
@@ -60,15 +66,16 @@
       window.ongMusicSheetPrefetch = kept.then(function (meta) {
         var age = meta ? Math.abs(Date.now() - Date.parse(meta.trim())) : NaN;
         if (age < maxAge) return null;
-        return { highlights: get(base + 'Youtube%20Catalogue'), songs: get(base + 'Songs') };
+        return { highlights: get(base + 'Youtube%20Catalogue') };
       });
       window.ongMusicSnapshotPrefetch = kept.then(function (meta) {
         if (meta) return null;
         return {
           base: snapshotBase,
-          highlights: get(snapshotBase + 'highlights.csv'),
-          songs: get(snapshotBase + 'songs.csv'),
-          meta: get(snapshotBase + 'snapshot.json')
+          files: {
+            'highlights.csv': get(snapshotBase + 'highlights.csv'),
+            'snapshot.json': get(snapshotBase + 'snapshot.json')
+          }
         };
       });
     })();

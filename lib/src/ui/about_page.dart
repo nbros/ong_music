@@ -70,11 +70,46 @@ final List<(String, String, Widget Function(BuildContext))> aboutLinks = [
 
 /// The helper text under the Twitch name field.
 String twitchNameHelp(String name, Catalogue? catalogue) {
-  if (name.trim().isEmpty) return 'Your name will show in orange in every list.';
+  // the requests are counted in the Songs sheet: until it is in, what the name will do
+  if (name.trim().isEmpty || !(catalogue?.hasSongs ?? false)) return 'Your name will show in orange in every list.';
   final requester = catalogue?.requesterNamed(name);
   if (requester == null || requester.requestCount == 0) return 'No request under that name yet.';
-  return 'Found ${plural(requester.requestCount, 'request')} by ${requester.name}, now in orange. '
-      'Tap the “You” chip to see only yours.';
+  return _foundHelp(requester.requestCount, requester.name);
+}
+
+String _foundHelp(int requests, String name) =>
+    'Found ${plural(requests, 'request')} by $name, now in orange. Tap the “You” chip to see only yours.';
+
+/// [child], in the room of the longer of itself and the text [later] it will be replaced with (null: its own room),
+/// so that what stands below does not move when that text comes.
+class _RoomFor extends StatelessWidget {
+  const _RoomFor({required this.later, required this.style, required this.child});
+
+  final String? later;
+  final TextStyle style;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final later = this.later;
+    return DefaultTextStyle.merge(
+      style: style,
+      child: later == null
+          ? child
+          : Stack(
+              children: [
+                Visibility(
+                  visible: false,
+                  maintainSize: true,
+                  maintainAnimation: true,
+                  maintainState: true,
+                  child: Text(later),
+                ),
+                child,
+              ],
+            ),
+    );
+  }
 }
 
 /// The About tab: one column; in an expanded window, two cards side by side
@@ -564,9 +599,11 @@ class _TwitchNameFieldState extends ConsumerState<_TwitchNameField> {
           ),
           Padding(
             padding: const EdgeInsets.only(top: 6),
-            child: Text(
-              twitchNameHelp(name, catalogue),
+            child: _RoomFor(
+              // the requests are counted once the Songs sheet is in: the room of what it may then say
+              later: name.trim().isEmpty || (catalogue?.hasSongs ?? false) ? null : _foundHelp(88, name.trim()),
               style: TextStyle(fontSize: 12, height: 16 / 12, color: on3),
+              child: Text(twitchNameHelp(name, catalogue)),
             ),
           ),
         ],
@@ -624,16 +661,17 @@ class _DataSectionState extends ConsumerState<_DataSection> {
     final scheme = Theme.of(context).colorScheme;
     final on3 = OngColors.of(context).on3;
     final small = TextStyle(fontSize: 12, height: 16 / 12, color: on3);
-    final fetchedAt = state.fetchedAt;
+    // the older of the sheets on the screen; a failure of either one
+    final fetchedAt = state.updatedAt;
     final String title;
-    if (state.isRefreshing) {
+    if (state.isUpdating) {
       title = 'Updating…';
     } else if (fetchedAt == null) {
       title = 'Not downloaded yet';
     } else {
       title = 'Updated ${formatAgo(fetchedAt, ref.read(clockProvider)())}';
     }
-    final error = state.lastError;
+    final error = state.anyError;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -649,13 +687,19 @@ class _DataSectionState extends ConsumerState<_DataSection> {
                       title,
                       style: TextStyle(fontSize: 14, height: 20 / 14, color: scheme.onSurface),
                     ),
-                    if (state.hasData)
+                    if (state.hasData) ...[
+                      Text(plural(state.highlightCount, 'highlight'), style: small),
+                      // what the Songs sheet counts, on one line of its own: its room is there before it is in
                       Text(
-                        '${plural(state.highlightCount, 'highlight')} · ${plural(state.playCount, 'song')} · '
-                        '${plural(state.streamCount, 'stream')}',
+                        state.hasSongs
+                            ? '${plural(state.playCount, 'song')} · ${plural(state.streamCount, 'stream')}'
+                            : ' ',
                         style: small,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                    if (error != null && !state.isRefreshing)
+                    ],
+                    if (error != null && !state.isUpdating)
                       Padding(
                         padding: const EdgeInsets.only(top: 2),
                         child: Text(
@@ -668,8 +712,8 @@ class _DataSectionState extends ConsumerState<_DataSection> {
               ),
               const SizedBox(width: 8),
               FilledButton.tonalIcon(
-                onPressed: state.isRefreshing ? null : () => ref.read(catalogueProvider.notifier).refresh(),
-                icon: state.isRefreshing
+                onPressed: state.isUpdating ? null : () => ref.read(catalogueProvider.notifier).refresh(),
+                icon: state.isUpdating
                     ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                     : const Icon(Icons.refresh, size: 18),
                 label: const Text('Refresh'),
@@ -689,7 +733,7 @@ class _DataSectionState extends ConsumerState<_DataSection> {
                 child: Text('Clear downloaded data', style: TextStyle(fontSize: 14, color: scheme.onSurface)),
               ),
               TextButton(
-                onPressed: state.isRefreshing ? null : _confirmClear,
+                onPressed: state.isUpdating ? null : _confirmClear,
                 style: TextButton.styleFrom(textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
                 child: const Text('Clear'),
               ),

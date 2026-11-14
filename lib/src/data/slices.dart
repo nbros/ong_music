@@ -89,3 +89,57 @@ Future<void> runInSlices(
     if (!more) return;
   }
 }
+
+/// How long the thread may still give to background work before it is wanted again (the next frame), in
+/// microseconds: what `requestIdleCallback` tells on the web.
+typedef IdleDeadline = int Function();
+
+/// What [runWhenIdle] leaves of an idle period, at least: a step is started only when this much is left, or the
+/// length of the longest step lately if longer.
+const int _idleMargin = 1000;
+
+/// How long background work keeps to the idle time ([runWhenIdle]) before it goes on between frames as work the user
+/// waits for does: while a list is scrolled without a pause, frames may leave it no idle time at all, and the Songs
+/// sheet (2,265 steps) would come one step a second, if at all.
+const Duration idlePatience = Duration(seconds: 5);
+
+/// Runs [step] until it returns false (the work is done), in the idle time of the thread: [idle] waits for it and
+/// tells how long it lasts (on the web, `requestIdleCallback`, see `waitForIdle`). A step is started only when the
+/// idle period has room for it: a millisecond, or the longest step lately when longer; an idle period too short
+/// waits for the next one. For background work the user does not wait for, while a list may be scrolled: the
+/// browser gives it the time its frames leave, so that it never delays one (at 120 Hz, the 8.3 ms of a frame less
+/// what drawing it took).
+///
+/// It goes on between frames as [runInSlices] does for work the user waits for ([pause], [longestSlice]) as soon as
+/// [hurry] says so (the Ong Log waits for the Songs sheet), or once [patience] has passed since it started: frames
+/// that leave no idle time would hold it back for ever. [clock] is a monotonic time in microseconds (a [Stopwatch]
+/// when null). [isAbandoned] and the failures of [step] as for [runInSlices].
+Future<void> runWhenIdle(
+  bool Function() step, {
+  required Future<IdleDeadline> Function() idle,
+  required Future<void> Function() pause,
+  bool Function()? isAbandoned,
+  bool Function()? hurry,
+  int Function()? clock,
+  Duration patience = idlePatience,
+}) async {
+  final watch = clock == null ? (Stopwatch()..start()) : null;
+  final now = clock ?? () => watch!.elapsedMicroseconds;
+  final start = now();
+  // the longest step lately, forgotten slowly: an outlier (a collection of garbage) does not hold back the rest
+  var cost = 0;
+  while (true) {
+    if ((hurry?.call() ?? false) || now() - start >= patience.inMicroseconds) {
+      return runInSlices(step, pause: pause, clock: clock, maxBudget: longestSlice, isAbandoned: isAbandoned);
+    }
+    final deadline = await idle();
+    if (isAbandoned?.call() ?? false) throw const LoadAbandoned();
+    while (deadline() >= math.max(_idleMargin, cost)) {
+      final before = now();
+      final more = step();
+      final took = now() - before;
+      cost = math.max(took, cost * 7 ~/ 8);
+      if (!more) return;
+    }
+  }
+}

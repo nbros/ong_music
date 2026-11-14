@@ -147,10 +147,47 @@ void main() {
       expect(downloads, isEmpty);
       rule.plan([a, b]);
       expect(downloads.keys, [a, b]);
-      rule.plan([kitOf('Ong SC 1', '東')]);
-      expect(downloads.keys, [a, b], reason: 'only the first plan counts');
+      rule.plan([a, b]);
+      expect(downloads.keys, [a, b], reason: 'a kit planned again is not asked again');
       timers.elapse(const Duration(minutes: 5));
       expect(registered, isEmpty, reason: 'nothing downloaded yet');
+    });
+
+    test(
+      'a later plan (the Songs sheet came) adds its kits: downloaded and registered, the first ones not again',
+      () async {
+        final (:rule, :timers, :downloads, :registered) = fakeRule();
+        rule.plan([a]);
+        downloads[a]!.complete(bytes);
+        await pumpEventQueue();
+        timers.elapse(fontWarmUpFirstQuiet);
+        expect(registered, [
+          ['Ong JP 1'],
+        ]);
+        final c = kitOf('Ong JP 2', '月');
+        rule.plan([a, b, c]);
+        expect(downloads.keys, [a, b, c]);
+        downloads[b]!.complete(bytes);
+        downloads[c]!.complete(bytes);
+        await pumpEventQueue();
+        rule.moved();
+        timers.elapse(fontWarmUpQuiet);
+        expect(registered, [
+          ['Ong JP 1'],
+          ['Ong KR 1', 'Ong JP 2'],
+        ]);
+        expect(rule.planned, [a, b, c]);
+      },
+    );
+
+    test('a later plan asks nothing of a family the API would not cut down', () async {
+      final (:rule, :timers, :downloads, :registered) = fakeRule();
+      rule.plan([a]);
+      downloads.remove(a)!.completeError(const FontKitUnavailable('slices'));
+      await pumpEventQueue();
+      const korean = (name: 'Ong KR 1', family: 'Noto Sans KR', text: '한');
+      rule.plan([a, kitOf('Ong JP 2', '月'), korean]);
+      expect(downloads.keys, [korean], reason: 'another family is asked');
     });
 
     test('registers what came, together, a short while after, when nothing has moved yet', () async {
@@ -413,7 +450,7 @@ void main() {
       final registered = <String>[];
       final app = await pumpApp(
         tester,
-        state: const CatalogueState(isRefreshing: true),
+        state: CatalogueState(isRefreshing: true),
         settle: false,
         fontNetwork: FakeFontNetwork(),
         fontKitDownload: (kit) async {
@@ -434,6 +471,59 @@ void main() {
       expect(registered, isEmpty, reason: 'a download registers nothing by itself');
       await tester.pump(fontWarmUpFirstQuiet);
       expect(registered, [for (final k in asked) k.name]);
+    });
+
+    // the songs hold a kanji the highlights do not, besides Korean, an emoji and Arabic
+    final withKanji = testCatalogue(
+      moreHighlights: [hRow(order: '4', title: '東方 - 月', upload: '2024-03-08')],
+      moreSongs: [
+        start('2024-03-03'),
+        sRow(date: '2024-03-03 20:00:00', title: '日 - 봄 🎶', requester: 'ا'),
+      ],
+    );
+
+    testWidgets('the Songs sheet coming: kits for the characters only it holds, the first ones not asked again', (
+      tester,
+    ) async {
+      final asked = <FontKit>[];
+      final registered = <String>[];
+      final app = await pumpApp(
+        tester,
+        state: CatalogueState(catalogue: withKanji.highlightsOnly, fetchedAt: testNow),
+        settle: false,
+        fontNetwork: FakeFontNetwork(),
+        fontKitDownload: (kit) async {
+          asked.add(kit);
+          return bytes;
+        },
+        fontKitRegistration: (fonts) async => registered.addAll([for (final (kit, _) in fonts) kit.name]),
+      );
+      await tester.pump();
+      await tester.pump(ms);
+      final first = [...asked];
+      expect([for (final k in first) '${k.name}: ${k.text}'], kitTexts('東方月'), reason: 'the highlights alone');
+      await tester.pump(fontWarmUpFirstQuiet);
+      expect(registered, [for (final k in first) k.name]);
+      app.notifier.emit(loaded(withKanji));
+      await tester.pump();
+      await tester.pump();
+      await tester.pump(ms);
+      final more = asked.skip(first.length).toList();
+      expect(
+        [for (final k in more) '${k.name}: ${k.text}'],
+        [
+          for (final k in planFontKits({...'東方月日봄🎶ا'.runes, ...appRareCharacters.runes}, planned: first))
+            '${k.name}: ${k.text}',
+        ],
+      );
+      // a family that has a kit already gets another one for the characters only the songs hold
+      expect([for (final k in more) '${k.name}: ${k.text}'], contains('Ong JP 2: 日'));
+      expect(more.where(first.contains), isEmpty, reason: 'nothing downloaded again');
+      await tester.pump(fontWarmUpFirstQuiet);
+      await tester.pump(fontWarmUpQuiet);
+      expect(registered, [
+        for (final k in [...first, ...more]) k.name,
+      ], reason: 'each kit registered once');
     });
 
     testWidgets('text typed in a field postpones the registration', (tester) async {
@@ -510,7 +600,7 @@ void main() {
       var gate = Completer<void>();
       final app = await pumpApp(
         tester,
-        state: const CatalogueState(isRefreshing: true),
+        state: CatalogueState(isRefreshing: true),
         settle: false,
         fontNetwork: FakeFontNetwork(),
         fontKitDownload: (kit) async {

@@ -1,8 +1,7 @@
-import 'sheet_prefetch.dart';
 import 'sheets.dart';
 
 /// Native platforms: no page, nothing prefetched.
-Future<RawSheets?> takePrefetchedSheets({required Duration timeout}) async => null;
+Future<String?> takePrefetchedSheet(Sheet sheet, {required Duration timeout}) async => null;
 
 /// Native platforms: nothing to forget.
 void discardPrefetchedSheets() {}
@@ -11,4 +10,4 @@ void discardPrefetchedSheets() {}
 void discardPrefetchedSnapshot() {}
 
 /// Native platforms: no page, nothing prefetched.
-Future<SnapshotTexts?> takePrefetchedSnapshot({required Duration timeout}) async => null;
+Future<String?> takePrefetchedSnapshotFile(String name, {required Duration timeout}) async => null;

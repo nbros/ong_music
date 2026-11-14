@@ -1,4 +1,4 @@
-/// Loading the catalogue from the cache or the network.
+/// Loading the catalogue from the cache or the network, a sheet at a time.
 library;
 
 import '../logger.dart';
@@ -10,106 +10,152 @@ import 'sheet_snapshot.dart';
 import 'sheets.dart';
 import 'slices.dart';
 
-/// Parses raw sheets into a catalogue, possibly on another isolate, or in slices.
-/// Throws [CatalogueFormatException] for an invalid payload.
+/// Parses the sheets, possibly on another isolate, or in slices: the Highlights sheet alone ([highlights]), then the
+/// Songs sheet against the highlights of a catalogue ([songs]). Both throw [CatalogueFormatException] for an invalid
+/// payload.
 ///
-/// [isAbandoned], when given, tells that the catalogue is no longer wanted (the state that asked for it is gone): a
-/// parser that can stop halfway then throws [LoadAbandoned] instead of going on for nothing. [background] tells that
-/// a catalogue is already on the screen: a parser that shares the thread of the page then lets its frames come first
-/// (a list being scrolled); otherwise the user waits for it.
-typedef CatalogueParser = Future<Catalogue> Function(RawSheets sheets, {bool Function()? isAbandoned, bool background});
+/// `isAbandoned`, when given, tells that the result is no longer wanted (the state that asked for it is gone, or
+/// another download replaced the text): a parser that can stop halfway then throws [LoadAbandoned] instead of going
+/// on for nothing. `background` tells that a catalogue is already on the screen: a parser that shares the thread of
+/// the page then lets its frames come first (a list being scrolled); otherwise the user waits for it.
+abstract interface class SheetParser {
+  /// The catalogue of the highlights alone (`parseHighlights`).
+  Future<Catalogue> highlights(String csv, {bool Function()? isAbandoned, bool background = false});
 
-/// Computes the [SheetsFingerprint] of raw sheets; [isAbandoned] and [background] as for [CatalogueParser].
-typedef SheetsFingerprinter =
-    Future<SheetsFingerprint> Function(RawSheets sheets, {bool Function()? isAbandoned, bool background});
+  /// What the Songs sheet adds to [highlights] (`parseSongs`). [hurry] tells, while it runs in the background, that
+  /// something now waits for it (the Ong Log): a parser that shares the thread of the page then goes on as for work
+  /// the user waits for.
+  Future<SongsPart> songs(
+    Catalogue highlights,
+    String csv, {
+    bool Function()? isAbandoned,
+    bool background = false,
+    bool Function()? hurry,
+  });
+}
 
 /// Parses on the calling isolate, in one go (tests, scripts).
-Future<Catalogue> parseOnCurrentIsolate(
-  RawSheets sheets, {
-  bool Function()? isAbandoned,
-  bool background = false,
-}) async => parseCatalogue(sheets.highlightsCsv, sheets.songsCsv);
+final class ParseOnCurrentIsolate implements SheetParser {
+  /// Creates the parser.
+  const ParseOnCurrentIsolate();
 
-/// Parses on the calling thread in slices, letting the browser draw a frame between two of them ([yieldToBrowser]):
-/// the web, where there is no other thread to parse on, and the megabytes of the sheets would freeze the page for a
-/// fifth of a second on a fast laptop, a second on a modest phone. The catalogue is that of [parseOnCurrentIsolate]
-/// (see [CatalogueLoad]).
+  @override
+  Future<Catalogue> highlights(String csv, {bool Function()? isAbandoned, bool background = false}) async =>
+      parseHighlights(csv);
+
+  @override
+  Future<SongsPart> songs(
+    Catalogue highlights,
+    String csv, {
+    bool Function()? isAbandoned,
+    bool background = false,
+    bool Function()? hurry,
+  }) async => parseSongs(highlights, csv);
+}
+
+/// Parses on the calling thread in slices, letting the browser draw a frame between two of them: the web, where
+/// there is no other thread to parse on, and the megabytes of the Songs sheet would freeze the page for a fifth of a
+/// second on a fast laptop, a second on a modest phone. The results are those of [ParseOnCurrentIsolate] (see
+/// [HighlightsLoad], [SongsLoad]).
 ///
-/// Slices of [sliceBudget]; when nothing is shown yet (not [background]), longer ones on a device whose frames are
-/// costly, up to [longestSlice] (see [runInSlices]). [pause] and [clock] are those of [runInSlices], replaced by
-/// tests only.
-Future<Catalogue> parseInSlices(
-  RawSheets sheets, {
+/// When nothing is shown yet (not `background`), slices of [sliceBudget], longer ones on a device whose frames are
+/// costly, up to [longestSlice] (see [runInSlices]). In the `background`, in the idle time the page leaves between
+/// its frames ([idle], see [runWhenIdle]): a list scrolled meanwhile keeps every one of its frames; then as when
+/// nothing is shown once `hurry` says so, or after [patience]. [pause], [idle], [clock] and [patience] are replaced
+/// by tests only.
+final class ParseInSlices implements SheetParser {
+  /// Creates the parser.
+  const ParseInSlices({this.pause = yieldToBrowser, this.idle = waitForIdle, this.clock, this.patience = idlePatience});
+
+  final Future<void> Function() pause;
+  final Future<IdleDeadline> Function() idle;
+  final int Function()? clock;
+  final Duration patience;
+
+  @override
+  Future<Catalogue> highlights(String csv, {bool Function()? isAbandoned, bool background = false}) async {
+    final load = HighlightsLoad(csv);
+    await _run(load.step, isAbandoned, background);
+    return load.catalogue;
+  }
+
+  @override
+  Future<SongsPart> songs(
+    Catalogue highlights,
+    String csv, {
+    bool Function()? isAbandoned,
+    bool background = false,
+    bool Function()? hurry,
+  }) async {
+    final load = SongsLoad(highlights, csv);
+    await _run(load.step, isAbandoned, background, hurry);
+    return load.songs;
+  }
+
+  Future<void> _run(bool Function() step, bool Function()? isAbandoned, bool background, [bool Function()? hurry]) =>
+      background
+      ? runWhenIdle(
+          step,
+          idle: idle,
+          pause: pause,
+          isAbandoned: isAbandoned,
+          hurry: hurry,
+          clock: clock,
+          patience: patience,
+        )
+      : runInSlices(step, pause: pause, clock: clock, maxBudget: longestSlice, isAbandoned: isAbandoned);
+}
+
+/// Computes the [TextFingerprint] of the text of a sheet; `isAbandoned` and `background` as for [SheetParser].
+typedef TextFingerprinter =
+    Future<TextFingerprint> Function(String text, {bool Function()? isAbandoned, bool background});
+
+/// The fingerprint at once: native platforms, where `String.hashCode` is computed natively and kept.
+Future<TextFingerprint> fingerprintAtOnce(String text, {bool Function()? isAbandoned, bool background = false}) async =>
+    (length: text.length, hash: text.hashCode);
+
+/// The fingerprint in slices, as [ParseInSlices] does: on the web `String.hashCode` is a loop over the code units, a
+/// dozen milliseconds for the Songs sheet. The hashes are those of [TextHash]: compare its fingerprints only with
+/// each other (the notifier takes both sides of every comparison from the function it was given). [pause], [idle]
+/// and [clock] as for [ParseInSlices].
+Future<TextFingerprint> fingerprintInSlices(
+  String text, {
   bool Function()? isAbandoned,
   bool background = false,
   Future<void> Function() pause = yieldToBrowser,
+  Future<IdleDeadline> Function() idle = waitForIdle,
   int Function()? clock,
 }) async {
-  final load = CatalogueLoad(sheets.highlightsCsv, sheets.songsCsv);
-  await runInSlices(load.step, pause: pause, clock: clock, maxBudget: _maxBudget(background), isAbandoned: isAbandoned);
-  return load.catalogue;
+  final hash = TextHash(text);
+  bool step() => hash.add(unitsPerPause);
+  await (background
+      ? runWhenIdle(step, idle: idle, pause: pause, isAbandoned: isAbandoned, clock: clock)
+      : runInSlices(step, pause: pause, clock: clock, maxBudget: longestSlice, isAbandoned: isAbandoned));
+  return (length: text.length, hash: hash.value);
 }
 
-Duration _maxBudget(bool background) => background ? sliceBudget : longestSlice;
+/// The text of a sheet, its time and its fingerprint: a kept copy, a download, or the daily copy.
+final class SheetText {
+  /// Bundles them.
+  const SheetText(this.text, this.fetchedAt, this.fingerprint, {this.isSnapshot = false});
 
-/// [RawSheets.fingerprint], at once: native platforms, where `String.hashCode` is computed natively and kept.
-Future<SheetsFingerprint> fingerprintAtOnce(
-  RawSheets sheets, {
-  bool Function()? isAbandoned,
-  bool background = false,
-}) async => sheets.fingerprint;
+  final String text;
 
-/// A fingerprint of the sheets in slices, as [parseInSlices] does: on the web `String.hashCode`, which
-/// [RawSheets.fingerprint] takes, is a loop over the code units, a dozen milliseconds for the Songs sheet. The hashes
-/// are those of [TextHash]: compare its fingerprints only with each other (the repository takes both sides of every
-/// comparison from the function it was given). [pause] and [clock] as for [parseInSlices].
-Future<SheetsFingerprint> fingerprintInSlices(
-  RawSheets sheets, {
-  bool Function()? isAbandoned,
-  bool background = false,
-  Future<void> Function() pause = yieldToBrowser,
-  int Function()? clock,
-}) async {
-  final highlights = TextHash(sheets.highlightsCsv), songs = TextHash(sheets.songsCsv);
-  await runInSlices(
-    () => highlights.add(unitsPerPause) || songs.add(unitsPerPause),
-    pause: pause,
-    clock: clock,
-    maxBudget: _maxBudget(background),
-    isAbandoned: isAbandoned,
-  );
-  return (
-    highlightsLength: sheets.highlightsCsv.length,
-    highlightsHash: highlights.value,
-    songsLength: sheets.songsCsv.length,
-    songsHash: songs.value,
-  );
-}
-
-/// A catalogue and the time its sheets were downloaded.
-final class LoadedCatalogue {
-  /// Bundles a catalogue, its download time and the identity of its sheets.
-  const LoadedCatalogue(this.catalogue, this.fetchedAt, this.fingerprint, {this.isSnapshot = false});
-
-  final Catalogue catalogue;
-
-  /// When its sheets were downloaded (UTC); for a snapshot, when the copy was made.
+  /// When it was downloaded (UTC); for a snapshot, when the copy was made.
   final DateTime fetchedAt;
+  final TextFingerprint fingerprint;
 
-  /// Identity of the raw sheets [catalogue] was parsed from.
-  final SheetsFingerprint fingerprint;
-
-  /// Whether the sheets come from the daily copy ([SnapshotFetcher]), not from Google.
+  /// Whether it comes from the daily copy ([SnapshotFetcher]), not from Google.
   final bool isSnapshot;
 }
 
-/// Cache and network access, without policy (that is `CatalogueNotifier`'s).
+/// Cache, network and parser access for each sheet, without policy (that is `CatalogueNotifier`'s).
 final class CatalogueRepository {
   /// Creates the repository. [clock] gives the current time (UTC).
   CatalogueRepository({
     required this.fetcher,
     required this.cache,
-    required this.parse,
+    required this.parser,
     this.snapshots = const NoSnapshot(),
     this.fingerprint = fingerprintAtOnce,
     DateTime Function()? clock,
@@ -118,125 +164,108 @@ final class CatalogueRepository {
   final SheetFetcher fetcher;
   final SheetCache cache;
 
-  /// The daily copy of the sheets ([loadSnapshot]).
+  /// The daily copy of the sheets ([snapshot]).
   final SnapshotFetcher snapshots;
-  final CatalogueParser parse;
-  final SheetsFingerprinter fingerprint;
+  final SheetParser parser;
+  final TextFingerprinter fingerprint;
   final DateTime Function() clock;
 
-  /// The cached catalogue, or null when there is no cache. A cache that no
-  /// longer parses is deleted and reads as null.
-  ///
-  /// [isAbandoned]: see [CatalogueParser]. An abandoned load throws [LoadAbandoned] and keeps the cache.
-  Future<LoadedCatalogue?> loadCached({bool Function()? isAbandoned}) async {
-    final cached = await cache.read();
-    if (cached == null) return null;
-    final Catalogue catalogue;
-    try {
-      catalogue = await _parse(cached.sheets, isAbandoned);
-    } on FormatException {
-      await cache.clear();
-      return null;
-    }
-    return LoadedCatalogue(catalogue, cached.fetchedAt, await fingerprint(cached.sheets, isAbandoned: isAbandoned));
+  /// The kept copy of [sheet], or null when there is none. Its fingerprint is computed in the background when
+  /// [background]. [isAbandoned]: see [SheetParser].
+  Future<SheetText?> readCache(Sheet sheet, {bool Function()? isAbandoned, bool background = false}) async {
+    final kept = await cache.read(sheet);
+    if (kept == null) return null;
+    final print = await fingerprint(kept.text, isAbandoned: isAbandoned, background: background);
+    return SheetText(kept.text, kept.fetchedAt, print);
   }
 
-  /// The daily copy of the sheets, parsed: a [LoadedCatalogue.isSnapshot] dated when the copy was made. Nothing is
-  /// cached. Throws when there is none or it does not parse (then a [CatalogueFormatException]); an abandoned load
-  /// ([isAbandoned], asked once the files are in and at each pause of the parser) throws [LoadAbandoned].
-  Future<LoadedCatalogue> loadSnapshot({bool Function()? isAbandoned}) async {
-    final snapshot = await snapshots.fetch();
+  /// Downloads [sheet] from Google, timed with [clock] when its download is over. Nothing is kept ([keep] does it
+  /// once the text parsed).
+  Future<SheetText> download(Sheet sheet, {bool Function()? isAbandoned, bool background = false}) async {
+    final text = await fetcher.fetch(sheet);
+    final fetchedAt = clock();
     if (isAbandoned?.call() ?? false) throw const LoadAbandoned();
-    final catalogue = await _parse(snapshot.sheets, isAbandoned);
-    return LoadedCatalogue(
-      catalogue,
-      snapshot.fetchedAt,
-      await fingerprint(snapshot.sheets, isAbandoned: isAbandoned),
-      isSnapshot: true,
-    );
+    return SheetText(text, fetchedAt, await fingerprint(text, isAbandoned: isAbandoned, background: background));
   }
+
+  /// The daily copy of [sheet], dated when the copy was made. Never kept. Throws when there is none.
+  Future<SheetText> snapshot(Sheet sheet, {bool Function()? isAbandoned, bool background = false}) async {
+    final copy = await snapshots.fetch(sheet);
+    if (isAbandoned?.call() ?? false) throw const LoadAbandoned();
+    final print = await fingerprint(copy.text, isAbandoned: isAbandoned, background: background);
+    return SheetText(copy.text, copy.fetchedAt, print, isSnapshot: true);
+  }
+
+  /// The catalogue of the highlights of [csv]. See [_parse] for its failures.
+  Future<Catalogue> parseHighlights(String csv, {bool Function()? isAbandoned, bool background = false}) =>
+      _parse(() => parser.highlights(csv, isAbandoned: isAbandoned, background: background));
+
+  /// [highlights] completed with the Songs sheet [csv] (`Catalogue.withSongs`). See [_parse] for its failures,
+  /// [SheetParser.songs] for [hurry].
+  Future<Catalogue> parseSongs(
+    Catalogue highlights,
+    String csv, {
+    bool Function()? isAbandoned,
+    bool background = false,
+    bool Function()? hurry,
+  }) async => highlights.withSongs(
+    await _parse(
+      () =>
+          parser.songs(highlights.highlightsOnly, csv, isAbandoned: isAbandoned, background: background, hurry: hurry),
+    ),
+  );
 
   /// [parse], whose failures on a payload it was not written for (a
   /// [StateError], an [ArgumentError] such as a [RangeError], a [TypeError]:
   /// bugs met on unexpected input) count as a [CatalogueFormatException]. Any other failure is not
   /// about the payload (the isolate could not start, no memory left) and
   /// is thrown as it is: the cache it was reading is good and must be kept.
-  Future<Catalogue> _parse(RawSheets sheets, bool Function()? isAbandoned, {bool background = false}) async {
+  static Future<T> _parse<T>(Future<T> Function() parse) async {
     try {
-      return await parse(sheets, isAbandoned: isAbandoned, background: background);
+      return await parse();
     } on StateError catch (e) {
-      throw CatalogueFormatException('Unreadable sheets: $e');
+      throw CatalogueFormatException('Unreadable sheet: $e');
     } on ArgumentError catch (e) {
-      throw CatalogueFormatException('Unreadable sheets: $e');
+      throw CatalogueFormatException('Unreadable sheet: $e');
     } on TypeError catch (e) {
-      throw CatalogueFormatException('Unreadable sheets: $e');
+      throw CatalogueFormatException('Unreadable sheet: $e');
     }
   }
 
-  /// Downloads and parses both sheets, then caches them. Throws (and caches
-  /// nothing) when a download fails or a payload is invalid
-  /// ([CatalogueFormatException]); a failure to cache only loses the cache.
-  ///
-  /// [current] gives the catalogue in use, if any, read once the sheets are downloaded. It makes two things possible:
-  /// - when the download is identical to its sheets, its catalogue is returned
-  ///   as is (same instance) with the new download time: nothing is parsed
-  ///   again (megabytes, on the page's only thread on web) and the ids held by the UI
-  ///   stay valid. That is the common case, the sheets change a few times a week;
-  /// - a download with less than half its highlights or plays is rejected: the
-  ///   sheets only grow, so that is most likely a wrong answer or a sheet being
-  ///   edited. Only while [current] is younger than [collapseGuard] though: a
-  ///   sheet that really shrank (rows archived) must not be refused for ever.
-  ///   Never against a snapshot: Google's answer always replaces it, as it
-  ///   would have been taken without it.
-  ///
-  /// [isAbandoned] and [background]: see [CatalogueParser]; a [current] catalogue is on the screen, and counts as
-  /// [background] too. An abandoned fetch throws [LoadAbandoned] and caches nothing. [downloaded] is called once the
-  /// sheets are downloaded, before they are parsed.
-  Future<LoadedCatalogue> fetch({
-    LoadedCatalogue? Function()? current,
-    bool Function()? isAbandoned,
-    bool background = false,
-    void Function()? downloaded,
-  }) async {
-    final sheets = await fetcher.fetch();
-    downloaded?.call();
-    final shown = current?.call();
-    // a catalogue on the screen, the snapshot shown meanwhile among them: its frames come first
-    final inBackground = background || shown != null;
-    final fingerprint = await this.fingerprint(sheets, isAbandoned: isAbandoned, background: inBackground);
-    final Catalogue catalogue;
-    if (shown != null && shown.fingerprint == fingerprint) {
-      catalogue = shown.catalogue;
-    } else {
-      catalogue = await _parse(sheets, isAbandoned, background: inBackground);
-      // abs: a download time in the future (clock changed) must not keep the guard on for ever
-      if (shown != null && !shown.isSnapshot && clock().difference(shown.fetchedAt).abs() < collapseGuard) {
-        _checkNotCollapsed(shown.catalogue, catalogue);
-      }
-    }
-    final fetchedAt = clock();
+  /// Keeps [text] as the copy of [sheet]. A failure only loses the copy.
+  Future<void> keep(Sheet sheet, SheetText text) async {
     try {
-      await cache.write(CachedSheets(sheets: sheets, fetchedAt: fetchedAt));
+      await cache.write(sheet, CachedSheet(text: text.text, fetchedAt: text.fetchedAt));
     } catch (e, st) {
       // SheetCache implementations should not throw; the download stays good anyway
-      logger.w('Cannot cache the sheets', error: e, stackTrace: st);
+      logger.w('Cannot cache the ${sheet.name} sheet', error: e, stackTrace: st);
     }
-    return LoadedCatalogue(catalogue, fetchedAt, fingerprint);
   }
 
-  /// How long a download much smaller than the catalogue in use is refused,
-  /// counted from the download of that catalogue.
+  /// How long a download much smaller than the copy of its sheet in use is refused, counted from the download of
+  /// that copy.
   static const Duration collapseGuard = Duration(days: 1);
 
-  static void _checkNotCollapsed(Catalogue current, Catalogue next) {
-    if (next.highlightCount * 2 < current.highlightCount || next.playCount * 2 < current.playCount) {
+  /// Throws a [CatalogueFormatException] when [next] has less than half the highlights of [current]: the sheets
+  /// only grow, so that is most likely a wrong answer or a sheet being edited.
+  static void checkHighlightsNotCollapsed(Catalogue current, Catalogue next) {
+    if (next.highlightCount * 2 < current.highlightCount) {
       throw CatalogueFormatException(
-        'Download rejected: ${next.highlightCount} highlights and ${next.playCount} plays, '
-        'against ${current.highlightCount} and ${current.playCount} now',
+        'Download rejected: ${next.highlightCount} highlights, against ${current.highlightCount} now',
       );
     }
   }
 
-  /// Deletes the cached sheets.
+  /// The same for the plays of the Songs sheet.
+  static void checkSongsNotCollapsed(Catalogue current, Catalogue next) {
+    if (next.playCount * 2 < current.playCount) {
+      throw CatalogueFormatException('Download rejected: ${next.playCount} plays, against ${current.playCount} now');
+    }
+  }
+
+  /// Deletes the kept copy of [sheet], which no longer parses.
+  Future<void> forget(Sheet sheet) => cache.remove(sheet);
+
+  /// Deletes the kept sheets.
   Future<void> clearCache() => cache.clear();
 }

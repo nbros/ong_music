@@ -152,16 +152,29 @@ final List<String> fontKitFamilies = [
 /// The kits that draw [codePoints] (rare characters, see `rare_characters.dart`) and [emojiBases] (characters the
 /// texts ask to be drawn as emoji): for each family of [kitGroups], the characters it takes, in ascending order,
 /// [kitLength] at a time, at most [kitsPerGroup] kits.
-List<FontKit> planFontKits(Iterable<int> codePoints, {Set<int> emojiBases = const {}}) {
+///
+/// With [planned], the kits planned already (for an earlier catalogue: the highlights before the Songs sheet), only
+/// the characters a family takes that its kits planned do not hold, in kits numbered after them, within the same
+/// [kitsPerGroup].
+List<FontKit> planFontKits(
+  Iterable<int> codePoints, {
+  Set<int> emojiBases = const {},
+  List<FontKit> planned = const [],
+}) {
   final sorted = {...codePoints, ...emojiBases}.toList()..sort();
   return [
     for (final group in kitGroups)
       ...() {
-        final taken = sorted.where((c) => group.takes(c, emojiBases)).toList();
+        final before = [
+          for (final kit in planned)
+            if (kit.family == group.family) kit,
+        ];
+        final held = {for (final kit in before) ...kit.text.runes};
+        final taken = sorted.where((c) => group.takes(c, emojiBases) && !held.contains(c)).toList();
         return [
-          for (var i = 0; i * kitLength < taken.length && i < kitsPerGroup; i++)
+          for (var i = 0; i * kitLength < taken.length && before.length + i < kitsPerGroup; i++)
             (
-              name: '${group.name} ${i + 1}',
+              name: '${group.name} ${before.length + i + 1}',
               family: group.family,
               text: String.fromCharCodes(taken.skip(i * kitLength).take(kitLength)),
             ),

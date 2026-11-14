@@ -723,7 +723,7 @@ void main() {
       final app = await pumpApp(tester, size: desk);
       await tester.tap(highlightRow('Song of Storms'));
       await tester.pumpAndSettle();
-      app.notifier.emit(const CatalogueState());
+      app.notifier.emit(CatalogueState());
       await tester.pump();
       expect(paneCard(), findsOneWidget);
       expect(inPane(find.byType(HighlightSheet)), findsNothing);

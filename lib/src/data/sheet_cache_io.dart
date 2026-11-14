@@ -32,9 +32,10 @@ Future<void> deleteLegacyDatabase(Directory appSupportDir) async {
   }
 }
 
-/// [SheetCache] in a directory: `highlights.csv`, `songs.csv` and
-/// `fetched_at.txt` (ISO-8601 UTC), the latter written last so that an
-/// interrupted write reads as the previous cache or as no cache.
+/// [SheetCache] in a directory: per sheet its text and its time (ISO-8601 UTC), `highlights.csv` and
+/// `highlights_fetched_at.txt`, `songs.csv` and `songs_fetched_at.txt`, the time written last so that an interrupted
+/// write reads as the previous copy of the sheet or as none. A `fetched_at.txt` left by a version up to 2.0.0 is the
+/// time of both sheets, until the first write gives each one its own.
 final class FileSheetCache implements SheetCache {
   /// Uses the directory returned by [directory] (created when needed).
   FileSheetCache(this.directory);
@@ -42,43 +43,79 @@ final class FileSheetCache implements SheetCache {
   /// The cache directory.
   final Future<Directory> Function() directory;
 
-  static const _highlights = 'highlights.csv', _songs = 'songs.csv', _meta = 'fetched_at.txt';
-
   @override
-  Future<CachedSheets?> read() async {
+  Future<CachedSheet?> read(Sheet sheet) async {
     try {
       final dir = await directory();
-      final meta = File(p.join(dir.path, _meta));
-      if (!await meta.exists()) return null;
-      final fetchedAt = DateTime.tryParse((await meta.readAsString()).trim());
+      // its own time again after the old shared one: a write running meanwhile replaces the latter with the former
+      final own = File(p.join(dir.path, sheetTimeName(sheet)));
+      final fetchedAt = await _time(own) ?? await _time(File(p.join(dir.path, legacyTimeName))) ?? await _time(own);
       if (fetchedAt == null) return null;
-      final texts = await Future.wait([
-        File(p.join(dir.path, _highlights)).readAsString(),
-        File(p.join(dir.path, _songs)).readAsString(),
-      ]);
-      return CachedSheets(
-        sheets: RawSheets(highlightsCsv: texts[0], songsCsv: texts[1]),
-        fetchedAt: fetchedAt.toUtc(),
-      );
+      final text = await File(p.join(dir.path, sheetTextName(sheet))).readAsString();
+      return CachedSheet(text: text, fetchedAt: fetchedAt.toUtc());
     } catch (e) {
       logger.w('Cannot read the sheet cache: $e');
       return null;
     }
   }
 
+  static Future<DateTime?> _time(File file) async =>
+      await file.exists() ? DateTime.tryParse((await file.readAsString()).trim()) : null;
+
   @override
-  Future<void> write(CachedSheets sheets) async {
+  Future<void> write(Sheet sheet, CachedSheet value) async {
     try {
       final dir = await directory();
       await dir.create(recursive: true);
       await _deleteStaleTemporaryFiles(dir);
-      final meta = File(p.join(dir.path, _meta));
+      await _splitLegacyTime(dir);
+      final meta = File(p.join(dir.path, sheetTimeName(sheet)));
       if (await meta.exists()) await meta.delete();
-      await _writeAtomically(File(p.join(dir.path, _highlights)), sheets.sheets.highlightsCsv);
-      await _writeAtomically(File(p.join(dir.path, _songs)), sheets.sheets.songsCsv);
-      await _writeAtomically(meta, sheets.fetchedAt.toUtc().toIso8601String());
+      await _writeAtomically(File(p.join(dir.path, sheetTextName(sheet))), value.text);
+      await _writeAtomically(meta, value.fetchedAt.toUtc().toIso8601String());
     } catch (e) {
       logger.w('Cannot write the sheet cache: $e');
+    }
+  }
+
+  @override
+  Future<void> remove(Sheet sheet) async {
+    try {
+      final dir = await directory();
+      if (!await dir.exists()) return;
+      await _splitLegacyTime(dir);
+      for (final name in [sheetTimeName(sheet), sheetTextName(sheet)]) {
+        final file = File(p.join(dir.path, name));
+        if (await file.exists()) await file.delete();
+      }
+    } catch (e) {
+      logger.w('Cannot remove from the sheet cache: $e');
+    }
+  }
+
+  /// The time of both sheets left by a version up to 2.0.0, if any, becomes the time of each one that has none of
+  /// its own; then it goes, before a sheet is written alone: it would date the other one too.
+  ///
+  /// Two writes may do it at once (both sheets downloaded together, another instance): the file one of them deletes
+  /// first is gone for the other, which then has nothing left to do.
+  static Future<void> _splitLegacyTime(Directory dir) async {
+    final legacy = File(p.join(dir.path, legacyTimeName));
+    final String time;
+    try {
+      time = await legacy.readAsString();
+    } on FileSystemException {
+      return; // none, or split by another write meanwhile
+    }
+    for (final sheet in Sheet.values) {
+      final own = File(p.join(dir.path, sheetTimeName(sheet)));
+      if (!await own.exists() && await File(p.join(dir.path, sheetTextName(sheet))).exists()) {
+        await _writeAtomically(own, time);
+      }
+    }
+    try {
+      await legacy.delete();
+    } on FileSystemException {
+      // deleted by another write meanwhile
     }
   }
 

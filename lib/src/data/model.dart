@@ -272,6 +272,9 @@ final class CalendarDate implements Comparable<CalendarDate> {
 }
 
 /// One row of the "Youtube Catalogue" sheet: a video of a moment of a stream.
+///
+/// Only what the row says: the Ong Log row it shows is `Catalogue.playOf`, known once the Songs sheet is there. So
+/// the same objects serve before and after it comes (see `Catalogue.withSongs`).
 final class Highlight {
   /// Creates a highlight; normally only the parser does this.
   const Highlight({
@@ -287,7 +290,6 @@ final class Highlight {
     required this.uploadDate,
     required this.vocals,
     required this.notes,
-    required this.playId,
   });
 
   /// Index in `Catalogue.highlights` (sheet order, oldest upload first).
@@ -326,10 +328,6 @@ final class Highlight {
 
   /// "Additional Notes", trimmed.
   final String notes;
-
-  /// Index in `Catalogue.plays` of the Ong Log row this video shows: same
-  /// [songKey], played within one day of [streamDate]. Null when unknown.
-  final int? playId;
 
   /// [streamDate] if known, else [uploadDate]: the date to display.
   CalendarDate? get date => streamDate ?? uploadDate;

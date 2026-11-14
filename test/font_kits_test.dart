@@ -14,6 +14,21 @@ String cssOf(String url) =>
 
 void main() {
   group('the kits', () {
+    test(
+      'a later plan: the characters the kits planned already hold are left out, the next kits numbered after them',
+      () {
+        final first = planFontKits('あ한'.runes);
+        expect([for (final k in first) '${k.name}: ${k.text}'], ['Ong JP 1: あ', 'Ong KR 1: 한']);
+        final more = planFontKits('あい한봄東'.runes, planned: first);
+        expect([for (final k in more) '${k.name}: ${k.text}'], ['Ong JP 2: い東', 'Ong KR 2: 봄', 'Ong SC 1: 東']);
+        expect(planFontKits('あ한'.runes, planned: first), isEmpty, reason: 'nothing new');
+        // never more than kitsPerGroup kits of a family: what does not fit is left to the engine
+        final many = [for (var i = 0; i < kitLength * kitsPerGroup; i++) 0x4E00 + i];
+        final full = planFontKits(many);
+        expect(planFontKits([...many, 0x9FA0], planned: full).where((k) => k.family == 'Noto Sans SC'), isEmpty);
+      },
+    );
+
     // Japanese, Korean, Chinese only, Arabic, signs the CJK fonts share (radical, bopomofo, enclosed, compatibility,
     // vertical forms), symbols the colour emoji does not draw, symbols it draws though text by default (▶ ♥ ✔ ❤ ㊗),
     // emoji and the variation selector, Latin letters Roboto lacks

@@ -121,9 +121,16 @@ final class PlayResults {
   bool startsStream(int index) => index == 0 || _plays[ids[index - 1]].streamId != _plays[ids[index]].streamId;
 }
 
-/// Both sheets, parsed and cross-linked. Immutable; all queries are in memory.
+/// The sheets, parsed and cross-linked. Immutable; all queries are in memory.
 ///
 /// Ids are indices: `highlights[h.id] == h`, `plays[p.id] == p`, etc.
+///
+/// A catalogue is first made from the "Youtube Catalogue" sheet alone (`parseHighlights`): the Highlights list needs
+/// nothing else, and the Songs sheet, seven times larger, comes later (see `CatalogueNotifier.songsWanted`). Such a catalogue has no
+/// [plays], [streams], [titles] or songs ([hasSongs] is false), and its [requesters] are those of the highlights,
+/// counted from that sheet alone. [withSongs] completes it with the Songs sheet: the complete catalogue shares its
+/// [highlights], the same objects, and keeps the ids of its requesters, so that a list of highlights stays as it is
+/// when the Songs sheet comes (see [highlightsOnly]).
 ///
 /// **An id is only valid with the catalogue it came from.** A refresh replaces
 /// the catalogue, and a row inserted or removed in the middle of a sheet shifts
@@ -133,7 +140,8 @@ final class PlayResults {
 /// across catalogues use what does not move: `Song.key`, a stream's date, a
 /// highlight's `seq` (`Highlight.key` also tells apart the rows sharing one), a
 /// requester's folded name. The catalogue instance itself
-/// is kept when a refresh finds the sheets unchanged.
+/// is kept when a refresh finds the sheets unchanged. A catalogue and the one [withSongs] made from it share their
+/// highlights and the ids of the requesters of the highlights: an id of a highlight is valid in both.
 final class Catalogue {
   Catalogue._({
     required this.highlights,
@@ -150,6 +158,9 @@ final class Catalogue {
     required List<GenreCount> highlightGenreCounts,
     required List<GenreCount> playGenreCounts,
     required Int32List highlightRequests,
+    required Map<String, Map<String, int>> spellings,
+    required Int32List? highlightPlays,
+    required Catalogue? highlightsOnly,
   }) : _songs = songs,
        _titleFolds = titleFolds,
        _requesterFolds = requesterFolds,
@@ -158,32 +169,27 @@ final class Catalogue {
        _highlightKeys = highlightKeys,
        _highlightGenreCounts = highlightGenreCounts,
        _playGenreCounts = playGenreCounts,
-       _highlightRequests = highlightRequests;
+       _highlightRequests = highlightRequests,
+       _spellings = spellings,
+       _highlightPlays = highlightPlays,
+       _highlightsOnly = highlightsOnly;
 
-  /// Assembles a catalogue and computes its indexes, in steps (see `CatalogueLoad`), then [done] receives the
-  /// catalogue. Only the parser does this (`parseCatalogue`).
+  /// Assembles the catalogue of the highlights alone and computes its indexes, in steps (see `HighlightsLoad`),
+  /// then [done] receives it. Only the parser does this (`parseHighlights`).
   ///
-  /// The loops over the titles (11,000 in the real sheets), the plays (31,000) and the highlights (2,000, whose
-  /// titles are folded) have a pause point every [pauseEvery] of them (at least 1). The other loops (over the
-  /// requesters, 1,700, and again over the highlights, for their keys and counts) cost a fraction of a millisecond
-  /// together and run in one step.
-  static Iterable<void> assemble({
+  /// [requesters] are those of the highlights, [spellings] their names as written in the sheet (folded name, then
+  /// count of each spelling), which [withSongs] adds to those of the Songs sheet. The loop over the highlights
+  /// (2,000 in the real sheets, whose titles are folded) has a pause point every [pauseEvery] of them (at least 1);
+  /// the others cost a fraction of a millisecond together and run in one step.
+  static Iterable<void> assembleHighlights({
     required List<Highlight> highlights,
-    required List<Play> plays,
-    required List<LiveStream> streams,
     required List<Requester> requesters,
-    required List<String> titles,
-    required Map<String, Song> songs,
+    required Map<String, Map<String, int>> spellings,
     required void Function(Catalogue catalogue) done,
     int pauseEvery = rowsPerPause,
   }) sync* {
     if (pauseEvery < 1) throw ArgumentError.value(pauseEvery, 'pauseEvery', 'must be at least 1');
-    final titleFolds = <String>[];
-    for (var i = 0; i < titles.length; i++) {
-      titleFolds.add(fold(titles[i]));
-      if (i % pauseEvery == 0) yield null;
-    }
-    final requesterFolds = [for (final r in requesters) r.folded];
+    final requesterFolds = List<String>.unmodifiable([for (final r in requesters) r.folded]);
     final requesterByFold = {for (final r in requesters) r.folded: r.id};
     yield null;
     // fields joined by a newline: a query token never contains whitespace, so never spans two fields
@@ -201,47 +207,74 @@ final class Catalogue {
     for (final h in highlights) {
       if (h.requesterId != null) highlightRequests[h.requesterId!]++;
     }
-    yield null;
-    final playGenres = List.filled(Genre.values.length, 0);
-    for (var i = 0; i < plays.length; i++) {
-      playGenres[plays[i].genre.index]++;
-      if (i % pauseEvery == 0) yield null;
-    }
-    final playGenreCounts = _genreCounts(playGenres);
     done(
       Catalogue._(
         highlights: highlights,
-        plays: plays,
-        streams: streams,
+        plays: const [],
+        streams: const [],
         requesters: requesters,
-        titles: titles,
-        songs: songs,
-        titleFolds: titleFolds,
+        titles: const [],
+        songs: const {},
+        titleFolds: const [],
         requesterFolds: requesterFolds,
         requesterByFold: requesterByFold,
         highlightFields: highlightFields,
         highlightKeys: highlightKeys,
         highlightGenreCounts: highlightGenreCounts,
-        playGenreCounts: playGenreCounts,
+        playGenreCounts: const [],
         highlightRequests: highlightRequests,
+        spellings: spellings,
+        highlightPlays: null,
+        highlightsOnly: null,
       ),
+    );
+  }
+
+  /// This catalogue completed with [songs], the Songs sheet parsed against its highlights (`parseSongs`, given
+  /// [highlightsOnly]): it shares the highlights of this one, and the indexes made of them alone. Cheap: nothing is
+  /// computed. Throws an [ArgumentError] when [songs] was parsed against other highlights.
+  Catalogue withSongs(SongsPart songs) {
+    final base = highlightsOnly;
+    if (songs.highlightCount != base.highlights.length || songs.requesters.length < base.requesters.length) {
+      throw ArgumentError.value(songs, 'songs', 'parsed against other highlights');
+    }
+    return Catalogue._(
+      highlights: base.highlights,
+      plays: songs.plays,
+      streams: songs.streams,
+      requesters: songs.requesters,
+      titles: songs.titles,
+      songs: songs.songs,
+      titleFolds: songs.titleFolds,
+      requesterFolds: songs.requesterFolds,
+      requesterByFold: songs.requesterByFold,
+      highlightFields: base._highlightFields,
+      highlightKeys: base._highlightKeys,
+      highlightGenreCounts: base._highlightGenreCounts,
+      playGenreCounts: songs.playGenreCounts,
+      highlightRequests: base._highlightRequests,
+      spellings: base._spellings,
+      highlightPlays: songs.highlightPlays,
+      highlightsOnly: base,
     );
   }
 
   /// Highlights in sheet order (oldest upload first).
   final List<Highlight> highlights;
 
-  /// Ong Log plays in sheet order (oldest first).
+  /// Ong Log plays in sheet order (oldest first). Empty without [hasSongs].
   final List<Play> plays;
 
-  /// Streams, oldest first. Every stream has at least one play.
+  /// Streams, oldest first. Every stream has at least one play. Empty without [hasSongs].
   final List<LiveStream> streams;
 
-  /// Requesters (of plays or highlights), in order of first appearance.
+  /// Requesters (of plays or highlights): those of the highlights first, in order of first appearance in their
+  /// sheet, then those of the plays alone. Without [hasSongs], only those of the highlights, their names as written
+  /// in that sheet, and no request counted.
   final List<Requester> requesters;
 
   /// Distinct play titles as written (whitespace collapsed); `Play.titleId`
-  /// indexes it.
+  /// indexes it. Empty without [hasSongs].
   final List<String> titles;
 
   final Map<String, Song> _songs;
@@ -254,6 +287,25 @@ final class Catalogue {
   final List<GenreCount> _highlightGenreCounts;
   final List<GenreCount> _playGenreCounts;
   final Int32List _highlightRequests;
+  final Map<String, Map<String, int>> _spellings;
+
+  /// The play of each highlight (`playOf`), -1 for none; null without [hasSongs].
+  final Int32List? _highlightPlays;
+  final Catalogue? _highlightsOnly;
+
+  /// Whether the Songs sheet is in: the Ong Log, the plays of the highlights, the request counts.
+  bool get hasSongs => _highlightPlays != null;
+
+  /// The catalogue of the highlights alone this one was completed from ([withSongs]); itself without [hasSongs].
+  /// Two catalogues with the same one show the same highlights, with the same ids.
+  Catalogue get highlightsOnly => _highlightsOnly ?? this;
+
+  /// The folded names of [requesters], by id (for `parseSongs`).
+  List<String> get requesterFolds => _requesterFolds;
+
+  /// The names of the requesters of the highlights as written in their sheet: folded name, then the count of each
+  /// spelling, in order of first appearance (for `parseSongs`, which adds those of the Songs sheet).
+  Map<String, Map<String, int>> get requesterSpellings => _spellings;
 
   static final List<String> _genreFolds = [for (final g in Genre.values) fold(g.label)];
   static final List<String> _typeFolds = [for (final t in PlayType.values) fold(t.label)];
@@ -324,8 +376,12 @@ final class Catalogue {
   /// The highlight linked to a play, or null.
   Highlight? highlightOf(Play play) => play.highlightId == null ? null : highlights[play.highlightId!];
 
-  /// The play linked to a highlight, or null.
-  Play? playOf(Highlight highlight) => highlight.playId == null ? null : plays[highlight.playId!];
+  /// The play linked to a highlight: the Ong Log row this video shows (same `Highlight.songKey`, played within one
+  /// day of its `Highlight.streamDate`), or null. Null for all without [hasSongs].
+  Play? playOf(Highlight highlight) {
+    final id = _highlightPlays?[highlight.id] ?? -1;
+    return id < 0 ? null : plays[id];
+  }
 
   // ---------------------------------------------------------------- counts
 
@@ -339,7 +395,8 @@ final class Catalogue {
 
   /// Number of highlights [requester] requested (`Requester.requestCount`
   /// counts their plays).
-  int highlightRequestCount(Requester requester) => _highlightRequests[requester.id];
+  int highlightRequestCount(Requester requester) =>
+      requester.id < _highlightRequests.length ? _highlightRequests[requester.id] : 0;
 
   /// Number of highlights whose `Highlight.key` is in [keys]; keys of no
   /// highlight of this catalogue do not count.
@@ -428,6 +485,89 @@ final class Catalogue {
     }
     return n;
   }
+}
+
+/// What the Songs sheet adds to a catalogue of highlights ([Catalogue.withSongs]): the plays, streams, titles and
+/// songs, the requesters of both sheets, the links between plays and highlights, and their indexes. Made by
+/// `parseSongs` against the highlights of one catalogue, and only valid with it. Holds nothing of the highlights
+/// themselves: made on a background isolate, it comes back without a copy of them.
+final class SongsPart {
+  SongsPart._({
+    required this.plays,
+    required this.streams,
+    required this.requesters,
+    required this.titles,
+    required this.songs,
+    required this.titleFolds,
+    required this.requesterFolds,
+    required this.requesterByFold,
+    required this.playGenreCounts,
+    required this.highlightPlays,
+  });
+
+  /// Computes the indexes of the plays, in steps (see `SongsLoad`), then [done] receives the part. Only the parser
+  /// does this (`parseSongs`). [highlightPlays] holds the play of each highlight, -1 for none.
+  ///
+  /// The loops over the titles (11,000 in the real sheets) and the plays (31,000) have a pause point every
+  /// [pauseEvery] of them (at least 1); the one over the requesters (1,700) runs in one step.
+  static Iterable<void> assemble({
+    required List<Play> plays,
+    required List<LiveStream> streams,
+    required List<Requester> requesters,
+    required List<String> titles,
+    required Map<String, Song> songs,
+    required Int32List highlightPlays,
+    required void Function(SongsPart songs) done,
+    int pauseEvery = rowsPerPause,
+  }) sync* {
+    if (pauseEvery < 1) throw ArgumentError.value(pauseEvery, 'pauseEvery', 'must be at least 1');
+    final titleFolds = <String>[];
+    for (var i = 0; i < titles.length; i++) {
+      titleFolds.add(fold(titles[i]));
+      if (i % pauseEvery == 0) yield null;
+    }
+    final requesterFolds = List<String>.unmodifiable([for (final r in requesters) r.folded]);
+    final requesterByFold = {for (final r in requesters) r.folded: r.id};
+    yield null;
+    final playGenres = List.filled(Genre.values.length, 0);
+    for (var i = 0; i < plays.length; i++) {
+      playGenres[plays[i].genre.index]++;
+      if (i % pauseEvery == 0) yield null;
+    }
+    done(
+      SongsPart._(
+        plays: plays,
+        streams: streams,
+        requesters: requesters,
+        titles: titles,
+        songs: songs,
+        titleFolds: titleFolds,
+        requesterFolds: requesterFolds,
+        requesterByFold: requesterByFold,
+        playGenreCounts: Catalogue._genreCounts(playGenres),
+        highlightPlays: highlightPlays,
+      ),
+    );
+  }
+
+  final List<Play> plays;
+  final List<LiveStream> streams;
+
+  /// The requesters of both sheets: those of the highlights first, with their ids.
+  final List<Requester> requesters;
+  final List<String> titles;
+  final Map<String, Song> songs;
+  final List<String> titleFolds;
+  final List<String> requesterFolds;
+  final Map<String, int> requesterByFold;
+  final List<GenreCount> playGenreCounts;
+  final Int32List highlightPlays;
+
+  /// Number of highlights it was parsed against.
+  int get highlightCount => highlightPlays.length;
+
+  /// Number of plays.
+  int get playCount => plays.length;
 }
 
 /// Matches plays against query tokens by testing each distinct title,

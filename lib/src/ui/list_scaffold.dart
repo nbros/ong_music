@@ -34,19 +34,28 @@ String describeLoadError(Object? error) => switch (error) {
 };
 
 /// Shown instead of a list while there is no catalogue: first download, or
-/// its failure with a Retry button.
+/// its failure with a Retry button. With [songs], the same for the Songs sheet, which the Ong Log waits for once
+/// the highlights are there.
 class CatalogueStatusView extends ConsumerWidget {
-  const CatalogueStatusView({super.key});
+  const CatalogueStatusView({super.key, this.songs = false, this.ongLog = false});
+
+  /// The status of the Songs sheet ([CatalogueState.isSongsFailed], [CatalogueState.songsError]), whose Retry
+  /// downloads it alone.
+  final bool songs;
+
+  /// Shown by the Ong Log: it says what the Ong Log waits for, with or without the highlights there.
+  final bool ongLog;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(catalogueProvider);
     final scheme = Theme.of(context).colorScheme;
     final on3 = OngColors.of(context).on3;
+    final notifier = ref.read(catalogueProvider.notifier);
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(32),
-        child: state.isFailed
+        child: (songs ? state.isSongsFailed : state.isFailed)
             ? Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -59,13 +68,13 @@ class CatalogueStatusView extends ConsumerWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    describeLoadError(state.lastError),
+                    describeLoadError(songs ? state.songsError : state.lastError),
                     textAlign: TextAlign.center,
                     style: TextStyle(color: on3),
                   ),
                   const SizedBox(height: 20),
                   FilledButton.icon(
-                    onPressed: () => ref.read(catalogueProvider.notifier).refresh(),
+                    onPressed: songs ? notifier.retrySongs : notifier.refresh,
                     icon: const Icon(Icons.refresh, size: 18),
                     label: const Text('Retry'),
                   ),
@@ -77,7 +86,7 @@ class CatalogueStatusView extends ConsumerWidget {
                   const CircularProgressIndicator(),
                   const SizedBox(height: 20),
                   Text(
-                    'Downloading the highlights and the Ong Log…',
+                    songs || ongLog ? 'Downloading the Ong Log…' : 'Downloading the highlights and the Ong Log…',
                     textAlign: TextAlign.center,
                     style: TextStyle(color: on3),
                   ),
@@ -850,7 +859,19 @@ class ListKeyboard {
 /// progress bar while the data refreshes in the background, [overlay] (the
 /// pinned header) above the list, and the [keyboard] of the list.
 class ListFrame extends ConsumerStatefulWidget {
-  const ListFrame({super.key, required this.controller, required this.slivers, this.overlay, this.keyboard});
+  const ListFrame({
+    super.key,
+    required this.controller,
+    required this.slivers,
+    this.overlay,
+    this.keyboard,
+    this.songs = false,
+  });
+
+  /// Whether the list shows the Songs sheet (the Ong Log): its refreshes show, a pull waits for it, and its failure
+  /// is said. Otherwise only those of the Highlights sheet: the Songs sheet loaded in the background, or refreshed
+  /// by the same pull, never shows over the Highlights list.
+  final bool songs;
 
   final ScrollController controller;
   final List<Widget> slivers;
@@ -867,16 +888,19 @@ class _ListFrameState extends ConsumerState<ListFrame> {
   Future<void> _pullToRefresh() async {
     setState(() => _pulling = true);
     final notifier = ref.read(catalogueProvider.notifier);
-    await notifier.refresh();
+    await notifier.refresh(waitForSongs: widget.songs);
     if (!mounted) return;
     setState(() => _pulling = false);
-    final error = ref.read(catalogueProvider).lastError;
+    final state = ref.read(catalogueProvider);
+    final error = widget.songs ? state.anyError : state.lastError;
     if (error != null) showMessage(context, 'Refresh failed. ${describeLoadError(error)}');
   }
 
   @override
   Widget build(BuildContext context) {
-    final refreshing = ref.watch(catalogueProvider.select((s) => s.isRefreshing));
+    final refreshing = ref.watch(
+      catalogueProvider.select((s) => s.isRefreshing || (widget.songs && s.isRefreshingSongs)),
+    );
     final overlay = widget.overlay;
     final list = CustomScrollView(
       controller: widget.controller,
