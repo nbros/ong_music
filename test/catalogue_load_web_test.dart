@@ -58,7 +58,11 @@ void main() {
       });
       expect(dumpCatalogue(sliced), dumpCatalogue(oneShot));
       expect(atOnce.gap, greaterThan(bound), reason: 'the one-shot parse is long enough to show the difference');
-      expect(inSlices.gap, lessThan(bound), reason: '${inSlices.frames} frames, against ${atOnce.frames} at once');
+      // against the one-shot parse on the same machine, and a bound a loaded test machine still meets (a slice took
+      // 51 ms once on GitHub's)
+      final reason = '${inSlices.gap} ms in ${inSlices.frames} frames, against ${atOnce.gap} ms at once';
+      expect(inSlices.gap, lessThan(atOnce.gap / 3), reason: reason);
+      expect(inSlices.gap, lessThan(2 * bound), reason: reason);
       expect(inSlices.frames, greaterThan(5));
     },
   );
