@@ -1258,18 +1258,74 @@ class ListChip extends StatelessWidget {
     // merged: one node as high as the tap target, not as the chip
     return MergeSemantics(
       child: _ChipTapTarget(
-        child: FilterChip(
-          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          // 32 px high with its border, not 34
-          visualDensity: const VisualDensity(vertical: -1),
-          selected: selected,
-          onSelected: (_) => onTap(),
-          labelStyle: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: color),
-          label: icon == null ? text! : (showLabel ? withIcon : Semantics(label: label, child: withIcon)),
+        child: _ChipFocusRing(
+          child: FilterChip(
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            // 32 px high with its border, not 34
+            visualDensity: const VisualDensity(vertical: -1),
+            selected: selected,
+            onSelected: (_) => onTap(),
+            labelStyle: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: color),
+            label: icon == null ? text! : (showLabel ? withIcon : Semantics(label: label, child: withIcon)),
+          ),
         ),
       ),
     );
   }
+}
+
+/// On a computer, a ring of the primary colour around the chip while the keyboard focus is on it (never a focus
+/// given by a click): painted only, [focusRingWidth] outside the chip, which keeps its size and its place.
+class _ChipFocusRing extends StatefulWidget {
+  const _ChipFocusRing({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_ChipFocusRing> createState() => _ChipFocusRingState();
+}
+
+class _ChipFocusRingState extends State<_ChipFocusRing> {
+  bool _focused = false;
+
+  @override
+  Widget build(BuildContext context) => Focus(
+    canRequestFocus: false,
+    skipTraversal: true,
+    includeSemantics: false,
+    onFocusChange: (focused) => setState(() => _focused = focused),
+    // the same widgets with and without the ring: the chip keeps its state, its focus among it
+    child: ValueListenableBuilder(
+      valueListenable: keyboardFocusShown,
+      child: widget.child,
+      builder: (context, shown, child) => CustomPaint(
+        foregroundPainter: shown && _focused && AppLayout.desktopOf(context)
+            ? _ChipRingPainter(Theme.of(context).colorScheme.primary)
+            : null,
+        child: child,
+      ),
+    ),
+  );
+}
+
+class _ChipRingPainter extends CustomPainter {
+  _ChipRingPainter(this.color);
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawRRect(
+      RRect.fromRectAndRadius((Offset.zero & size).inflate(focusRingWidth), const Radius.circular(10)),
+      Paint()
+        ..color = color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = focusRingWidth,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_ChipRingPainter oldDelegate) => color != oldDelegate.color;
 }
 
 /// Gives a chip a tap target 48 px high on every platform, without the 48 px

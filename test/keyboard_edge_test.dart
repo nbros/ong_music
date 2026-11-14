@@ -1,4 +1,5 @@
 // The keyboard of the lists: two highlights of one video, and a key held after it brought the cursor back.
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
@@ -29,7 +30,45 @@ Map<String, Element> rowElements() => {
     (e.widget as HighlightRow).highlight.track: e,
 };
 
+/// The rings painted around the tags (the keyboard focus on a computer).
+int tagRings(WidgetTester tester) => tester
+    .widgetList<CustomPaint>(find.byType(CustomPaint))
+    .where((p) => p.foregroundPainter.runtimeType.toString() == '_ChipRingPainter')
+    .length;
+
 void main() {
+  group('the ring of the keyboard focus on a tag', () {
+    testWidgets('on a computer: on the tag the keyboard focused, gone once the mouse is used', (tester) async {
+      await kt.pumpLook(tester, kt.Look.deskWide, kt.moreHighlights(30));
+      expect(tagRings(tester), 0);
+      await kt.focusSearch(tester);
+      await kt.press(tester, LogicalKeyboardKey.tab);
+      expect(kt.region(), 'chips');
+      await tester.pump();
+      expect(tagRings(tester), 1);
+      await kt.press(tester, LogicalKeyboardKey.arrowRight);
+      await tester.pump();
+      expect(tagRings(tester), 1, reason: 'it follows the focus');
+      // a click on a tag gives it the focus, without a ring
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: tester.getCenter(find.byType(FilterChip).at(2)));
+      await mouse.down(tester.getCenter(find.byType(FilterChip).at(2)));
+      await mouse.up();
+      await tester.pumpAndSettle();
+      expect(tagRings(tester), 0);
+      await mouse.removePointer();
+    });
+
+    testWidgets('none on a phone', (tester) async {
+      await kt.pumpLook(tester, kt.Look.phone, kt.moreHighlights(30));
+      await kt.focusSearch(tester);
+      await kt.press(tester, LogicalKeyboardKey.tab);
+      await tester.pump();
+      expect(kt.region(), 'chips');
+      expect(tagRings(tester), 0);
+    });
+  });
+
   for (final look in kt.Look.values) {
     testWidgets('${look.name}: two highlights of one video are two rows: a refresh keeps each, the focus on its own', (
       tester,

@@ -21,6 +21,7 @@ library;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'layout.dart';
@@ -114,8 +115,7 @@ class _StateLayerState extends State<StateLayer> {
   final _press = ValueNotifier(_Press.none);
   int? _pointer;
 
-  /// Focused while the keyboard moves the focus (Material's focus highlight
-  /// shows then only).
+  /// Focused while the keyboard moves the focus ([keyboardFocusShown]).
   final _keyboardFocus = ValueNotifier(false);
 
   /// Whether the way the focus moves is followed: only while focused.
@@ -143,7 +143,7 @@ class _StateLayerState extends State<StateLayer> {
   @override
   void dispose() {
     widget.states.removeListener(_onStates);
-    if (_followingMode) FocusManager.instance.removeHighlightModeListener(_onHighlightMode);
+    if (_followingMode) keyboardFocusShown.removeListener(_onKeyboard);
     _press.dispose();
     _keyboardFocus.dispose();
     super.dispose();
@@ -155,16 +155,15 @@ class _StateLayerState extends State<StateLayer> {
     if (focused != _followingMode) {
       _followingMode = focused;
       if (focused) {
-        FocusManager.instance.addHighlightModeListener(_onHighlightMode);
+        keyboardFocusShown.addListener(_onKeyboard);
       } else {
-        FocusManager.instance.removeHighlightModeListener(_onHighlightMode);
+        keyboardFocusShown.removeListener(_onKeyboard);
       }
     }
-    _onHighlightMode(FocusManager.instance.highlightMode);
+    _onKeyboard();
   }
 
-  void _onHighlightMode(FocusHighlightMode mode) =>
-      _keyboardFocus.value = _followingMode && mode == FocusHighlightMode.traditional;
+  void _onKeyboard() => _keyboardFocus.value = _followingMode && keyboardFocusShown.value;
 
   void _onDown(PointerDownEvent event) {
     final original = event.original ?? event;
@@ -209,6 +208,7 @@ class _StateLayerState extends State<StateLayer> {
         pressColor: widget.press,
         shape: widget.shape,
         textDirection: Directionality.maybeOf(context),
+        ring: Theme.of(context).colorScheme.primary,
       ),
       child: widget.child,
     ),
@@ -226,6 +226,37 @@ enum _Press {
   inner,
 }
 
+/// Whether the focus is to be shown: the last thing the user did was to press a key, not to click or to tap (as
+/// `:focus-visible` on a web page). A control focused by a click shows no focus; it shows it once a key is pressed.
+///
+/// Flutter's own [FocusManager.highlightMode] does not tell: with a mouse it is always the keyboard's.
+ValueListenable<bool> get keyboardFocusShown {
+  // the focus manager hears the keys first; a new one (each test has its own) starts with no focus shown
+  final manager = FocusManager.instance;
+  if (!identical(manager, _watchedManager)) {
+    _watchedManager = manager;
+    _keyboardFocusShown.value = false;
+    manager.addEarlyKeyEventHandler((event) {
+      if (event is KeyDownEvent) _keyboardFocusShown.value = true;
+      return KeyEventResult.ignored;
+    });
+  }
+  if (!_watchingPointers) {
+    _watchingPointers = true;
+    GestureBinding.instance.pointerRouter.addGlobalRoute((event) {
+      if (event is PointerDownEvent) _keyboardFocusShown.value = false;
+    });
+  }
+  return _keyboardFocusShown;
+}
+
+final _keyboardFocusShown = ValueNotifier(false);
+FocusManager? _watchedManager;
+bool _watchingPointers = false;
+
+/// The width of the ring that shows the keyboard focus on a computer.
+const double focusRingWidth = 2;
+
 class _LayerPainter extends CustomPainter {
   _LayerPainter({
     required this.states,
@@ -236,7 +267,12 @@ class _LayerPainter extends CustomPainter {
     required this.pressColor,
     required this.shape,
     required this.textDirection,
+    required this.ring,
   }) : super(repaint: Listenable.merge([states, press, keyboardFocus]));
+
+  /// The colour of the ring, [focusRingWidth] wide inside the control, that shows the keyboard focus (never a
+  /// focus given by a click or a tap).
+  final Color ring;
 
   final ValueListenable<Set<WidgetState>> states;
   final ValueListenable<_Press> press;
@@ -264,6 +300,19 @@ class _LayerPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    if (keyboardFocus.value && !states.value.contains(WidgetState.disabled)) {
+      final ringPaint = Paint()
+        ..color = ring
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = focusRingWidth;
+      final inner = (Offset.zero & size).deflate(focusRingWidth / 2);
+      final shape = this.shape;
+      if (shape == null) {
+        canvas.drawRect(inner, ringPaint);
+      } else {
+        canvas.drawPath(shape.getOuterPath(inner, textDirection: textDirection), ringPaint);
+      }
+    }
     final color = this.color;
     if (color == null || color.a == 0) return;
     final paint = Paint()..color = color;
