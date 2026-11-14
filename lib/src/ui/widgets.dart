@@ -13,6 +13,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../data/model.dart';
 import '../data/text.dart';
+import '../data/thumbnail_cache.dart';
 import 'format.dart';
 import 'fullscreen_button.dart';
 import 'instant_feedback.dart';
@@ -514,8 +515,14 @@ class _PillInk extends StatelessWidget {
 
 // ------------------------------------------------------------------ thumbnails
 
-/// Builds the image of a thumbnail URL; tests override it (no network).
-final thumbnailImageProvider = Provider<ImageProvider Function(String url)>((ref) => NetworkImage.new);
+/// Builds the image of a thumbnail URL: kept on disk in the native apps, a
+/// plain [NetworkImage] on the web ([createThumbnailImages]); tests override
+/// it (no network).
+final thumbnailImageProvider = Provider<ImageProvider Function(String url)>((ref) {
+  final images = createThumbnailImages();
+  ref.onDispose(images.dispose);
+  return images.image;
+});
 
 /// A YouTube thumbnail, decoded at its display size, with a neutral
 /// placeholder while it loads and an icon without video or on error.
