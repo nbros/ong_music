@@ -30,9 +30,11 @@ class OngLogPage extends ConsumerStatefulWidget {
   ConsumerState<OngLogPage> createState() => _OngLogPageState();
 }
 
-class _OngLogPageState extends ConsumerState<OngLogPage> {
+class _OngLogPageState extends ConsumerState<OngLogPage> implements ListModel {
   late final TextEditingController _search;
   final _scroll = ScrollController();
+  late final _keyboard = ListKeyboard(tab: AppTab.ongLog, model: this, scroll: _scroll);
+  late final _onKey = _keyboard.handle;
 
   PlayResults? _layoutResults;
   PlayFilter? _layoutFilter;
@@ -47,54 +49,103 @@ class _OngLogPageState extends ConsumerState<OngLogPage> {
     FocusManager.instance.addEarlyKeyEventHandler(_onKey);
   }
 
-  /// ↑ and ↓ select the previous or next play (not the headers), in an
-  /// expanded window.
-  KeyEventResult _onKey(KeyEvent event) {
-    if (!mounted) return KeyEventResult.ignored;
-    final key = listKeyOf(event, ref.read(searchFocusProvider(AppTab.ongLog)));
-    if (key == null || key == ListKey.enter || !listHasKeys(context, ref, AppTab.ongLog)) {
-      return KeyEventResult.ignored;
-    }
+  // the list for the keyboard: the headers of the streams and their plays, as the list builds them; ↑ and ↓ stop
+  // at the plays that have a fiche (a play without song has none: passed over)
+
+  @override
+  int get itemCount => _layoutCatalogue == null ? 0 : _layout?.itemCount ?? 0;
+
+  @override
+  double offsetOf(int item) => _layout!.itemOffset(item);
+
+  @override
+  double extentOf(int item) => _layout!.itemExtent(item);
+
+  @override
+  int itemAt(double offset) => _layout!.itemAtOffset(offset).clamp(0, math.max(0, itemCount - 1));
+
+  @override
+  bool stopsAt(int item) {
+    final row = _layout!.rowOfItem(item);
+    return row >= 0 && _layoutCatalogue!.songOfPlay(_layoutResults![row]) != null;
+  }
+
+  @override
+  bool isHeader(int item) => _layout!.isHeader(item);
+
+  @override
+  int? headerOf(int item) => _layout!.headerItem(_layout!.groupOfItem(item));
+
+  @override
+  int? get pinnedHeader {
+    final layout = _layout;
+    if (layout == null || layout.groupCount == 0 || !_scroll.hasClients || _scroll.offset <= 0) return null;
+    return layout.headerItem(layout.groupAtOffset(_scroll.offset));
+  }
+
+  @override
+  double get inset => _layout?.headerExtent ?? 0;
+
+  @override
+  Object keyOf(int item) {
+    final layout = _layout!;
+    final row = layout.rowOfItem(item);
+    // a header by its stream, a row by its play
+    return row < 0
+        ? ('stream', _layoutResults![layout.groupStarts[layout.groupOfItem(item)]].streamId)
+        : _layoutResults!.ids[row];
+  }
+
+  @override
+  int itemOf(Object key) {
     final results = _layoutResults;
     final layout = _layout;
-    final catalogue = _layoutCatalogue;
-    if (results == null || layout == null || catalogue == null || results.isEmpty) return KeyEventResult.handled;
-    final step = key == ListKey.next ? 1 : -1;
+    if (results == null || layout == null) return -1;
+    if (key case ('stream', final int stream)) {
+      final row = _layoutCatalogue == null ? -1 : results.firstOf(_layoutCatalogue!.streams[stream]);
+      return row < 0 ? -1 : layout.itemOfRow(row) - 1;
+    }
+    final row = key is int ? results.indexOf(key) : -1;
+    return row < 0 ? -1 : layout.itemOfRow(row);
+  }
+
+  @override
+  int? get selected {
     final stack = ref.read(detailPaneProvider(AppTab.ongLog));
     final play = selectedPlayId(stack);
     final stream = selectedStreamId(stack);
-    var index = play == null ? -1 : results.ids.indexOf(play);
-    int next;
-    if (index >= 0) {
-      next = index + step;
-    } else {
-      // a selected header: its first row, or the row above it
-      index = stream == null ? -1 : _firstRowOf(results, layout, stream);
-      next = index < 0 ? 0 : (step > 0 ? index : index - 1);
-    }
-    // a play without a song has no fiche: passed over
-    while (next >= 0 && next < results.length && catalogue.songOfPlay(results[next]) == null) {
-      next += step;
-    }
-    if (next < 0 || next >= results.length) return KeyEventResult.handled;
-    final p = results[next];
-    showSongSheet(context, catalogue, catalogue.songOfPlay(p)!, play: p);
-    // in view below the pinned header (the row's own header, for the first row of a stream)
-    revealExtent(_scroll, layout.itemOffset(layout.itemOfRow(next)), layout.rowExtent, inset: layout.headerExtent);
-    return KeyEventResult.handled;
+    final item = play != null ? itemOf(play) : (stream != null ? itemOf(('stream', stream)) : -1);
+    return item < 0 ? null : item;
   }
 
-  /// The first row of stream [stream] in [results], or -1.
-  static int _firstRowOf(PlayResults results, GroupedListLayout layout, int stream) {
-    for (final row in layout.groupStarts) {
-      if (results[row].streamId == stream) return row;
+  @override
+  void choose(int item) => openDetails(item);
+
+  /// The setlist of a header, the song of a play.
+  @override
+  void openDetails(int item) {
+    final catalogue = _layoutCatalogue!;
+    final row = _layout!.rowOfItem(item);
+    if (row < 0) {
+      showStreamSheet(
+        context,
+        catalogue,
+        catalogue.streamOf(_layoutResults![_layout!.groupStarts[_layout!.groupOfItem(item)]]),
+      );
+      return;
     }
-    return -1;
+    final play = _layoutResults![row];
+    final song = catalogue.songOfPlay(play);
+    if (song != null) showSongSheet(context, catalogue, song, play: play);
   }
+
+  @override
+  bool start() => false;
 
   @override
   void dispose() {
     FocusManager.instance.removeEarlyKeyEventHandler(_onKey);
+    _keyboard.dispose();
     _search.dispose();
     _scroll.dispose();
     super.dispose();
@@ -214,6 +265,7 @@ class _OngLogPageState extends ConsumerState<OngLogPage> {
         Expanded(
           child: ListFrame(
             controller: _scroll,
+            keyboard: _keyboard,
             overlay: results.isEmpty
                 ? null
                 : _PinnedHeader(controller: _scroll, layout: layout, catalogue: catalogue, results: results),
@@ -253,47 +305,65 @@ class _PlayList extends ConsumerWidget {
     final expanded = AppLayout.modeOf(context) == WindowMode.expanded;
     return SliverGroupedList(
       layout: layout,
-      delegate: SliverChildBuilderDelegate(childCount: layout.itemCount, (context, item) {
-        final row = layout.rowOfItem(item);
-        if (row < 0) {
-          final stream = _streamOfRow(catalogue, results, layout.groupStarts[layout.groupOfItem(item)]);
-          void onTap() => showStreamSheet(context, catalogue, stream);
-          if (expanded) {
-            return _SelectableHeader(key: ValueKey(('s', stream.id)), stream: stream, onTap: onTap);
-          }
-          return StreamHeader(key: ValueKey(('s', stream.id)), stream: stream, onTap: onTap);
-        }
-        final play = results[row];
-        void onTap() {
-          final song = catalogue.songOfPlay(play);
-          if (song != null) showSongSheet(context, catalogue, song, play: play);
-        }
-
-        if (expanded) {
-          // only the rows whose state changes are built again when the selection changes
-          return Consumer(
-            key: ValueKey(play.id),
-            builder: (context, ref, _) => PlayRow(
-              catalogue: catalogue,
-              play: play,
-              tokens: results.tokens,
-              me: me,
-              selected: ref.watch(detailPaneProvider(AppTab.ongLog).select((s) => selectedPlayId(s) == play.id)),
-              onTap: onTap,
-              onVideo: (h) => openVideo(context, ref, h),
+      delegate: SliverChildBuilderDelegate(
+        childCount: layout.itemCount,
+        // a refresh adding plays moves the rows on screen instead of building new ones: a row keeps its state, its
+        // keyboard focus among it
+        findChildIndexCallback: (key) {
+          if (key is! ValueKey) return null;
+          final row = switch (key.value) {
+            final int play => results.indexOf(play),
+            ('s', final int stream) when stream < catalogue.streams.length => results.firstOf(
+              catalogue.streams[stream],
             ),
+            _ => -1,
+          };
+          if (row < 0) return null;
+          final item = layout.itemOfRow(row);
+          return key.value is int ? item : item - 1;
+        },
+        (context, item) {
+          final row = layout.rowOfItem(item);
+          if (row < 0) {
+            final stream = _streamOfRow(catalogue, results, layout.groupStarts[layout.groupOfItem(item)]);
+            void onTap() => showStreamSheet(context, catalogue, stream);
+            if (expanded) {
+              return _SelectableHeader(key: ValueKey(('s', stream.id)), stream: stream, onTap: onTap);
+            }
+            return StreamHeader(key: ValueKey(('s', stream.id)), stream: stream, onTap: onTap);
+          }
+          final play = results[row];
+          void onTap() {
+            final song = catalogue.songOfPlay(play);
+            if (song != null) showSongSheet(context, catalogue, song, play: play);
+          }
+
+          if (expanded) {
+            // only the rows whose state changes are built again when the selection changes
+            return Consumer(
+              key: ValueKey(play.id),
+              builder: (context, ref, _) => PlayRow(
+                catalogue: catalogue,
+                play: play,
+                tokens: results.tokens,
+                me: me,
+                selected: ref.watch(detailPaneProvider(AppTab.ongLog).select((s) => selectedPlayId(s) == play.id)),
+                onTap: onTap,
+                onVideo: (h) => openVideo(context, ref, h),
+              ),
+            );
+          }
+          return PlayRow(
+            key: ValueKey(play.id),
+            catalogue: catalogue,
+            play: play,
+            tokens: results.tokens,
+            me: me,
+            onTap: onTap,
+            onVideo: (h) => openVideo(context, ref, h),
           );
-        }
-        return PlayRow(
-          key: ValueKey(play.id),
-          catalogue: catalogue,
-          play: play,
-          tokens: results.tokens,
-          me: me,
-          onTap: onTap,
-          onVideo: (h) => openVideo(context, ref, h),
-        );
-      }),
+        },
+      ),
     );
   }
 }

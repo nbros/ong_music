@@ -762,7 +762,9 @@ void main() {
       await tester.tap(detailsButtons().first);
       await tester.pumpAndSettle();
       stops += await expectFocusShows(tester, 'a sheet');
-      expect(stops, greaterThan(60));
+      // a list and a row of chips are one stop each (their rows and chips are reached with the arrows: see
+      // keyboard_test.dart)
+      expect(stops, greaterThan(40));
     }, variant: windows);
 
     testWidgets('the licences page: the hover of a row in the first frame, the chosen package in its colour', (

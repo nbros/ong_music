@@ -1,6 +1,8 @@
 /// The Highlights tab: search, genre chips, and the videos, newest first.
 library;
 
+import 'dart:math' as math;
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -25,9 +27,11 @@ class HighlightsPage extends ConsumerStatefulWidget {
   ConsumerState<HighlightsPage> createState() => _HighlightsPageState();
 }
 
-class _HighlightsPageState extends ConsumerState<HighlightsPage> {
+class _HighlightsPageState extends ConsumerState<HighlightsPage> implements ListModel {
   late final TextEditingController _search;
   final _scroll = ScrollController();
+  late final _keyboard = ListKeyboard(tab: AppTab.highlights, model: this, scroll: _scroll);
+  late final _onKey = _keyboard.handle;
 
   HighlightResults? _shownResults;
   HighlightFilter? _shownFilter;
@@ -42,29 +46,72 @@ class _HighlightsPageState extends ConsumerState<HighlightsPage> {
     FocusManager.instance.addEarlyKeyEventHandler(_onKey);
   }
 
-  /// ↑ and ↓ select the previous or next highlight, Enter starts the video of
-  /// the selected one (an expanded window).
-  KeyEventResult _onKey(KeyEvent event) {
-    if (!mounted) return KeyEventResult.ignored;
-    final key = listKeyOf(event, ref.read(searchFocusProvider(AppTab.highlights)));
-    if (key == null || !listHasKeys(context, ref, AppTab.highlights)) return KeyEventResult.ignored;
-    final stack = ref.read(detailPaneProvider(AppTab.highlights));
-    if (key == ListKey.enter) {
-      final selected = stack.firstOrNull;
-      if (selected is! HighlightFiche || selected.highlight.youtubeId == null) return KeyEventResult.ignored;
-      startVideo(context, ref, selected.highlight);
-      return KeyEventResult.handled;
-    }
+  // the list for the keyboard: one item per highlight shown, every one a row
+
+  @override
+  int get itemCount => _shownCatalogue == null ? 0 : _shownResults?.length ?? 0;
+
+  @override
+  double offsetOf(int item) => item * _shownRowExtent;
+
+  @override
+  double extentOf(int item) => _shownRowExtent;
+
+  @override
+  int itemAt(double offset) => (offset / _shownRowExtent).floor().clamp(0, math.max(0, itemCount - 1));
+
+  @override
+  bool stopsAt(int item) => true;
+
+  @override
+  bool isHeader(int item) => false;
+
+  @override
+  int? headerOf(int item) => null;
+
+  @override
+  int? get pinnedHeader => null;
+
+  @override
+  double get inset => 0;
+
+  Highlight _highlight(int item) => _shownCatalogue!.highlights[_shownResults!.ids[item]];
+
+  /// A highlight by its key, which a refresh keeps (not by its id, its place in the sheet, which changes when a
+  /// highlight above it goes).
+  @override
+  Object keyOf(int item) => highlightRowKey(_shownCatalogue!, _highlight(item));
+
+  @override
+  int itemOf(Object key) {
     final results = _shownResults;
     final catalogue = _shownCatalogue;
-    if (results == null || catalogue == null || results.isEmpty) return KeyEventResult.handled;
-    final selected = selectedHighlightId(stack);
-    final index = selected == null ? -1 : results.ids.indexOf(selected);
-    // nothing selected in the list (filtered out): its first row
-    final next = index < 0 ? 0 : (index + (key == ListKey.next ? 1 : -1)).clamp(0, results.length - 1);
-    if (next != index) showHighlightSheet(context, catalogue, catalogue.highlights[results.ids[next]]);
-    revealExtent(_scroll, next * _shownRowExtent, _shownRowExtent);
-    return KeyEventResult.handled;
+    if (results == null || catalogue == null || key is! String) return -1;
+    return rowOfKey(catalogue, results, key);
+  }
+
+  @override
+  int? get selected {
+    final id = selectedHighlightId(ref.read(detailPaneProvider(AppTab.highlights)));
+    final item = id == null ? -1 : _shownResults?.indexOf(id) ?? -1;
+    return item < 0 ? null : item;
+  }
+
+  @override
+  void choose(int item) => showHighlightSheet(context, _shownCatalogue!, _highlight(item));
+
+  @override
+  void openDetails(int item) => showHighlightSheet(context, _shownCatalogue!, _highlight(item));
+
+  /// Enter on the selected row, or with nothing focused: the video of the highlight of the pane (its row may be
+  /// filtered out), in the pane (with nothing over its fiche) or on YouTube.
+  @override
+  bool start() {
+    // the video of the fiche of the list, not of one stacked on it
+    final fiche = ref.read(detailPaneProvider(AppTab.highlights)).firstOrNull;
+    if (fiche is! HighlightFiche || fiche.highlight.youtubeId == null) return false;
+    startVideo(context, ref, fiche.highlight);
+    return true;
   }
 
   /// Keeps what is on screen there when the rows change under the same
@@ -93,6 +140,7 @@ class _HighlightsPageState extends ConsumerState<HighlightsPage> {
   @override
   void dispose() {
     FocusManager.instance.removeEarlyKeyEventHandler(_onKey);
+    _keyboard.dispose();
     _search.dispose();
     _scroll.dispose();
     super.dispose();
@@ -179,6 +227,7 @@ class _HighlightsPageState extends ConsumerState<HighlightsPage> {
         Expanded(
           child: ListFrame(
             controller: _scroll,
+            keyboard: _keyboard,
             slivers: [
               if (results.isEmpty)
                 SliverToBoxAdapter(
@@ -215,38 +264,84 @@ class _HighlightList extends ConsumerWidget {
     final mouse = expanded && AppLayout.mouseOf(context);
     return SliverFixedExtentList(
       itemExtent: ListMetrics.of(context).highlightRow,
-      delegate: SliverChildBuilderDelegate(childCount: results.length, (context, i) {
-        final h = catalogue.highlights[results.ids[i]];
-        if (expanded) {
-          // a row shows its fiche in the pane; only the rows whose state changes are built again when the
-          // selection changes
-          return Consumer(
-            key: ValueKey(h.id),
-            builder: (context, ref, _) => HighlightRow(
-              catalogue: catalogue,
-              highlight: h,
-              tokens: results.tokens,
-              me: me,
-              currentYear: currentYear,
-              selected: ref.watch(
-                detailPaneProvider(AppTab.highlights).select((stack) => selectedHighlightId(stack) == h.id),
+      delegate: SliverChildBuilderDelegate(
+        childCount: results.length,
+        // a refresh adding highlights moves the rows on screen instead of building new ones: a row keeps its state,
+        // its keyboard focus among it
+        findChildIndexCallback: (key) =>
+            key is ValueKey<String> ? _orNull(rowOfKey(catalogue, results, key.value)) : null,
+        (context, i) {
+          final h = catalogue.highlights[results.ids[i]];
+          if (expanded) {
+            // a row shows its fiche in the pane; only the rows whose state changes are built again when the
+            // selection changes
+            return Consumer(
+              key: ValueKey(highlightRowKey(catalogue, h)),
+              builder: (context, ref, _) => HighlightRow(
+                catalogue: catalogue,
+                highlight: h,
+                tokens: results.tokens,
+                me: me,
+                currentYear: currentYear,
+                selected: ref.watch(
+                  detailPaneProvider(AppTab.highlights).select((stack) => selectedHighlightId(stack) == h.id),
+                ),
+                onTap: () => showHighlightSheet(context, catalogue, h),
+                onThumbnail: mouse ? () => openVideo(context, ref, h) : null,
               ),
-              onTap: () => showHighlightSheet(context, catalogue, h),
-              onThumbnail: mouse ? () => openVideo(context, ref, h) : null,
-            ),
+            );
+          }
+          return HighlightRow(
+            key: ValueKey(highlightRowKey(catalogue, h)),
+            catalogue: catalogue,
+            highlight: h,
+            tokens: results.tokens,
+            me: me,
+            currentYear: currentYear,
+            onTap: () => h.youtubeId == null ? showHighlightSheet(context, catalogue, h) : openVideo(context, ref, h),
+            onMore: () => showHighlightSheet(context, catalogue, h),
           );
-        }
-        return HighlightRow(
-          key: ValueKey(h.id),
-          catalogue: catalogue,
-          highlight: h,
-          tokens: results.tokens,
-          me: me,
-          currentYear: currentYear,
-          onTap: () => h.youtubeId == null ? showHighlightSheet(context, catalogue, h) : openVideo(context, ref, h),
-          onMore: () => showHighlightSheet(context, catalogue, h),
-        );
-      }),
+        },
+      ),
     );
   }
+}
+
+/// [index], or null when it is -1.
+int? _orNull(int index) => index < 0 ? null : index;
+
+/// The rows of each result by the keys of their highlights, made when first needed (a key press, a list built
+/// again over rows already there): once per result.
+final _rowsByKey = Expando<Map<String, int>>('rows by key');
+
+/// The row keys of the highlights of each catalogue, by id, made when first needed: once per catalogue.
+final _rowKeys = Expando<List<String>>('row keys');
+
+/// What tells the row of [highlight] from every other one and stays the same after a refresh: its
+/// [Highlight.key], which highlights showing the same video share (two rows with one key would be taken for each
+/// other when the list is built again), followed for the second and later ones, counted from the oldest so that
+/// new highlights change nothing, by their rank among them.
+String highlightRowKey(Catalogue catalogue, Highlight highlight) {
+  final keys = _rowKeys[catalogue] ??= () {
+    final seen = <String, int>{};
+    return [
+      for (final h in catalogue.highlights)
+        switch (seen.update(h.key, (n) => n + 1, ifAbsent: () => 0)) {
+          0 => h.key,
+          final n => '${h.key}\n$n',
+        },
+    ];
+  }();
+  return keys[highlight.id];
+}
+
+/// The row of the highlight of [key] in [results] of [catalogue], or -1.
+///
+/// Rows are known by the keys of their highlights, which a refresh keeps: their ids are their places in the sheet,
+/// which change when a highlight above them goes (the next one would take the row of the one gone, and its focus).
+int rowOfKey(Catalogue catalogue, HighlightResults results, String key) {
+  final rows = _rowsByKey[results] ??= {
+    for (var i = results.length - 1; i >= 0; i--) highlightRowKey(catalogue, catalogue.highlights[results.ids[i]]): i,
+  };
+  return rows[key] ?? -1;
 }

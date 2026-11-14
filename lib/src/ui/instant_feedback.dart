@@ -348,9 +348,25 @@ class AppInkWell extends StatefulWidget {
   State<AppInkWell> createState() => _AppInkWellState();
 }
 
-class _AppInkWellState extends State<AppInkWell> {
+class _AppInkWellState extends State<AppInkWell> with AutomaticKeepAliveClientMixin {
   /// The states of the control of the desktop look.
   final _states = WidgetStatesController();
+
+  /// Whether the control, or a control in it, has the keyboard focus (desktop
+  /// look): it stays alive while it does, as Material's ink wells do, so that
+  /// the focus of a row scrolled out of a lazy list stays on it instead of
+  /// going back to the control focused before it (the search field).
+  bool _focused = false;
+
+  @override
+  bool get wantKeepAlive => _focused;
+
+  void _onFocusChange(bool focused) {
+    _states.update(WidgetState.focused, focused);
+    if (focused == _focused) return;
+    _focused = focused;
+    updateKeepAlive();
+  }
 
   late final Map<Type, Action<Intent>> _actions = {
     ActivateIntent: CallbackAction<ActivateIntent>(onInvoke: (_) => _activate()),
@@ -382,6 +398,7 @@ class _AppInkWellState extends State<AppInkWell> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     if (!AppLayout.desktopOf(context)) {
       return InkWell(
         onTap: widget.onTap,
@@ -405,7 +422,7 @@ class _AppInkWellState extends State<AppInkWell> {
       actions: _actions,
       child: Focus(
         canRequestFocus: enabled && widget.canRequestFocus,
-        onFocusChange: (value) => states.update(WidgetState.focused, value),
+        onFocusChange: _onFocusChange,
         child: MouseRegion(
           // as an InkWell: the hand on the web, the arrow in the Windows app
           cursor: WidgetStateMouseCursor.adaptiveClickable.resolve({if (!enabled) WidgetState.disabled}),
