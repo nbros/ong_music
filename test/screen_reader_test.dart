@@ -53,7 +53,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await goToTab(tester, 'About');
-    await activate(tester, 'Stickers');
+    await activate(tester, 'Merch');
     expect(app.effects.opened, hasLength(2));
     handle.dispose();
   });

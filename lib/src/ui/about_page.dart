@@ -58,14 +58,6 @@ final List<(String, String, Widget Function(BuildContext))> aboutLinks = [
     (_) => const VectorGraphic(loader: AssetBytesLoader('assets/icons/twitter.svg'), width: 28, height: 28),
   ),
   ('Merch', 'https://jonathanong.threadless.com/', (_) => Image.asset('assets/jacket.png', width: 28, height: 28)),
-  (
-    'Stickers',
-    'https://stukem.com/collections/jonathanong',
-    (_) => ClipRRect(
-      borderRadius: BorderRadius.circular(6),
-      child: Image.asset('assets/ongZoom.png', width: 28, height: 28),
-    ),
-  ),
 ];
 
 /// The helper text under the Twitch name field.
@@ -134,7 +126,8 @@ class AboutPage extends ConsumerWidget {
         padding: const EdgeInsets.fromLTRB(16, 18, 16, 4),
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final width = constraints.maxWidth / 4;
+            // two rows of three
+            final width = constraints.maxWidth / 3;
             return Wrap(
               runSpacing: 14,
               children: [

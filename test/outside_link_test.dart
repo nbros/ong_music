@@ -258,7 +258,7 @@ void main() {
       await hover(tester, gesture, find.byType(VideoPreview));
       expect(anchors(), findsNothing);
       await goToTab(tester, 'About');
-      expect(await linkOver(find.text('Stickers')), contains('http'));
+      expect(await linkOver(find.text('Merch')), contains('http'));
       expect(await linkOver(find.widgetWithText(FilledButton, 'Watch on Twitch')), 'https://www.twitch.tv/jonathanong');
       expect(await linkOver(find.text('Privacy policy')), 'https://ongmusic.nbros.dev/privacy-policy');
       await hover(tester, gesture, find.text('Licences'));
@@ -370,7 +370,7 @@ void main() {
       rects.add(tester.getRect(find.byType(VideoPill).first));
       await goToTab(tester, 'About');
       rects
-        ..add(tester.getRect(find.text('Stickers')))
+        ..add(tester.getRect(find.text('Merch')))
         ..add(tester.getRect(find.widgetWithText(FilledButton, 'Watch on Twitch')))
         ..add(tester.getRect(find.text('Privacy policy')));
       return rects;

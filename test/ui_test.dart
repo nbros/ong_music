@@ -898,10 +898,10 @@ void main() {
       final app = await pumpApp(tester);
       await goToTab(tester, 'About');
       await tester.tap(find.text('Watch on Twitch'));
-      await tester.tap(find.text('Stickers'));
+      await tester.tap(find.text('Merch'));
       expect(app.effects.opened.map((u) => u.toString()), [
         'https://www.twitch.tv/jonathanong',
-        'https://stukem.com/collections/jonathanong',
+        'https://jonathanong.threadless.com/',
       ]);
     });
 
@@ -909,7 +909,7 @@ void main() {
       final app = await pumpApp(tester);
       await goToTab(tester, 'About');
       app.effects.openWorks = false;
-      await tester.tap(find.text('Stickers'));
+      await tester.tap(find.text('Merch'));
       await tester.pump();
       expect(find.text('Couldn’t open the link'), findsOneWidget);
       await waitForMessage(tester);
