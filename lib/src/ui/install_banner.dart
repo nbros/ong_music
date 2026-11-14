@@ -3,6 +3,7 @@
 /// of the About tab.
 library;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -208,6 +209,74 @@ class InstallSection extends ConsumerWidget {
         padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
         decoration: BoxDecoration(color: scheme.surfaceContainer, borderRadius: BorderRadius.circular(16)),
         child: _HintBody(hint: hint, color: scheme.onSurface),
+      ),
+    );
+  }
+}
+
+/// Whether the About tab tells that there is an Android app too: in the web app, where no advice is given
+/// ([installHintProvider]: a computer, or the web app installed), but not on an iPhone. Overridden in tests.
+final androidAppNoteProvider = Provider<bool>(
+  (ref) =>
+      kIsWeb &&
+      ref.watch(installHintProvider).kind == InstallHintKind.none &&
+      defaultTargetPlatform != TargetPlatform.iOS,
+);
+
+/// The note of the About tab that the app is on Android too, with the link to Google Play; nothing where
+/// [androidAppNoteProvider] is false. In a [card] of its own (an expanded window), or as a section of the one column.
+class AndroidAppNote extends ConsumerWidget {
+  const AndroidAppNote({super.key, this.card = false});
+
+  /// One of the cards of an expanded window, under the settings: their colour, their corners, a gap above.
+  final bool card;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (!ref.watch(androidAppNoteProvider)) return const SizedBox.shrink();
+    final scheme = Theme.of(context).colorScheme;
+    final on3 = OngColors.of(context).on3;
+    final color = scheme.onSurface;
+    return Padding(
+      padding: card ? const EdgeInsets.only(top: 16) : const EdgeInsets.fromLTRB(16, 24, 16, 0),
+      child: Container(
+        padding: card ? const EdgeInsets.fromLTRB(24, 16, 12, 16) : const EdgeInsets.fromLTRB(16, 12, 8, 12),
+        decoration: BoxDecoration(color: scheme.surfaceContainer, borderRadius: BorderRadius.circular(card ? 28 : 16)),
+        child: Row(
+          spacing: 12,
+          children: [
+            Icon(Icons.android, size: 24, color: on3),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Also on Android',
+                    style: TextStyle(fontSize: 15, height: 20 / 15, fontWeight: FontWeight.w500, color: color),
+                  ),
+                  Text(
+                    'Ong Music is an app on Google Play too.',
+                    style: TextStyle(fontSize: 13, height: 18 / 13, color: color.withValues(alpha: 0.85)),
+                  ),
+                ],
+              ),
+            ),
+            OutsideLink(
+              url: playStoreUrl,
+              label: 'Open the Play Store',
+              onOpen: () => openLink(context, ref, playStoreUrl),
+              builder: (context, open) => TextButton.icon(
+                style: platformButtonStyle(
+                  context,
+                  TextButton.styleFrom(foregroundColor: color, padding: const EdgeInsets.symmetric(horizontal: 8)),
+                ),
+                onPressed: open,
+                icon: Icon(Icons.open_in_new, size: 18, color: on3),
+                label: const Text('Google Play'),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

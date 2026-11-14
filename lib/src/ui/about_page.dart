@@ -175,7 +175,7 @@ class AboutPage extends ConsumerWidget {
           // the scrollbar follows the primary scroll controller: desktop does not attach it by itself
           primary: true,
           padding: EdgeInsets.only(top: 20, bottom: bottom),
-          children: [...artist, ...settings, const _Footer()],
+          children: [...artist, ...settings, const AndroidAppNote(), const _Footer()],
         ),
       );
     }
@@ -199,7 +199,12 @@ class AboutPage extends ConsumerWidget {
                   spacing: 16,
                   children: [
                     Expanded(child: card([const SizedBox(height: 20), ...artist])),
-                    Expanded(child: card(settings)),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [card(settings), const AndroidAppNote(card: true)],
+                      ),
+                    ),
                   ],
                 ),
               ),

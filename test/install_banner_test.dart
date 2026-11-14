@@ -241,4 +241,40 @@ void main() {
       });
     }
   }
+
+  group('the Android app, told in the About tab of the web app', () {
+    Finder note(String text) => find.descendant(of: find.byType(AndroidAppNote), matching: find.text(text));
+
+    testWidgets('one column: a section before the footer, with the link to Google Play', (tester) async {
+      final app = await pumpApp(tester, androidAppNote: true);
+      await goToTab(tester, 'About');
+      await tester.scrollUntilVisible(note('Also on Android'), 200, scrollable: aboutScrollable());
+      expect(note('Ong Music is an app on Google Play too.'), findsOneWidget);
+      expect(
+        tester.getRect(note('Also on Android')).top,
+        greaterThan(tester.getRect(find.text('Clear downloaded data')).bottom),
+      );
+      await tester.tap(note('Google Play'));
+      await tester.pump();
+      expect(app.effects.opened, [Uri.parse(playStoreUrl)]);
+    });
+
+    testWidgets('expanded window: a card under the settings, as wide as them', (tester) async {
+      await pumpApp(tester, androidAppNote: true, size: const Size(1280, 800));
+      await goToTab(tester, 'About');
+      final card = tester.getRect(
+        find.descendant(of: find.byType(AndroidAppNote), matching: find.byType(Container)).first,
+      );
+      expect(card.top, greaterThan(tester.getRect(find.text('Clear downloaded data')).bottom));
+      expect(card.left, lessThan(tester.getRect(find.text('Appearance')).left));
+      expect(card.left, greaterThan(640));
+    });
+
+    testWidgets('nothing in the apps, nor where an advice to install is given', (tester) async {
+      await pumpApp(tester);
+      await goToTab(tester, 'About');
+      await tester.scrollUntilVisible(find.text('Clear downloaded data'), 200, scrollable: aboutScrollable());
+      expect(find.text('Also on Android'), findsNothing);
+    });
+  });
 }
