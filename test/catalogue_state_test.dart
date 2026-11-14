@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:ong_music/src/data/parser.dart';
 import 'package:ong_music/src/data/repository.dart';
 import 'package:ong_music/src/data/sheet_cache.dart';
+import 'package:ong_music/src/data/sheet_snapshot.dart';
 import 'package:ong_music/src/data/sheets.dart';
 import 'package:ong_music/src/state/catalogue_state.dart';
 import 'package:ong_music/src/state/settings_state.dart';
@@ -52,6 +53,7 @@ void main() {
       overrides: [
         if (prefs != null) sharedPreferencesProvider.overrideWithValue(prefs),
         sheetFetcherProvider.overrideWithValue(fetcher),
+        snapshotFetcherProvider.overrideWithValue(const NoSnapshot()),
         sheetCacheProvider.overrideWithValue(cache),
         catalogueParserProvider.overrideWithValue((sheets, {isAbandoned, background = false}) {
           parses++;
@@ -574,6 +576,7 @@ void main() {
       container = ProviderContainer.test(
         overrides: [
           sheetFetcherProvider.overrideWithValue(fetcher),
+          snapshotFetcherProvider.overrideWithValue(const NoSnapshot()),
           sheetCacheProvider.overrideWithValue(_ThrowingCache()),
           catalogueParserProvider.overrideWithValue(parseOnCurrentIsolate),
           clockProvider.overrideWithValue(() => clock),
@@ -620,6 +623,7 @@ void main() {
         container = ProviderContainer.test(
           overrides: [
             sheetFetcherProvider.overrideWithValue(fetcher),
+            snapshotFetcherProvider.overrideWithValue(const NoSnapshot()),
             sheetCacheProvider.overrideWithValue(cache),
             // the cache, then the first download: both unreadable
             catalogueParserProvider.overrideWithValue(
@@ -646,6 +650,7 @@ void main() {
           container = ProviderContainer.test(
             overrides: [
               sheetFetcherProvider.overrideWithValue(fetcher),
+              snapshotFetcherProvider.overrideWithValue(const NoSnapshot()),
               sheetCacheProvider.overrideWithValue(MemorySheetCache(cached)),
               catalogueParserProvider.overrideWithValue(parseOnCurrentIsolate),
               clockProvider.overrideWithValue(() => clock),
@@ -679,6 +684,7 @@ void main() {
       container = ProviderContainer.test(
         overrides: [
           sheetFetcherProvider.overrideWithValue(fetcher),
+          snapshotFetcherProvider.overrideWithValue(const NoSnapshot()),
           sheetCacheProvider.overrideWithValue(cache),
           catalogueParserProvider.overrideWithValue(
             (sheets, {isAbandoned, background = false}) =>

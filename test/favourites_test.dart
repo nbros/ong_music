@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:ong_music/src/data/catalogue.dart';
 import 'package:ong_music/src/data/repository.dart';
 import 'package:ong_music/src/data/sheet_cache.dart';
+import 'package:ong_music/src/data/sheet_snapshot.dart';
 import 'package:ong_music/src/data/sheets.dart';
 import 'package:ong_music/src/state/catalogue_state.dart';
 import 'package:ong_music/src/state/settings_state.dart';
@@ -49,6 +50,7 @@ void main() {
       overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
         sheetFetcherProvider.overrideWithValue(fetcher),
+        snapshotFetcherProvider.overrideWithValue(const NoSnapshot()),
         sheetCacheProvider.overrideWithValue(MemorySheetCache()),
         catalogueParserProvider.overrideWithValue(parseOnCurrentIsolate),
         clockProvider.overrideWithValue(() => now),

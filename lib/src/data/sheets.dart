@@ -170,8 +170,8 @@ final class HttpSheetFetcher implements SheetFetcher {
     final client = _client ?? http.Client();
     try {
       final results = await Future.wait([
-        _get(client, SheetUrls.highlights),
-        _get(client, SheetUrls.songs),
+        getSheetText(client, SheetUrls.highlights, timeout),
+        getSheetText(client, SheetUrls.songs, timeout),
       ]).timeout(maxDuration);
       return RawSheets(highlightsCsv: results[0], songsCsv: results[1]);
     } finally {
@@ -179,15 +179,18 @@ final class HttpSheetFetcher implements SheetFetcher {
       if (_client == null) client.close();
     }
   }
+}
 
-  Future<String> _get(http.Client client, Uri uri) async {
-    final response = await client.send(http.Request('GET', uri)).timeout(timeout);
-    if (response.statusCode != 200) {
-      unawaited(response.stream.listen(null).cancel());
-      throw SheetHttpException(uri, response.statusCode);
-    }
-    // a silence throws into the stream, which toBytes then stops listening to
-    final bytes = await http.ByteStream(response.stream.timeout(timeout)).toBytes();
-    return sheetCsv(decodeUtf8(bytes), uri);
+/// The body of [uri] as [HttpSheetFetcher] reads it: UTF-8 from the bytes whatever the declared charset, a
+/// [SheetHttpException] for an answer that is not a 200, a [SheetNotCsvException] for a web page. [timeout] is the
+/// longest silence of the server ([HttpSheetFetcher.timeout]).
+Future<String> getSheetText(http.Client client, Uri uri, Duration timeout) async {
+  final response = await client.send(http.Request('GET', uri)).timeout(timeout);
+  if (response.statusCode != 200) {
+    unawaited(response.stream.listen(null).cancel());
+    throw SheetHttpException(uri, response.statusCode);
   }
+  // a silence throws into the stream, which toBytes then stops listening to
+  final bytes = await http.ByteStream(response.stream.timeout(timeout)).toBytes();
+  return sheetCsv(decodeUtf8(bytes), uri);
 }

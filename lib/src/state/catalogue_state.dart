@@ -16,6 +16,7 @@ import '../data/parser.dart';
 import '../data/repository.dart';
 import '../data/sheet_cache.dart';
 import '../data/sheet_prefetch.dart';
+import '../data/sheet_snapshot.dart';
 import '../data/sheets.dart';
 import '../data/slices.dart';
 import '../logger.dart';
@@ -44,6 +45,9 @@ const Duration _maxTimerWait = Duration(hours: 1);
 
 /// Downloads the sheets.
 final sheetFetcherProvider = Provider<SheetFetcher>((ref) => HttpSheetFetcher());
+
+/// Downloads the daily copy of the sheets, shown on a first load until Google answers.
+final snapshotFetcherProvider = Provider<SnapshotFetcher>((ref) => HttpSnapshotFetcher());
 
 /// Persists the raw sheets (files on IO, Cache API on web).
 final sheetCacheProvider = Provider<SheetCache>((ref) => createSheetCache());
@@ -94,6 +98,7 @@ final catalogueRepositoryProvider = Provider<CatalogueRepository>(
   (ref) => CatalogueRepository(
     fetcher: ref.watch(sheetFetcherProvider),
     cache: ref.watch(sheetCacheProvider),
+    snapshots: ref.watch(snapshotFetcherProvider),
     parse: ref.watch(catalogueParserProvider),
     fingerprint: ref.watch(sheetsFingerprintProvider),
     clock: ref.watch(clockProvider),
@@ -117,7 +122,8 @@ final class CatalogueState {
   /// The catalogue shown, null until one is loaded.
   final Catalogue? catalogue;
 
-  /// When the sheets of [catalogue] were downloaded (UTC): "last update".
+  /// When the sheets of [catalogue] were downloaded (UTC): "last update". For the daily copy shown on a first load,
+  /// when the copy was made.
   final DateTime? fetchedAt;
 
   /// A download is running.
@@ -151,7 +157,11 @@ final catalogueProvider = NotifierProvider<CatalogueNotifier, CatalogueState>(Ca
 
 /// Refresh policy:
 /// - on start, the cached catalogue is shown at once; without cache the
-///   sheets are downloaded (loading, then data or failure);
+///   sheets are downloaded (loading, then data or failure), and the daily copy
+///   of the sheets ([SnapshotFetcher]) is asked at the same time: shown when it
+///   comes before Google's answer, which then replaces it, as a refresh does.
+///   It is never cached, never stops or delays a download (data shown from it
+///   is always due for one), and its failures are not reported;
 /// - a cache older than [catalogueMaxAge] is refreshed in the background, at
 ///   start, when the app resumes ([refreshIfStale]) and while it stays in the
 ///   foreground ([setForeground]);
@@ -183,6 +193,9 @@ class CatalogueNotifier extends Notifier<CatalogueState> {
   int _failures = 0;
   DateTime? _attemptAt;
 
+  /// Whether a download of this build has brought sheets: the snapshot is no longer wanted.
+  bool _downloaded = false;
+
   // The notifier object survives `ref.invalidate` and `ref` then designates the
   // new build, so `ref.mounted` cannot tell an asynchronous operation that the
   // build it started in is gone. Each build has a generation instead; work of
@@ -203,6 +216,7 @@ class CatalogueNotifier extends Notifier<CatalogueState> {
     _timer = null;
     _failures = 0;
     _attemptAt = null;
+    _downloaded = false;
     ref.onDispose(() {
       if (_generation == generation) {
         _generation++;
@@ -218,8 +232,11 @@ class CatalogueNotifier extends Notifier<CatalogueState> {
   Future<void> _load(int generation) async {
     if (generation != _generation) return;
     LoadedCatalogue? cached;
+    // false once the cache was read and holds nothing usable; not when it could not be read
+    var kept = true;
     try {
       cached = await _repo.loadCached(isAbandoned: () => generation != _generation);
+      kept = cached != null;
     } on LoadAbandoned {
       return;
     } catch (e, st) {
@@ -227,6 +244,7 @@ class CatalogueNotifier extends Notifier<CatalogueState> {
     }
     if (generation != _generation) return;
     _started = true;
+    if (kept) discardPrefetchedSnapshot();
     if (cached != null && state.catalogue == null) {
       logger.i('Catalogue loaded from cache (${cached.fetchedAt})');
       _loaded = cached;
@@ -238,6 +256,8 @@ class CatalogueNotifier extends Notifier<CatalogueState> {
     }
     if (cached == null || _isStale(cached.fetchedAt)) {
       unawaited(refresh());
+      // first launch: the daily copy may be on the screen a second or more before Google's answer
+      if (!kept) unawaited(_showSnapshot(generation));
     } else {
       // no download now: the one the page started, if any, must not wait for the next refresh
       ref.read(prefetchDiscarderProvider)();
@@ -247,6 +267,35 @@ class CatalogueNotifier extends Notifier<CatalogueState> {
 
   bool _isStale(DateTime? fetchedAt) =>
       fetchedAt == null || ref.read(clockProvider)().difference(fetchedAt).abs() >= catalogueMaxAge;
+
+  /// Whether the data on the screen calls for a download now: none, the daily copy (only Google's answer counts,
+  /// however recent the copy), or data older than [catalogueMaxAge].
+  bool _isDue() => state.catalogue == null || (_loaded?.isSnapshot ?? false) || _isStale(state.fetchedAt);
+
+  /// Shows the daily copy of the sheets, unless a download brought the sheets first (or this build is gone): the
+  /// first load, while nothing is on the screen. Its failures are logged only: without it, the first load is as it
+  /// was before it existed. A download that failed before it came keeps its error, shown as after any failed refresh.
+  Future<void> _showSnapshot(int generation) async {
+    bool unwanted() => generation != _generation || _downloaded;
+    final LoadedCatalogue snapshot;
+    try {
+      snapshot = await _repo.loadSnapshot(isAbandoned: unwanted);
+    } on LoadAbandoned {
+      return;
+    } catch (e) {
+      logger.i('No snapshot of the sheets: $e');
+      return;
+    }
+    if (unwanted() || state.catalogue != null) return;
+    logger.i('Catalogue shown from the snapshot of ${snapshot.fetchedAt}');
+    _loaded = snapshot;
+    state = CatalogueState(
+      catalogue: snapshot.catalogue,
+      fetchedAt: snapshot.fetchedAt,
+      isRefreshing: state.isRefreshing,
+      lastError: state.lastError,
+    );
+  }
 
   /// Downloads the sheets now (user request, retry). Returns when done; never
   /// throws, the outcome is in [state]. Joins a download already running.
@@ -269,10 +318,14 @@ class CatalogueNotifier extends Notifier<CatalogueState> {
     _attemptAt = ref.read(clockProvider)();
     try {
       final loaded = await _repo.fetch(
-        current: compareWithCurrent ? _loaded : null,
+        // read once downloaded: the snapshot may be on the screen by then
+        current: compareWithCurrent ? () => _loaded : null,
         isAbandoned: () => generation != _generation,
         // a catalogue on the screen: the list may be scrolled meanwhile, its frames come first
         background: state.catalogue != null,
+        downloaded: () {
+          if (generation == _generation) _downloaded = true;
+        },
       );
       if (generation != _generation) return;
       final unchanged = identical(loaded.catalogue, state.catalogue);
@@ -301,9 +354,7 @@ class CatalogueNotifier extends Notifier<CatalogueState> {
   Duration _untilDue() {
     final now = ref.read(clockProvider)();
     final fetchedAt = state.fetchedAt;
-    var wait = state.catalogue == null || _isStale(fetchedAt)
-        ? Duration.zero
-        : catalogueMaxAge - now.difference(fetchedAt!);
+    var wait = _isDue() ? Duration.zero : catalogueMaxAge - now.difference(fetchedAt!);
     final attemptAt = _attemptAt;
     if (_failures > 0 && attemptAt != null) {
       final delay = state.lastError is FormatException
@@ -349,12 +400,13 @@ class CatalogueNotifier extends Notifier<CatalogueState> {
   }
 
   /// Refreshes when the data is older than [catalogueMaxAge], or when there is
-  /// none because the first download failed. Call it when the app resumes.
+  /// none because the first download failed (or only the daily copy). Call it
+  /// when the app resumes.
   Future<void> refreshIfStale() async {
     if (_disposed || !_started) return;
     final running = _refresh;
     if (running != null) return running;
-    if (state.catalogue == null || _isStale(state.fetchedAt)) {
+    if (_isDue()) {
       // refused for its content: not again at each return to the app (see [_untilDue]); "Retry" still does
       if (state.lastError is FormatException && _untilDue() > Duration.zero) return;
       return refresh();

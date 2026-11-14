@@ -6,6 +6,7 @@ import 'catalogue.dart';
 import 'page_thread.dart';
 import 'parser.dart';
 import 'sheet_cache.dart';
+import 'sheet_snapshot.dart';
 import 'sheets.dart';
 import 'slices.dart';
 
@@ -88,15 +89,18 @@ Future<SheetsFingerprint> fingerprintInSlices(
 /// A catalogue and the time its sheets were downloaded.
 final class LoadedCatalogue {
   /// Bundles a catalogue, its download time and the identity of its sheets.
-  const LoadedCatalogue(this.catalogue, this.fetchedAt, this.fingerprint);
+  const LoadedCatalogue(this.catalogue, this.fetchedAt, this.fingerprint, {this.isSnapshot = false});
 
   final Catalogue catalogue;
 
-  /// When its sheets were downloaded (UTC).
+  /// When its sheets were downloaded (UTC); for a snapshot, when the copy was made.
   final DateTime fetchedAt;
 
   /// Identity of the raw sheets [catalogue] was parsed from.
   final SheetsFingerprint fingerprint;
+
+  /// Whether the sheets come from the daily copy ([SnapshotFetcher]), not from Google.
+  final bool isSnapshot;
 }
 
 /// Cache and network access, without policy (that is `CatalogueNotifier`'s).
@@ -106,12 +110,16 @@ final class CatalogueRepository {
     required this.fetcher,
     required this.cache,
     required this.parse,
+    this.snapshots = const NoSnapshot(),
     this.fingerprint = fingerprintAtOnce,
     DateTime Function()? clock,
   }) : clock = clock ?? (() => DateTime.now().toUtc());
 
   final SheetFetcher fetcher;
   final SheetCache cache;
+
+  /// The daily copy of the sheets ([loadSnapshot]).
+  final SnapshotFetcher snapshots;
   final CatalogueParser parse;
   final SheetsFingerprinter fingerprint;
   final DateTime Function() clock;
@@ -131,6 +139,21 @@ final class CatalogueRepository {
       return null;
     }
     return LoadedCatalogue(catalogue, cached.fetchedAt, await fingerprint(cached.sheets, isAbandoned: isAbandoned));
+  }
+
+  /// The daily copy of the sheets, parsed: a [LoadedCatalogue.isSnapshot] dated when the copy was made. Nothing is
+  /// cached. Throws when there is none or it does not parse (then a [CatalogueFormatException]); an abandoned load
+  /// ([isAbandoned], asked once the files are in and at each pause of the parser) throws [LoadAbandoned].
+  Future<LoadedCatalogue> loadSnapshot({bool Function()? isAbandoned}) async {
+    final snapshot = await snapshots.fetch();
+    if (isAbandoned?.call() ?? false) throw const LoadAbandoned();
+    final catalogue = await _parse(snapshot.sheets, isAbandoned);
+    return LoadedCatalogue(
+      catalogue,
+      snapshot.fetchedAt,
+      await fingerprint(snapshot.sheets, isAbandoned: isAbandoned),
+      isSnapshot: true,
+    );
   }
 
   /// [parse], whose failures on a payload it was not written for (a
@@ -154,7 +177,7 @@ final class CatalogueRepository {
   /// nothing) when a download fails or a payload is invalid
   /// ([CatalogueFormatException]); a failure to cache only loses the cache.
   ///
-  /// [current] is the catalogue in use, if any. It makes two things possible:
+  /// [current] gives the catalogue in use, if any, read once the sheets are downloaded. It makes two things possible:
   /// - when the download is identical to its sheets, its catalogue is returned
   ///   as is (same instance) with the new download time: nothing is parsed
   ///   again (megabytes, on the page's only thread on web) and the ids held by the UI
@@ -163,24 +186,32 @@ final class CatalogueRepository {
   ///   sheets only grow, so that is most likely a wrong answer or a sheet being
   ///   edited. Only while [current] is younger than [collapseGuard] though: a
   ///   sheet that really shrank (rows archived) must not be refused for ever.
+  ///   Never against a snapshot: Google's answer always replaces it, as it
+  ///   would have been taken without it.
   ///
-  /// [isAbandoned] and [background]: see [CatalogueParser]. An abandoned fetch throws [LoadAbandoned] and caches
-  /// nothing.
+  /// [isAbandoned] and [background]: see [CatalogueParser]; a [current] catalogue is on the screen, and counts as
+  /// [background] too. An abandoned fetch throws [LoadAbandoned] and caches nothing. [downloaded] is called once the
+  /// sheets are downloaded, before they are parsed.
   Future<LoadedCatalogue> fetch({
-    LoadedCatalogue? current,
+    LoadedCatalogue? Function()? current,
     bool Function()? isAbandoned,
     bool background = false,
+    void Function()? downloaded,
   }) async {
     final sheets = await fetcher.fetch();
-    final fingerprint = await this.fingerprint(sheets, isAbandoned: isAbandoned, background: background);
+    downloaded?.call();
+    final shown = current?.call();
+    // a catalogue on the screen, the snapshot shown meanwhile among them: its frames come first
+    final inBackground = background || shown != null;
+    final fingerprint = await this.fingerprint(sheets, isAbandoned: isAbandoned, background: inBackground);
     final Catalogue catalogue;
-    if (current != null && current.fingerprint == fingerprint) {
-      catalogue = current.catalogue;
+    if (shown != null && shown.fingerprint == fingerprint) {
+      catalogue = shown.catalogue;
     } else {
-      catalogue = await _parse(sheets, isAbandoned, background: background);
+      catalogue = await _parse(sheets, isAbandoned, background: inBackground);
       // abs: a download time in the future (clock changed) must not keep the guard on for ever
-      if (current != null && clock().difference(current.fetchedAt).abs() < collapseGuard) {
-        _checkNotCollapsed(current.catalogue, catalogue);
+      if (shown != null && !shown.isSnapshot && clock().difference(shown.fetchedAt).abs() < collapseGuard) {
+        _checkNotCollapsed(shown.catalogue, catalogue);
       }
     }
     final fetchedAt = clock();

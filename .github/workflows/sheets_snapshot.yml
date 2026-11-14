@@ -1,0 +1,84 @@
+# Once a day: a copy of the two Google Sheets CSV exports (the "snapshot") on the branch sheets-snapshot of this
+# repository, read by the app from raw.githubusercontent.com on a first load, until Google's own answer replaces it
+# a second or so later (lib/src/data/sheet_snapshot.dart). The work is in tool/sheets_snapshot.sh.
+#
+# The branch holds ONE orphan commit, replaced (force-pushed) when a sheet changed: no history grows. A bad day
+# (Google answering an error page, an export cut short, a sheet that lost rows) fails this run, visibly, and the
+# snapshot published before stays. A stale snapshot is harmless: the app asks Google at the same time anyway, and only
+# its first paint of a first visit uses the copy.
+#
+# Nothing here builds or deploys the site, and nothing runs the code of the default branch beyond the script.
+#
+# GitHub disables the scheduled workflows of a public repository "when no repository activity has occurred in 60
+# days". Its documentation does not say what counts as activity. Two belts, neither documented as resetting those 60
+# days: the snapshot is pushed again when it is 30 days old even if the sheets did not change (a push at least
+# monthly), and each run enables this workflow again through the API. Should the schedule stop all the same, the app
+# keeps working: it shows an older copy for a second on first visits, or none (Settings → Actions, or the Actions tab,
+# enables the workflow again; "Run workflow" runs it).
+name: Sheets snapshot
+
+on:
+  schedule:
+    # 11:37 UTC: the morning after the evening streams (US Eastern), off the busy start of the hour
+    - cron: "37 11 * * *"
+  workflow_dispatch:
+    inputs:
+      accept_smaller:
+        description: "Take a sheet that lost more than a tenth of its rows (rows really archived)"
+        type: boolean
+        default: false
+
+permissions: {}
+
+concurrency:
+  group: sheets-snapshot
+  cancel-in-progress: false
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write # to push the branch sheets-snapshot
+      actions: write # to enable this workflow again (see above)
+
+    steps:
+      - name: Checkout from GitHub
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1 # the script only; its credentials push the snapshot
+
+      # Not documented as resetting the 60 days (see above): a second belt, and never a reason to fail the run.
+      - name: Keep this workflow enabled
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow enable sheets_snapshot.yml --repo "$GITHUB_REPOSITORY"
+
+      - name: Test the script
+        run: bash tool/sheets_snapshot_test.sh
+
+      # The snapshot published now, if any: a sheet that shrank much against it is refused.
+      - name: Read the published snapshot
+        run: |
+          mkdir published
+          status=0
+          git ls-remote --exit-code origin refs/heads/sheets-snapshot > /dev/null || status=$?
+          if [[ $status == 0 ]]; then
+            git fetch --depth=1 origin sheets-snapshot
+            git archive FETCH_HEAD | tar -x -C published
+            cat published/snapshot.json
+          elif [[ $status == 2 ]]; then
+            echo "No snapshot published yet"
+          else
+            echo "::error::Cannot read the branch sheets-snapshot"
+            exit 1
+          fi
+
+      - name: Download and check the sheets
+        env:
+          SNAPSHOT_ACCEPT_SMALLER: ${{ inputs.accept_smaller && '1' || '' }}
+        run: bash tool/sheets_snapshot.sh make snapshot published
+
+      - name: Publish
+        run: bash tool/sheets_snapshot.sh publish snapshot
