@@ -346,7 +346,12 @@ class DetailPaneNotifier extends Notifier<List<Fiche>> {
     final previous = stateOrNull ?? const <Fiche>[];
     // no catalogue (cleared): kept for when it comes back
     if (catalogue == null) return previous;
-    if (previous.isNotEmpty) {
+    final snapshot = ref.read(catalogueProvider).isSnapshot;
+    // the fiche opened by the app itself over the daily copy of a first load, the user having chosen nothing: when
+    // Google's answer comes with newer rows, the pane shows the newest of them, as it would have without the copy
+    final follows = _pickedOnSnapshot && !snapshot && previous.length == 1;
+    if (!snapshot) _pickedOnSnapshot = false;
+    if (previous.isNotEmpty && !follows) {
       // a refresh: each fiche on the new catalogue, up to the first one whose item is gone (no fiche ever shows
       // the items of two catalogues, nor a link to an item that is not there)
       final kept = <Fiche>[];
@@ -359,8 +364,16 @@ class DetailPaneNotifier extends Notifier<List<Fiche>> {
     }
     // never empty once the catalogue is there: the first row of the list, or the newest item
     final first = _firstFiche(catalogue);
+    if (first == null && previous.isNotEmpty) {
+      final kept = previous.first.translate(catalogue);
+      if (kept != null) return [kept];
+    }
+    _pickedOnSnapshot = snapshot && first != null;
     return first == null ? const [] : [first];
   }
+
+  /// The single fiche of the pane is the app's own pick, made over the daily copy of the sheets.
+  bool _pickedOnSnapshot = false;
 
   Fiche? _firstFiche(Catalogue catalogue) {
     switch (tab) {
@@ -396,12 +409,14 @@ class DetailPaneNotifier extends Notifier<List<Fiche>> {
   /// Shows [fiche] alone: a row chosen in the list.
   void choose(Fiche fiche) {
     final current = _current(fiche);
+    _pickedOnSnapshot = false;
     if (current != null) state = [current];
   }
 
   /// Shows [fiche] over the current one: a link of the fiche on screen.
   void push(Fiche fiche) {
     final current = _current(fiche);
+    _pickedOnSnapshot = false;
     if (current != null) state = [...state, current];
   }
 

@@ -117,7 +117,13 @@ final catalogueRepositoryProvider = Provider<CatalogueRepository>(
 @immutable
 final class CatalogueState {
   /// Creates a state.
-  const CatalogueState({this.catalogue, this.fetchedAt, this.isRefreshing = false, this.lastError});
+  const CatalogueState({
+    this.catalogue,
+    this.fetchedAt,
+    this.isRefreshing = false,
+    this.lastError,
+    this.isSnapshot = false,
+  });
 
   /// The catalogue shown, null until one is loaded.
   final Catalogue? catalogue;
@@ -128,6 +134,9 @@ final class CatalogueState {
 
   /// A download is running.
   final bool isRefreshing;
+
+  /// [catalogue] is the daily copy of the sheets, shown on a first load until Google's answer replaces it.
+  final bool isSnapshot;
 
   /// Error of the last download attempt, null when it succeeded. Network errors,
   /// [SheetHttpException], [CatalogueFormatException] (invalid payload)...
@@ -142,9 +151,15 @@ final class CatalogueState {
   int get playCount => catalogue?.playCount ?? 0;
   int get streamCount => catalogue?.streamCount ?? 0;
 
-  CatalogueState _refreshing() =>
-      CatalogueState(catalogue: catalogue, fetchedAt: fetchedAt, isRefreshing: true, lastError: lastError);
-  CatalogueState _failed(Object error) => CatalogueState(catalogue: catalogue, fetchedAt: fetchedAt, lastError: error);
+  CatalogueState _refreshing() => CatalogueState(
+    catalogue: catalogue,
+    fetchedAt: fetchedAt,
+    isRefreshing: true,
+    lastError: lastError,
+    isSnapshot: isSnapshot,
+  );
+  CatalogueState _failed(Object error) =>
+      CatalogueState(catalogue: catalogue, fetchedAt: fetchedAt, lastError: error, isSnapshot: isSnapshot);
 
   @override
   String toString() =>
@@ -294,6 +309,7 @@ class CatalogueNotifier extends Notifier<CatalogueState> {
       fetchedAt: snapshot.fetchedAt,
       isRefreshing: state.isRefreshing,
       lastError: state.lastError,
+      isSnapshot: true,
     );
   }
 

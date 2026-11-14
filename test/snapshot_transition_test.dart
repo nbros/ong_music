@@ -6,6 +6,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:ong_music/src/data/sheets.dart';
 import 'package:ong_music/src/state/catalogue_state.dart';
 import 'package:ong_music/src/ui/rows.dart';
+import 'package:ong_music/src/ui/sheets.dart';
 
 import 'fixtures.dart';
 import 'ui_harness.dart';
@@ -73,6 +74,81 @@ void main() {
     final titles = [for (final (title, _) in rowsShown(tester)) title];
     expect(titles, isNotEmpty);
     expect(titles.every((t) => t.contains('1')), isTrue, reason: 'still filtered: $titles');
+  });
+
+  group('expanded window, the fiche the app opened by itself', () {
+    const desk = Size(1440, 900);
+    String paneTitle(WidgetTester tester) =>
+        tester.widget<HighlightSheet>(find.byType(HighlightSheet).first).highlight.title;
+
+    testWidgets('over the snapshot it follows the newest highlight when Google brings newer ones', (tester) async {
+      final app = await pumpApp(
+        tester,
+        size: desk,
+        desktop: true,
+        state: CatalogueState(catalogue: snapshot, fetchedAt: madeAt, isRefreshing: true, isSnapshot: true),
+        settle: false,
+      );
+      await tester.pump(const Duration(seconds: 1));
+      expect(paneTitle(tester), 'Tune 29');
+      app.notifier.emit(CatalogueState(catalogue: google, fetchedAt: testNow));
+      await tester.pumpAndSettle();
+      expect(paneTitle(tester), 'Brand new');
+    });
+
+    testWidgets('a row the user chose over the snapshot stays', (tester) async {
+      final app = await pumpApp(
+        tester,
+        size: desk,
+        desktop: true,
+        state: CatalogueState(catalogue: snapshot, fetchedAt: madeAt, isRefreshing: true, isSnapshot: true),
+        settle: false,
+      );
+      await tester.pump(const Duration(seconds: 1));
+      await tester.tap(find.text('Tune 27'));
+      await tester.pump(const Duration(seconds: 1));
+      expect(paneTitle(tester), 'Tune 27');
+      app.notifier.emit(CatalogueState(catalogue: google, fetchedAt: testNow));
+      await tester.pumpAndSettle();
+      expect(paneTitle(tester), 'Tune 27');
+    });
+
+    testWidgets('over kept data (no snapshot) a refresh leaves it where it was', (tester) async {
+      final app = await pumpApp(
+        tester,
+        size: desk,
+        desktop: true,
+        state: CatalogueState(catalogue: snapshot, fetchedAt: madeAt),
+      );
+      expect(paneTitle(tester), 'Tune 29');
+      app.notifier.emit(CatalogueState(catalogue: google, fetchedAt: testNow));
+      await tester.pumpAndSettle();
+      expect(paneTitle(tester), 'Tune 29');
+    });
+
+    testWidgets('the snapshot still there after a failed download, then a later answer: it follows', (tester) async {
+      final app = await pumpApp(
+        tester,
+        size: desk,
+        desktop: true,
+        state: CatalogueState(catalogue: snapshot, fetchedAt: madeAt, isRefreshing: true, isSnapshot: true),
+        settle: false,
+      );
+      await tester.pump(const Duration(seconds: 1));
+      app.notifier.emit(
+        CatalogueState(
+          catalogue: snapshot,
+          fetchedAt: madeAt,
+          lastError: SheetHttpException(SheetUrls.songs, 503),
+          isSnapshot: true,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(paneTitle(tester), 'Tune 29');
+      app.notifier.emit(CatalogueState(catalogue: google, fetchedAt: testNow));
+      await tester.pumpAndSettle();
+      expect(paneTitle(tester), 'Brand new');
+    });
   });
 
   testWidgets('Google fails after the snapshot: no message on the list, the About tab says it as for kept data', (
