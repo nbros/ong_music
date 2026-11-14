@@ -86,7 +86,7 @@ class CatalogueStatusView extends ConsumerWidget {
                   const CircularProgressIndicator(),
                   const SizedBox(height: 20),
                   Text(
-                    songs || ongLog ? 'Downloading the Ong Log…' : 'Downloading the highlights and the Ong Log…',
+                    songs || ongLog ? 'Downloading the Ong Log…' : 'Downloading the highlights…',
                     textAlign: TextAlign.center,
                     style: TextStyle(color: on3),
                   ),

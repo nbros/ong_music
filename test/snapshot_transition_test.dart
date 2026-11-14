@@ -50,7 +50,7 @@ void main() {
     // the list at once, with the thin bar of a refresh, not the first-download screen
     expect(find.byType(HighlightRow), findsWidgets);
     expect(find.byType(LinearProgressIndicator), findsOneWidget);
-    expect(find.text('Downloading the highlights and the Ong Log…'), findsNothing);
+    expect(find.text('Downloading the highlights…'), findsNothing);
     listScroll(tester).jumpTo(300);
     await tester.pump(const Duration(seconds: 1));
     final before = rowsShown(tester);

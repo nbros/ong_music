@@ -152,7 +152,7 @@ void main() {
       expect(find.text('Downloading the Ong Log…').hitTestable(), findsOneWidget);
       await tester.tap(find.text('Highlights').last);
       await tester.pump(const Duration(seconds: 1));
-      expect(find.text('Downloading the highlights and the Ong Log…').hitTestable(), findsOneWidget);
+      expect(find.text('Downloading the highlights…').hitTestable(), findsOneWidget);
     });
 
     testWidgets('not asked for yet (before the first frame of the list asked for it): the same screen', (tester) async {

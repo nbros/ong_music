@@ -920,7 +920,7 @@ void main() {
     testWidgets('first download: progress', (tester) async {
       await pumpApp(tester, state: CatalogueState(isRefreshing: true), settle: false);
       expect(find.byType(CircularProgressIndicator), findsWidgets);
-      expect(find.text('Downloading the highlights and the Ong Log…').hitTestable(), findsOneWidget);
+      expect(find.text('Downloading the highlights…').hitTestable(), findsOneWidget);
     });
 
     testWidgets('first download failed: message and Retry', (tester) async {
