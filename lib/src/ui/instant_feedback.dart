@@ -511,8 +511,7 @@ class _AppInkWellState extends State<AppInkWell> with AutomaticKeepAliveClientMi
 /// The part of every button style of the desktop look (in the button themes,
 /// see `theme.dart`): no overlay, whose highlights fade in and out, no ripple,
 /// and a [StateLayer] of the foreground colour of the button behind its
-/// content instead, at Material's opacities. The button clips it to its
-/// shape (a button with a background builder clips its content).
+/// content instead, at Material's opacities, in the shape of the button.
 final ButtonStyle instantButtonStyle = ButtonStyle(
   overlayColor: const WidgetStatePropertyAll(Colors.transparent),
   splashFactory: NoSplash.splashFactory,
@@ -538,6 +537,9 @@ class _ButtonStateLayer extends StatelessWidget {
       hover: foreground.withValues(alpha: hoverStateOpacity),
       focus: foreground.withValues(alpha: focusStateOpacity),
       press: foreground.withValues(alpha: pressStateOpacity),
+      // the shape of the button, which is that of its material: the button itself only clips its content when it
+      // is not told how to (the constructors of the filled buttons and the ones with an icon tell it not to)
+      shape: context.findAncestorWidgetOfExactType<Material>()?.shape,
       child: child,
     );
   }

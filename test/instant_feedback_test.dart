@@ -7,6 +7,7 @@ import 'package:ong_music/src/ui/instant_feedback.dart';
 import 'package:ong_music/src/ui/rows.dart';
 
 import 'top_bar_test.dart' show pumpDesktop, windows;
+import 'ui_harness.dart' show goToTab;
 
 void main() {
   testWidgets('a state layer removed while the mouse is down on it takes the release without an error', (tester) async {
@@ -43,5 +44,16 @@ void main() {
         .widget<MouseRegion>(find.descendant(of: well, matching: find.byType(MouseRegion)).first)
         .cursor;
     expect(cursor, SystemMouseCursors.basic);
+  }, variant: windows);
+
+  testWidgets('desktop look: the tint of a hovered button has the shape of the button, not its box', (tester) async {
+    await pumpDesktop(tester, const Size(1280, 800));
+    await goToTab(tester, 'About');
+    for (final label in ['Refresh', 'Clear']) {
+      final button = find.ancestor(of: find.text(label), matching: find.bySubtype<ButtonStyleButton>()).first;
+      final layer = tester.widget<StateLayer>(find.descendant(of: button, matching: find.byType(StateLayer)).first);
+      expect(layer.shape, isA<StadiumBorder>(), reason: label);
+      expect(tester.getRect(find.byWidget(layer)), tester.getRect(button), reason: label);
+    }
   }, variant: windows);
 }
