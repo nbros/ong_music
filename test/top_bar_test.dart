@@ -13,6 +13,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:ong_music/src/state/settings_state.dart';
 import 'package:ong_music/src/ui/about_page.dart';
 import 'package:ong_music/src/ui/detail_pane.dart';
 import 'package:ong_music/src/ui/fullscreen_button.dart';
@@ -371,6 +372,44 @@ void main() {
       // much larger text: the links scale down rather than be cut
       final large = topBarLayout(width: 320, nameWidth: 170, labelWidths: [138, 108, 82], button: true);
       expect(large.scale, lessThan(1));
+    });
+  });
+
+  group('the light/dark button of the top bar', () {
+    test('only with the room for it beside everything else at the sizes of the design', () {
+      const name = 82.0, labels = [64.0, 53.0, 38.0];
+      bool at(double width, {bool button = true}) =>
+          topBarHasThemeButton(width: width, nameWidth: name, labelWidths: labels, button: button);
+      // 467 for the bar with its name and the full screen button, 40 for this one, 4 between the two
+      expect(at(511), isTrue);
+      expect(at(510), isFalse);
+      // without the full screen button (the Windows app): 427 + 40
+      expect(at(467, button: false), isTrue);
+      expect(at(466, button: false), isFalse);
+    });
+
+    testWidgets('gives the other theme than the one on screen, and makes it the setting', (tester) async {
+      await pumpDesktop(tester, const Size(1340, 830));
+      Brightness shown() => Theme.of(tester.element(find.byType(AppTopBar))).brightness;
+      expect(shown(), Brightness.light);
+      final place = tester.getRect(find.byType(ThemeButton));
+      await tester.tap(find.byTooltip('Dark theme'));
+      await tester.pumpAndSettle();
+      expect(shown(), Brightness.dark);
+      expect(find.byTooltip('Light theme'), findsOneWidget);
+      expect(tester.getRect(find.byType(ThemeButton)), place, reason: 'nothing moves');
+      await tester.tap(find.byTooltip('Light theme'));
+      await tester.pumpAndSettle();
+      expect(shown(), Brightness.light);
+      // the setting of the About tab follows
+      await goToTab(tester, 'About');
+      final choice = tester.widget<SegmentedButton<ThemePreference>>(find.byType(SegmentedButton<ThemePreference>));
+      expect(choice.selected, {ThemePreference.light});
+    });
+
+    testWidgets('none in a window too narrow for it', (tester) async {
+      await pumpDesktop(tester, const Size(360, 830));
+      expect(find.byType(ThemeButton), findsNothing);
     });
   });
 

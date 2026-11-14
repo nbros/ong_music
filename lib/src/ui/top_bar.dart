@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../state/settings_state.dart';
 import 'fullscreen_button.dart';
 import 'nav_rail.dart';
 import 'outside_link.dart';
@@ -23,12 +24,27 @@ const double topBarHeight = 56;
 /// links 4 px apart with 14 px of padding on each side, the full screen
 /// button 16 px from the right edge.
 const double _edge = 20, _picture = 32, _nameGap = 10, _linksGap = 20, _linkSpacing = 4, _linkPadding = 14;
-const double _endEdge = 16, _buttonWidth = 40;
+const double _endEdge = 16, _buttonWidth = 40, _buttonGap = 4;
 
 /// The narrowest a window may be for the name; and, without the name, for
 /// links with their full padding: below, the edges and the paddings shrink
 /// down to these.
 const double _narrowEdge = 16, _narrowLinksGap = 12, _minLinkPadding = 4;
+
+/// Whether the bar has the room for the light/dark button, before the full screen [button]: only when everything
+/// else is there at the sizes of the design, the name included.
+@visibleForTesting
+bool topBarHasThemeButton({
+  required double width,
+  required double nameWidth,
+  required List<double> labelWidths,
+  required bool button,
+}) => topBarLayout(
+  width: width - _buttonWidth - (button ? _buttonGap : 0),
+  nameWidth: nameWidth,
+  labelWidths: labelWidths,
+  button: button,
+).name;
 
 /// What the bar shows in a window [width] wide whose name and labels are
 /// [nameWidth] and [labelWidths] wide, with or without the full screen
@@ -137,6 +153,12 @@ class AppTopBar extends ConsumerWidget {
                     labelWidths: labelWidths,
                     button: fullscreen != null,
                   );
+                  final themeButton = topBarHasThemeButton(
+                    width: constraints.maxWidth,
+                    nameWidth: nameWidth,
+                    labelWidths: labelWidths,
+                    button: fullscreen != null,
+                  );
                   Widget links = Semantics(
                     role: SemanticsRole.tabBar,
                     explicitChildNodes: true,
@@ -210,6 +232,8 @@ class AppTopBar extends ConsumerWidget {
                       SizedBox(width: layout.linksGap),
                       if (layout.scale < 1) Expanded(child: links) else links,
                       if (layout.scale >= 1) const Spacer(),
+                      if (themeButton) const Center(child: ThemeButton()),
+                      if (themeButton && fullscreen != null) const SizedBox(width: _buttonGap),
                       if (fullscreen != null) Center(child: FullscreenButton(fullscreen: fullscreen)),
                       const SizedBox(width: _endEdge),
                     ],
@@ -220,6 +244,25 @@ class AppTopBar extends ConsumerWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Switches between the light and the dark theme, from the one on screen (the system's while the setting follows
+/// it) to the other, which becomes the setting; the About tab keeps the three choices. The icon is that of the
+/// theme the button gives, at one size: nothing moves.
+class ThemeButton extends ConsumerWidget {
+  const ThemeButton({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final dark = theme.brightness == Brightness.dark;
+    return IconButton(
+      tooltip: dark ? 'Light theme' : 'Dark theme',
+      onPressed: () =>
+          ref.read(themePreferenceProvider.notifier).set(dark ? ThemePreference.light : ThemePreference.dark),
+      icon: Icon(dark ? Icons.light_mode : Icons.dark_mode, color: theme.colorScheme.onSurfaceVariant),
     );
   }
 }
