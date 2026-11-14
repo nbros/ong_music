@@ -1,6 +1,6 @@
 # Privacy Policy for Ong Music
 
-Effective date: *2026-11-12*
+Effective date: *2026-11-14*
 
 ## Introduction
 Welcome to **Ong Music**. This privacy policy outlines our commitment to respecting your privacy and explains how we handle any personal information you may provide to us. Since **Ong Music** does not collect any personal information from its users, your privacy is inherently protected.
@@ -15,6 +15,8 @@ Since **Ong Music** does not collect any personal data, there is no data collect
 
 ## Data downloaded by the app
 **Ong Music** downloads public data from Google Sheets, and video thumbnails from YouTube. Like when you visit any website, these servers see the request (for example your IP address). The app adds no identifier to these requests. The web version also downloads fonts from Google Fonts (fonts.googleapis.com and fonts.gstatic.com) for the characters its own fonts lack, such as Japanese, Chinese, Korean or Arabic characters, some symbols, or emoji. Shortly after it opens, it asks for fonts limited to the characters the catalogue uses, and sends Google the list of those characters, which come from the public data.
+
+On its first start, before it has downloaded any data, the app also downloads a daily copy of the same public data from GitHub (raw.githubusercontent.com), which it shows until Google Sheets answers; GitHub sees this request in the same way.
 
 The web version, this site and the Windows download are served by GitHub (GitHub Pages and GitHub Releases), which sees these requests in the same way.
 
