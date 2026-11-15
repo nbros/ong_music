@@ -478,8 +478,8 @@ class CatalogueNotifier extends Notifier<CatalogueState> {
     Catalogue? catalogue;
     // false once the cache was read and holds nothing usable; not when it could not be read
     var kept = true;
-    // the kept data files, read with the highlights: the table of names before their first parse, the VODs whenever
-    // they come (unless a download came first)
+    // the kept data files, read with the highlights: the table of names before their first parse, the VODs and their
+    // offsets whenever they come (unless a download came first)
     final dataCache = ref.read(dataFileCacheProvider);
     final keptAliases = _readKeptData(dataCache, DataFile.aliases);
     Future<void> takeKept(DataFile file) => _readKeptData(dataCache, file).then((copy) {

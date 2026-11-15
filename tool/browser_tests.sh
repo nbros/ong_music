@@ -20,6 +20,8 @@ tests=(
   test/rankings_test.dart
   test/schedule_test.dart
   test/text_test.dart
+  # (the offsets of the VODs, signed numbers of seconds read from offsets.tsv)
+  test/vod_offsets_test.dart
 )
 
 flutter test --platform chrome "$@" "${tests[@]}"
