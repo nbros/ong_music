@@ -225,6 +225,10 @@ class Effects {
   /// How many times the app asked the system to close it (Android back).
   int exits = 0;
 
+  /// What the app last told the system about Back: whether it takes it (true) or lets the system show the way home
+  /// and leave (false, Android's predictive back); null before it said anything.
+  bool? frameworkHandlesBack;
+
   /// The methods the app called on the navigation channel (the address of
   /// the web app).
   final navigation = <String>[];
@@ -311,6 +315,7 @@ Future<TestApp> pumpApp(
   final effects = Effects();
   tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
     if (call.method == 'SystemNavigator.pop') effects.exits++;
+    if (call.method == 'SystemNavigator.setFrameworkHandlesBack') effects.frameworkHandlesBack = call.arguments as bool;
     if (call.method == 'Clipboard.setData') {
       if (!effects.clipboardWorks) throw PlatformException(code: 'copy_fail');
       effects.clipboard = (call.arguments as Map)['text'] as String?;

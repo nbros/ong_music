@@ -1,6 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     package="nbros.ong_music">
+   <!-- Predictive back (Android 13+, shown from Android 15): while the app's own Back has nothing to do (Highlights,
+        nothing open over it), the system previews the way home; otherwise the app says it takes Back (the PopScope
+        of the shell, the routes over it), and no such preview is shown. -->
    <!-- Backup: the user's settings and favourites only, see res/xml/backup_rules.xml (Android 11 and lower)
         and res/xml/data_extraction_rules.xml (Android 12 and higher). -->
    <application
@@ -10,7 +13,8 @@
         android:allowBackup="true"
         android:fullBackupContent="@xml/backup_rules"
         android:dataExtractionRules="@xml/data_extraction_rules"
-        tools:targetApi="31">
+        android:enableOnBackInvokedCallback="true"
+        tools:targetApi="33">
         <activity
             android:name=".MainActivity"
             android:exported="true"

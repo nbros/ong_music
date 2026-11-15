@@ -998,6 +998,27 @@ void main() {
       expect(app.effects.exits, 1);
     });
 
+    testWidgets('tells the system whether it takes Back: no way home to preview while it does', (tester) async {
+      _running(tester);
+      final app = await pumpApp(tester);
+      expect(app.effects.frameworkHandlesBack, isFalse, reason: 'Highlights, nothing open: Back leaves');
+      await goToTab(tester, 'Ong Log');
+      expect(app.effects.frameworkHandlesBack, isTrue);
+      await tester.tap(find.text('Fri 1 Mar 2024'));
+      await tester.pumpAndSettle();
+      expect(app.effects.frameworkHandlesBack, isTrue);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(app.effects.frameworkHandlesBack, isTrue, reason: 'the sheet closed, Ong Log stays');
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(selectedTab(tester), 0);
+      expect(app.effects.frameworkHandlesBack, isFalse, reason: 'back on Highlights, the next Back leaves');
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(app.effects.exits, 1);
+    });
+
     testWidgets('closes an open sheet and stays on the tab', (tester) async {
       final app = await pumpApp(tester);
       await goToTab(tester, 'Ong Log');
@@ -1240,3 +1261,7 @@ void main() {
     });
   });
 }
+
+/// The app in front, as on a phone: only then does the framework tell the system whether it takes Back (a test
+/// starts without a lifecycle state, reset after each test).
+void _running(WidgetTester tester) => tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
