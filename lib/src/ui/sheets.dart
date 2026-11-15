@@ -993,18 +993,20 @@ class _StreamSheetState extends ConsumerState<StreamSheet> {
   final _controller = ScrollController();
   final _headerKey = GlobalKey();
 
-  /// The links of the parts of the VOD of [_vodStream], taken when the fiche first shows it: a file of the VODs
-  /// coming while it is open adds no button that would push the setlist down (it shows the next time).
+  /// How many buttons of the VOD of [_vodStream] the head shows: the number of its parts when the fiche first
+  /// showed it. A file of the VODs coming while it is open adds or removes no button, which would move the setlist
+  /// (they show the next time); the buttons shown open the links of the file taken last ([_vodButtons]).
   LiveStream? _vodStream;
-  List<Uri> _vodLinks = const [];
+  int _vodButtonCount = 0;
 
-  /// [_vodLinks] for [stream], taken once.
-  List<Uri> _vodLinksOf(LiveStream stream) {
+  /// The buttons of the head for [stream]: as many as [_vodButtonCount], each with the current link of its part
+  /// (null when the current file no longer has that part: the button stays, disabled).
+  List<Uri?> _vodButtons(LiveStream stream, List<Uri> current) {
     if (!identical(_vodStream, stream)) {
       _vodStream = stream;
-      _vodLinks = vodLinksFor(widget.catalogue, ref.read(vodFileProvider))?.streamLinks(stream) ?? const [];
+      _vodButtonCount = current.length;
     }
-    return _vodLinks;
+    return [for (var i = 0; i < _vodButtonCount; i++) i < current.length ? current[i] : null];
   }
 
   @override
@@ -1041,7 +1043,7 @@ class _StreamSheetState extends ConsumerState<StreamSheet> {
     final metrics = ListMetrics.of(context);
     final videos = s.highlightIds.length;
     final shape = _paneRowShape(context);
-    final vod = _vodLinksOf(s);
+    final vod = _vodButtons(s, vodLinksFor(catalogue, ref.watch(vodFileProvider))?.streamLinks(s) ?? const []);
     return _SheetBody(
       controller: _controller,
       slivers: [
@@ -1106,32 +1108,32 @@ class _StreamSheetState extends ConsumerState<StreamSheet> {
 }
 
 /// A button of the head of the fiche of a stream: its VOD from the start ([watchTheVodText]), or part [part] of it
-/// when it has several videos ([watchTheVodPartText]), opened on YouTube.
+/// when it has several videos ([watchTheVodPartText]), opened on YouTube. Disabled, in its place, without [link].
 class _VodButton extends StatelessWidget {
   const _VodButton({required this.link, this.part});
 
-  final Uri link;
+  final Uri? link;
   final int? part;
 
   @override
   Widget build(BuildContext context) {
     final part = this.part;
     final label = part == null ? watchTheVodText : watchTheVodPartText(part);
-    return VodLink(
-      link: link,
-      label: label,
-      builder: (context, open) => FilledButton.tonalIcon(
-        onPressed: open,
-        style: platformButtonStyle(
-          context,
-          FilledButton.styleFrom(
-            minimumSize: const Size(0, 40),
-            textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-          ),
-        ),
-        icon: const Icon(vodIcon, size: 20),
-        label: Text(label),
-      ),
-    );
+    final link = this.link;
+    if (link == null) return _button(context, label, null);
+    return VodLink(link: link, label: label, builder: (context, open) => _button(context, label, open));
   }
+
+  static Widget _button(BuildContext context, String label, VoidCallback? open) => FilledButton.tonalIcon(
+    onPressed: open,
+    style: platformButtonStyle(
+      context,
+      FilledButton.styleFrom(
+        minimumSize: const Size(0, 40),
+        textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+      ),
+    ),
+    icon: const Icon(vodIcon, size: 20),
+    label: Text(label),
+  );
 }

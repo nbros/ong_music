@@ -1,6 +1,8 @@
 // The actions of the VODs: "Watch in the VOD" in the menu of a play and as the button of a row without video,
 // "Watch the VOD" in the head of the fiche of a stream; nothing of them without the file, and nothing moves when it
 // comes.
+import 'dart:math' as math;
+
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -57,19 +59,29 @@ Future<void> _menu(WidgetTester tester, Finder row) async {
   await tester.pumpAndSettle();
 }
 
-/// The places of the rows of the Ong Log and of what they show, by a description: the box of each row, header and
-/// type icon; where each text starts and its height (a text's box may narrow beside a new button, its glyphs stay
-/// where they are, left aligned; the texts inside a span of a widget have no place of their own).
-Map<String, Object> _places(WidgetTester tester) => {
-  for (final (i, e) in find.byType(PlayRow).evaluate().indexed) ...{
-    'row $i': tester.getRect(find.byWidget(e.widget)),
-    for (final (j, t) in find.descendant(of: find.byWidget(e.widget), matching: find.byType(Text)).evaluate().indexed)
-      if (tester.getRect(find.byWidget(t.widget)) case final r when r.isFinite) 'row $i text $j': (r.topLeft, r.height),
-    'row $i type': tester.getRect(find.descendant(of: find.byWidget(e.widget), matching: find.byType(PlayTypeIcon))),
-  },
-  for (final (i, e) in find.byType(StreamHeader).evaluate().indexed)
-    'header $i': tester.getRect(find.byWidget(e.widget)),
-};
+/// The boxes of the rows of the Ong Log and of what they show, widths included, by a description: each row, header
+/// and type icon, the column of the title and the line under it (`row i column`), each text in that column
+/// (`row i column text j`) and outside it (`row i text j`, the time). The texts inside a span of a widget have no box
+/// of their own.
+Map<String, Rect> _places(WidgetTester tester) {
+  final places = <String, Rect>{};
+  for (final (i, e) in find.byType(PlayRow).evaluate().indexed) {
+    final row = find.byWidget(e.widget);
+    final column = find.descendant(of: row, matching: find.byType(Expanded)).first;
+    places['row $i'] = tester.getRect(row);
+    places['row $i column'] = tester.getRect(column);
+    final inColumn = find.descendant(of: column, matching: find.byType(Text)).evaluate().toSet();
+    for (final (j, t) in find.descendant(of: row, matching: find.byType(Text)).evaluate().indexed) {
+      final r = tester.getRect(find.byWidget(t.widget));
+      if (r.isFinite) places[inColumn.contains(t) ? 'row $i column text $j' : 'row $i text $j'] = r;
+    }
+    places['row $i type'] = tester.getRect(find.descendant(of: row, matching: find.byType(PlayTypeIcon)));
+  }
+  for (final (i, e) in find.byType(StreamHeader).evaluate().indexed) {
+    places['header $i'] = tester.getRect(find.byWidget(e.widget));
+  }
+  return places;
+}
 
 void main() {
   group('without the file (the branch missing, no network)', () {
@@ -191,7 +203,37 @@ void main() {
       expect(before, isNotEmpty);
       await _arrive(tester);
       expect(find.byType(VodButton), findsNWidgets(2));
-      expect(_places(tester), before);
+      final after = _places(tester);
+      expect(after.keys, before.keys);
+      // the rows that gain the button
+      final gained = {
+        for (final (i, e) in find.byType(PlayRow).evaluate().indexed)
+          if (find.descendant(of: find.byWidget(e.widget), matching: find.byType(VodButton)).evaluate().isNotEmpty) i,
+      };
+      expect(gained, hasLength(2));
+      bool ofGained(String key) => gained.any((i) => key.startsWith('row $i column'));
+      // everything else keeps its box, widths included: rows, headers, times, type icons, the rows without the button
+      for (final key in before.keys.where((k) => !ofGained(k))) {
+        expect(after[key], before[key], reason: key);
+      }
+      // what changes, in a row that gains the button: the column of the title and the line under it narrows by 42 px
+      // (the button's 48 against the 6 of the space it takes the place of), from its right edge; its texts keep their
+      // place and height, their width cut to the column's (a long title is cut 42 px earlier)
+      for (final i in gained) {
+        final column = before['row $i column']!, narrower = after['row $i column']!;
+        expect(narrower, Rect.fromLTWH(column.left, column.top, column.width - 42, column.height));
+        for (final key in before.keys.where((k) => k.startsWith('row $i column text'))) {
+          final text = before[key]!;
+          expect(after[key], Rect.fromLTWH(text.left, text.top, math.min(text.width, narrower.width), text.height));
+        }
+      }
+      // (the line under the title fills its column: it is one of the texts cut)
+      expect(
+        gained.any(
+          (i) => before.keys.any((k) => k.startsWith('row $i column text') && after[k]!.width < before[k]!.width),
+        ),
+        isTrue,
+      );
     });
   });
 
@@ -223,6 +265,33 @@ void main() {
       expect(app.effects.opened.map((u) => '$u'), ['https://youtu.be/$_secondPart2', 'https://youtu.be/$_second']);
       // its setlist has the buttons of the rows too
       expect(find.descendant(of: find.byType(StreamSheet), matching: find.byType(VodButton)), findsOneWidget);
+    });
+
+    testWidgets('open when another file comes: its buttons open the new links, none added or moved', (tester) async {
+      final app = await pumpApp(tester);
+      await goToTab(tester, 'Ong Log');
+      await _arrive(tester);
+      await tester.tap(find.widgetWithText(StreamHeader, 'Sat 2 Mar 2024'));
+      await tester.pumpAndSettle();
+      final head = [
+        for (final label in ['Watch the VOD, part 1', 'Watch the VOD, part 2']) tester.getRect(find.text(label)),
+      ];
+      // part 1 re-uploaded, part 2 gone
+      await _arrive(tester, VodFile.parse('date\tpart\tid\n2024-03-02\t1\tvod3ccccccc'));
+      expect([
+        for (final label in ['Watch the VOD, part 1', 'Watch the VOD, part 2']) tester.getRect(find.text(label)),
+      ], head);
+      await tester.tap(find.text('Watch the VOD, part 1'));
+      await tester.pumpAndSettle();
+      expect(app.effects.opened.map((u) => '$u'), ['https://youtu.be/vod3ccccccc']);
+      // the part the file no longer has: disabled, in its place
+      await tester.tap(find.text('Watch the VOD, part 2'));
+      await tester.pumpAndSettle();
+      expect(app.effects.opened, hasLength(1));
+      // the plays of its setlist: the new file too (one part of unknown length: I Will Survive at 2:03:00)
+      await tester.tap(find.descendant(of: find.byType(StreamSheet), matching: find.byType(VodButton)));
+      await tester.pumpAndSettle();
+      expect(app.effects.opened.last.toString(), 'https://youtu.be/vod3ccccccc?t=7380');
     });
 
     testWidgets('open when the file comes: its head stays as it is, nothing pushed down', (tester) async {
