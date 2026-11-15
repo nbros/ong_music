@@ -78,7 +78,11 @@ class _OngMusicAppState extends ConsumerState<OngMusicApp> {
     history: ref.read(browserHistoryProvider),
     initial: ref.read(initialAddressProvider),
   );
-  late final _router = AppRouterDelegate(ref: ref, bar: _addressBar, shell: const AppShell());
+  late final _router = AppRouterDelegate(
+    ref: ref,
+    bar: _addressBar,
+    shell: const UnderRoutesInsets(child: AppShell()),
+  );
 
   @override
   void initState() {
@@ -151,6 +155,55 @@ final startsInBackgroundProvider = Provider<bool>((ref) {
   final state = WidgetsBinding.instance.lifecycleState;
   return state == AppLifecycleState.hidden || state == AppLifecycleState.paused || pageIsHidden();
 });
+
+/// Keeps from [child], while another route covers its own (a dialog, a sheet, a page), the keyboard of that route: the
+/// bottom of the view insets and of the paddings stays what it was when the route came over, until that route is
+/// gone and the keyboard that came for it with it.
+///
+/// Without it, the tabs under the dialog of the favourites' import followed its keyboard: as the keyboard rose and
+/// went, the bars of the system and of the app changed height one after the other, the page grew for a moment, and
+/// About scrolled to its end stayed lower for good, the button just tapped no longer under the finger.
+class UnderRoutesInsets extends StatefulWidget {
+  const UnderRoutesInsets({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  State<UnderRoutesInsets> createState() => _UnderRoutesInsetsState();
+}
+
+class _UnderRoutesInsetsState extends State<UnderRoutesInsets> {
+  /// The bottoms as they were the last time they were the tabs' own (view insets, padding, view padding).
+  ({double insets, double padding, double viewPadding})? _held;
+
+  @override
+  Widget build(BuildContext context) {
+    final media = MediaQuery.of(context);
+    final covered = !(ModalRoute.of(context)?.isCurrent ?? true);
+    final held = _held;
+    // kept under a route, then until the keyboard that came for that route has gone down (a keyboard already up
+    // when the route came is the tabs' own: theirs again at once)
+    final keep = held != null && (covered || (_kept && held.insets == 0 && media.viewInsets.bottom > 0));
+    _kept = keep;
+    if (!keep) {
+      _held = (insets: media.viewInsets.bottom, padding: media.padding.bottom, viewPadding: media.viewPadding.bottom);
+    }
+    // always the same widgets over the child, kept or not: its state stays
+    return MediaQuery(
+      data: keep
+          ? media.copyWith(
+              viewInsets: media.viewInsets.copyWith(bottom: held.insets),
+              padding: media.padding.copyWith(bottom: held.padding),
+              viewPadding: media.viewPadding.copyWith(bottom: held.viewPadding),
+            )
+          : media,
+      child: widget.child,
+    );
+  }
+
+  /// Whether the last build kept the bottoms.
+  bool _kept = false;
+}
 
 /// The navigation (on phones and tablets, a bar at the bottom of a compact
 /// window, a rail on the left of the others; in the desktop look, a bar at
@@ -273,29 +326,18 @@ class _AppShellState extends ConsumerState<AppShell> {
                       heightFactor: 1,
                       child: ConstrainedBox(
                         constraints: const BoxConstraints(maxWidth: maxContentWidth),
-                        // as high under the keyboard as without it: a rising keyboard takes the inset of the system
-                        // bar under the navigation bar before it covers the bar itself, the bar would shrink by that
-                        // much, and the page over it grow for a moment: a page scrolled to its end moved down for
-                        // good (About under the dialog of the import, once its keyboard was gone)
-                        child: MediaQuery(
-                          data: MediaQuery.of(context).copyWith(
-                            padding: MediaQuery.paddingOf(
-                              context,
-                            ).copyWith(bottom: MediaQuery.viewPaddingOf(context).bottom),
-                          ),
-                          child: NavigationBar(
-                            selectedIndex: tab.index,
-                            onDestinationSelected: _select,
-                            destinations: [
-                              // no tooltip: it would only repeat the label under the icon
-                              for (final d in _destinations)
-                                NavigationDestination(
-                                  icon: d.newCount ? NewHighlightsBadge(child: Icon(d.icon)) : Icon(d.icon),
-                                  label: d.label,
-                                  tooltip: '',
-                                ),
-                            ],
-                          ),
+                        child: NavigationBar(
+                          selectedIndex: tab.index,
+                          onDestinationSelected: _select,
+                          destinations: [
+                            // no tooltip: it would only repeat the label under the icon
+                            for (final d in _destinations)
+                              NavigationDestination(
+                                icon: d.newCount ? NewHighlightsBadge(child: Icon(d.icon)) : Icon(d.icon),
+                                label: d.label,
+                                tooltip: '',
+                              ),
+                          ],
                         ),
                       ),
                     ),

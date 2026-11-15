@@ -202,6 +202,8 @@ Sent from my phone''';
     await _toSection(tester);
     await tapVisible(tester, _button('Import').first);
     expect(find.text('Paste the exported text'), findsOneWidget);
+    // on the first line of the box, where the caret is
+    expect(tester.getTopLeft(find.text('Paste the exported text')), tester.getTopLeft(_field()));
     final actions = tester.getRect(find.text('Cancel'));
     await tester.enterText(_field(), 'https://youtu.be/notInTheApp\nNo such song');
     await tester.tap(find.descendant(of: find.byType(AlertDialog), matching: _button('Import')));
@@ -253,9 +255,11 @@ Sent from my phone''';
   });
 
   testWidgets('the page under the dialog is where it was once the dialog and its keyboard are gone', (tester) async {
-    // a phone with a gesture bar: the keyboard rises over it step by step, and takes its inset as it does
+    // a phone with a gesture bar: the keyboard takes the bar's inset as it rises, and the system's bar is higher
+    // while a keyboard is up
     void keyboard(double height) {
       tester.view.viewInsets = FakeViewPadding(bottom: height);
+      tester.view.viewPadding = FakeViewPadding(top: 24, bottom: height > 0 ? 48 : 24);
       tester.view.padding = FakeViewPadding(top: 24, bottom: height > 24 ? 0 : 24 - height);
     }
 
@@ -264,31 +268,49 @@ Sent from my phone''';
     addTearDown(tester.view.resetViewPadding);
     addTearDown(tester.view.resetPadding);
     addTearDown(tester.view.resetViewInsets);
-    await pumpApp(tester, state: _state(), size: const Size(412, 892));
+    await pumpApp(tester, state: _state(), size: const Size(412, 1400));
     await goToTab(tester, 'About');
-    // the end of the page, where the footer is
+    // the end of the page, where the footer is; the window is high enough for the section to be on screen there
     final position = tester.state<ScrollableState>(aboutScrollable()).position;
     position.jumpTo(position.maxScrollExtent);
     await tester.pumpAndSettle();
     final before = position.pixels;
+    final viewport = position.viewportDimension;
     final button = tester.getRect(_button('Import').first);
-    await tester.tap(_button('Import').first);
-    await tester.pumpAndSettle();
-    for (final height in <double>[10, 40, 120, 300]) {
-      keyboard(height);
-      await tester.pump(const Duration(milliseconds: 16));
+    for (final closedFirst in [true, false]) {
+      await tester.tap(_button('Import').first);
+      await tester.pumpAndSettle();
+      for (final height in <double>[10, 40, 120, 300]) {
+        keyboard(height);
+        await tester.pump(const Duration(milliseconds: 16));
+        // the page under the dialog does not follow its keyboard
+        expect(position.pixels, before);
+        expect(position.viewportDimension, viewport);
+      }
+      await tester.enterText(find.byType(EditableText).last, 'nothing');
+      await tester.pumpAndSettle();
+      final cancel = find.descendant(of: find.byType(AlertDialog), matching: _button('Cancel'));
+      // the keyboard goes down before the dialog closes (Back), or after (Cancel)
+      if (!closedFirst) {
+        await tester.tap(cancel);
+        await tester.pump();
+      }
+      for (final height in <double>[120, 40, 10, 0]) {
+        keyboard(height);
+        await tester.pump(const Duration(milliseconds: 16));
+        expect(position.pixels, before, reason: 'keyboard $height, dialog closed first: ${!closedFirst}');
+      }
+      if (closedFirst) await tester.tap(cancel);
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(position.pixels, before);
+      expect(tester.getRect(_button('Import').first), button);
     }
-    await tester.enterText(_field(), 'nothing');
+    // the keyboard of the tabs' own fields is theirs: the page makes room for it
+    await tester.showKeyboard(find.byType(TextField).first);
+    keyboard(300);
     await tester.pumpAndSettle();
-    for (final height in <double>[120, 40, 10, 0]) {
-      keyboard(height);
-      await tester.pump(const Duration(milliseconds: 16));
-    }
-    await tester.pumpAndSettle();
-    await tester.tap(find.descendant(of: find.byType(AlertDialog), matching: _button('Cancel')));
-    await tester.pumpAndSettle();
-    expect(position.pixels, before);
-    expect(tester.getRect(_button('Import').first), button);
+    expect(tester.getSize(aboutScrollable()).height, lessThan(1400 - 300));
   });
 
   testWidgets('what one device exports, another imports whole', (tester) async {

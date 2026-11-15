@@ -432,7 +432,6 @@ class _UnwrappedTextFieldState extends State<UnwrappedTextField>
               isHovering: _hovered,
               isEmpty: widget.controller.text.isEmpty,
               decoration: InputDecoration(
-                hintText: widget.hintText,
                 // the line of the error is there before it: nothing moves when it comes
                 helperText: ' ',
                 errorText: widget.errorText,
@@ -452,7 +451,31 @@ class _UnwrappedTextFieldState extends State<UnwrappedTextField>
                       child: SingleChildScrollView(
                         controller: _horizontal,
                         scrollDirection: Axis.horizontal,
-                        child: SizedBox(width: math.max(constraints.maxWidth, _width(context, style)), child: editable),
+                        child: SizedBox(
+                          width: math.max(constraints.maxWidth, _width(context, style)),
+                          // the hint on the first line, where the caret is: the decoration would put it on the last
+                          // one (it knows no first line of a box that scrolls its text)
+                          child: Stack(
+                            children: [
+                              if (widget.controller.text.isEmpty)
+                                IgnorePointer(
+                                  child: ExcludeSemantics(
+                                    child: Text(
+                                      widget.hintText,
+                                      maxLines: 1,
+                                      softWrap: false,
+                                      overflow: TextOverflow.clip,
+                                      style: style.merge(
+                                        theme.inputDecorationTheme.hintStyle ??
+                                            TextStyle(color: theme.colorScheme.onSurfaceVariant),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              editable,
+                            ],
+                          ),
+                        ),
                       ),
                     ),
                   ),
