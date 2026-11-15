@@ -42,12 +42,12 @@ final class Ranking<T> {
   ///
   /// A counting sort, O(entries + largest count): the entries go into one bucket per count in alphabetical order,
   /// no comparison of names (a sort of the 10,000 songs by name takes milliseconds, made once per catalogue).
-  factory Ranking._sorted(List<T> entries, List<int> counts, Int32List alphabetical) {
-    var largest = 0, kept = 0, total = 0;
+  factory Ranking._sorted(List<T> entries, List<int> counts, Int32List alphabetical, {int? total}) {
+    var largest = 0, kept = 0, sum = 0;
     for (final count in counts) {
       if (count <= 0) continue;
       kept++;
-      total += count;
+      sum += count;
       if (count > largest) largest = count;
     }
     // where each count begins, the largest first
@@ -78,7 +78,7 @@ final class Ranking<T> {
       sortedCounts,
       ranks,
       top: largest,
-      total: total,
+      total: total ?? sum,
     );
   }
 
@@ -203,6 +203,9 @@ final class _Tables {
     );
   }();
 
+  /// The index of each artist by its merge key ([Artist.folded]).
+  late final Map<String, int> artistByKey = {for (var a = 0; a < artists.folds.length; a++) artists.folds[a]: a};
+
   /// The number of different songs each requester asked for (by `Requester.id`).
   late final Int32List requesterSongs = () {
     final counts = Int32List(catalogue.requesters.length);
@@ -216,6 +219,51 @@ final class _Tables {
   }();
 
   static final Int32List genreOrder = alphabeticalOrder([for (final g in Genre.values) fold(g.label)]);
+}
+
+/// An entry of the Artists, Genres or Requesters ranking, by what stays of it from one catalogue to the next (a
+/// refresh): the songs of the entry are ranked by [CatalogueRankings.songsOf].
+sealed class RankedEntry {
+  const RankedEntry();
+}
+
+/// An artist, by its merge key ([Artist.folded]).
+final class ArtistEntry extends RankedEntry {
+  const ArtistEntry(this.key);
+
+  final String key;
+
+  @override
+  bool operator ==(Object other) => other is ArtistEntry && other.key == key;
+
+  @override
+  int get hashCode => Object.hash(ArtistEntry, key);
+}
+
+/// A genre.
+final class GenreEntry extends RankedEntry {
+  const GenreEntry(this.genre);
+
+  final Genre genre;
+
+  @override
+  bool operator ==(Object other) => other is GenreEntry && other.genre == genre;
+
+  @override
+  int get hashCode => Object.hash(GenreEntry, genre);
+}
+
+/// A requester, by their folded name ([Requester.folded]).
+final class RequesterEntry extends RankedEntry {
+  const RequesterEntry(this.folded);
+
+  final String folded;
+
+  @override
+  bool operator ==(Object other) => other is RequesterEntry && other.folded == folded;
+
+  @override
+  int get hashCode => Object.hash(RequesterEntry, folded);
 }
 
 /// Makes ahead what the rankings of [catalogue] share (the tables, with the alphabetical orders of its songs and of
@@ -349,6 +397,56 @@ final class CatalogueRankings {
   );
 
   static final _requesters = Expando<Ranking<Requester>>('requester ranking');
+
+  /// The songs of [entry], by the plays counted that are of it: of the titles of the artist (as [artists] counts
+  /// them), logged under the genre, or requested by the requester; with [requesterId], of their requests alone. One
+  /// pass over the plays, made by the caller once. Empty when the entry is not in this catalogue, or has nothing
+  /// counted.
+  ///
+  /// Its `Ranking.total` is every play counted, as the row of the entry counts them: those of a title without letter
+  /// or digit too, which are of no song (a few dozen in the real sheets).
+  Ranking<Song> songsOf(RankedEntry entry) {
+    final t = _tables;
+    final counts = Int32List(t.songs.length);
+    final titleSong = t.titleSong;
+    final only = requesterId;
+    var total = 0;
+    void count(bool Function(Play p) of) {
+      for (final p in catalogue.plays) {
+        if (only != null && p.requesterId != only) continue;
+        if (!of(p)) continue;
+        total++;
+        final s = titleSong[p.titleId];
+        if (s >= 0) counts[s]++;
+      }
+    }
+
+    switch (entry) {
+      case ArtistEntry(:final key):
+        final a = catalogue.hasSongs ? t.artistByKey[key] : null;
+        if (a != null) {
+          final ofTitle = t.artists.ofTitle;
+          count((p) => ofTitle[p.titleId] == a);
+        }
+      case GenreEntry(:final genre):
+        count((p) => p.genre == genre);
+      case RequesterEntry(:final folded):
+        final r = catalogue.requesterNamed(folded)?.id;
+        if (r != null) count((p) => p.requesterId == r);
+    }
+    return Ranking._sorted(t.songs, counts, t.songOrder, total: total);
+  }
+
+  /// The name of [entry] in this catalogue (the artist's most played spelling, the genre's label, the requester's
+  /// name), or null when it is not in it.
+  String? nameOf(RankedEntry entry) => switch (entry) {
+    ArtistEntry(:final key) => switch (_tables.artistByKey[key]) {
+      final a? => _tables.artists.names[a],
+      null => null,
+    },
+    GenreEntry(:final genre) => genre.label,
+    RequesterEntry(:final folded) => catalogue.requesterNamed(folded)?.name,
+  };
 
   /// The number of entries of the ranking of [kind].
   int lengthOf(RankingKind kind) => switch (kind) {

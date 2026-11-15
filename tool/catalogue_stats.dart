@@ -87,6 +87,17 @@ void main(List<String> args) {
       _time('ranking $label${id == null ? '' : ' You'}', () => rank(CatalogueRankings(c, requesterId: id)), c);
     }
   }
+  // the songs of an entry (the page a row of the Artists, Genres or Requesters ranking opens): one pass over the plays
+  final rankings = CatalogueRankings(c);
+  final topArtist = rankings.artists.entries.first;
+  final topRequester = rankings.requesters.entries.first;
+  for (final (label, entry) in [
+    ('songs of ${topArtist.name}', ArtistEntry(topArtist.folded)),
+    ('songs of Popular', const GenreEntry(Genre.popular)),
+    ('songs of ${topRequester.name}', RequesterEntry(topRequester.folded)),
+  ]) {
+    _time(label, () => rankings.songsOf(entry).length, c);
+  }
   // the first ranking of a catalogue makes the tables it needs: on catalogues of their own, after one to warm up
   final catalogues = [for (var i = 0; i < 5; i++) parseCatalogue(highlightsCsv, songsCsv)];
   CatalogueRankings(catalogues.removeLast())

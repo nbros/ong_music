@@ -1222,6 +1222,16 @@ final rankingsProvider = Provider.autoDispose.family<CatalogueRankings?, bool>((
   return CatalogueRankings(catalogue, requesterId: _myRequesterId(ref, mine, myPlayCountProvider));
 });
 
+/// The songs of an entry of the statistics page (an artist, a genre, a requester) and the rankings they are counted
+/// with: of every play, or of the user's own requests alone with `mine` (as [rankingsProvider]); null without the
+/// Songs sheet. Made once per catalogue while the page of the entry is open.
+final entrySongsProvider = Provider.autoDispose
+    .family<({CatalogueRankings rankings, Ranking<Song> songs})?, (RankedEntry, bool)>((ref, args) {
+      final (entry, mine) = args;
+      final rankings = ref.watch(rankingsProvider(mine));
+      return rankings == null ? null : (rankings: rankings, songs: rankings.songsOf(entry));
+    });
+
 /// Number of plays matching a query (the "N in the Ong Log" link); 0 without
 /// catalogue or for an empty query.
 final playCountForQueryProvider = Provider.autoDispose.family<int, String>(

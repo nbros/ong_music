@@ -152,11 +152,6 @@ class PlayFilterNotifier extends Notifier<PlayFilter> {
 
   /// Shows every play matching [query], without chip filter.
   void searchOnly(String query) => state = PlayFilter(query: query);
-
-  /// Shows the plays matching [query], of [genre] when given and among the user's own requests alone with [mine],
-  /// without other filter.
-  void showOnly({String query = '', Genre? genre, bool mine = false}) =>
-      state = PlayFilter(query: query, genre: genre, mine: mine);
 }
 
 /// How many searches were started from elsewhere than their field ("N in the
@@ -186,15 +181,6 @@ void showOngLogFor(WidgetRef ref, String query) {
 void showRequesterInOngLog(WidgetRef ref, String name) {
   ref.read(searchStepsProvider.notifier).add();
   ref.read(playFilterProvider.notifier).searchOnly(name);
-  ref.read(selectedTabProvider.notifier).select(AppTab.ongLog);
-  FocusManager.instance.primaryFocus?.unfocus();
-}
-
-/// Opens the Ong Log on the plays matching [query], of [genre] (its chip) when given, and on the user's own requests
-/// alone with [mine] (the "You" chip), without other filter: a row of the statistics page.
-void showInOngLog(WidgetRef ref, {String query = '', Genre? genre, bool mine = false}) {
-  ref.read(searchStepsProvider.notifier).add();
-  ref.read(playFilterProvider.notifier).showOnly(query: query, genre: genre, mine: mine);
   ref.read(selectedTabProvider.notifier).select(AppTab.ongLog);
   FocusManager.instance.primaryFocus?.unfocus();
 }

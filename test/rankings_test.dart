@@ -160,6 +160,73 @@ void main() {
     });
   });
 
+  group('the songs of an entry', () {
+    final rankings = CatalogueRankings(catalogue);
+    List<(String, int)> songsOf(CatalogueRankings rankings, RankedEntry entry) {
+      final songs = rankings.songsOf(entry);
+      return [for (var i = 0; i < songs.length; i++) (songs.entries[i].track, songs.counts[i])];
+    }
+
+    test('of an artist: the plays of its titles, whatever their spelling', () {
+      expect(songsOf(rankings, const ArtistEntry('pokemon')), [('route 1', 2), ('Pallet Town', 1)]);
+      expect(rankings.songsOf(const ArtistEntry('pokemon')).total, 3);
+      expect(rankings.songsOf(const ArtistEntry('pokemon')).ranks, [1, 2]);
+      expect(rankings.nameOf(const ArtistEntry('pokemon')), 'Pokémon');
+    });
+
+    test('every play of the entry counted in its total, as on its row: those of no song too', () {
+      final withNoSong = catalogueOf(
+        songs: [
+          start('2024-01-01'),
+          play('Pokémon - Route 1', requester: 'c', genre: 'ANIME'),
+          // of no song: no letter nor digit
+          play('???', requester: 'c', genre: 'ANIME'),
+        ],
+      );
+      final all = CatalogueRankings(withNoSong);
+      final anime = all.songsOf(const GenreEntry(Genre.anime));
+      expect(anime.counts, [1]);
+      expect(anime.total, 2);
+      expect(anime.total, all.genres.counts.single);
+      expect(all.songsOf(const RequesterEntry('c')).total, withNoSong.requesterNamed('c')!.requestCount);
+    });
+
+    test('of a genre, and of a requester: their plays, equal counts in the order of the tracks', () {
+      expect(songsOf(rankings, const GenreEntry(Genre.gameOst)), [('Song of Storms', 2), ('Lost Woods', 1)]);
+      expect(songsOf(rankings, const RequesterEntry('a')), [('Lost Woods', 1), ('route 1', 1), ('Song of Storms', 1)]);
+      expect(rankings.nameOf(const RequesterEntry('emile')), 'Émile');
+      expect(rankings.nameOf(const GenreEntry(Genre.anime)), 'Anime');
+    });
+
+    test('with the requests of one requester alone', () {
+      final c = CatalogueRankings(catalogue, requesterId: catalogue.requesterNamed('c')!.id);
+      expect(songsOf(c, const ArtistEntry('pokemon')), [('Pallet Town', 1), ('route 1', 1)]);
+      expect(c.songsOf(const ArtistEntry('zelda')).isEmpty, isTrue);
+    });
+
+    test('of an entry the catalogue does not have: none', () {
+      expect(rankings.songsOf(const ArtistEntry('mario')).isEmpty, isTrue);
+      expect(rankings.nameOf(const ArtistEntry('mario')), isNull);
+      expect(rankings.songsOf(const RequesterEntry('nobody')).isEmpty, isTrue);
+      expect(rankings.songsOf(const RequesterEntry('zorro')).isEmpty, isTrue);
+      expect(rankings.nameOf(const RequesterEntry('zorro')), isNull);
+      expect(rankings.songsOf(const GenreEntry(Genre.jazz)).isEmpty, isTrue);
+      expect(CatalogueRankings(catalogue.highlightsOnly).songsOf(const GenreEntry(Genre.anime)).isEmpty, isTrue);
+    });
+
+    test('entries are equal by their key', () {
+      expect(
+        const ArtistEntry('zelda'),
+        ArtistEntry(
+          'zel'
+          'da',
+        ),
+      );
+      expect(const ArtistEntry('zelda'), isNot(const RequesterEntry('zelda')));
+      expect(const GenreEntry(Genre.anime).hashCode, GenreEntry(Genre.values[Genre.anime.index]).hashCode);
+    });
+  });
+
   test('a catalogue of the highlights alone: empty rankings, nothing thrown', () {
     final alone = CatalogueRankings(catalogue.highlightsOnly);
     expect(alone.songs.isEmpty, isTrue);

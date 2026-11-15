@@ -1,5 +1,6 @@
 /// The statistics page, opened from the About tab: the totals of the catalogue, and every song, artist, genre or
-/// requester of the Ong Log, the most played (or requesting) first.
+/// requester of the Ong Log, the most played (or requesting) first; and over it, the songs of one artist, genre or
+/// requester.
 library;
 
 import 'dart:math' as math;
@@ -33,8 +34,8 @@ const Map<RankingKind, String> rankingLabels = {
   RankingKind.requesters: 'Requesters',
 };
 
-/// The hint of a row that opens the Ong Log on its plays (an artist, a genre, a requester).
-const String _inOngLogHint = 'Shows them in the Ong Log';
+/// The hint of a row that opens the page of its songs (an artist, a genre, a requester).
+const String _songsHint = 'Shows the songs';
 
 /// Opens the statistics page over the app. Its back arrow, the system's back button, the browser's Back (the page
 /// has a step of its own in the history, at the address of the About tab, as the licences page) and Escape close
@@ -84,94 +85,20 @@ class StatsPage extends ConsumerStatefulWidget {
   ConsumerState<StatsPage> createState() => _StatsPageState();
 }
 
-class _StatsPageState extends ConsumerState<StatsPage> implements ListModel {
-  final _scroll = ScrollController();
-  late final _keyboard = ListKeyboard(tab: null, model: this, scroll: _scroll);
-
-  /// The ranking as the list was built last, and what its rows open.
-  _Shown? _shown;
-
+class _StatsPageState extends ConsumerState<StatsPage> with _RankingListModel<StatsPage> {
   @override
   void initState() {
     super.initState();
-    // before the focused widget: a segment would take the arrows, a button Escape
-    FocusManager.instance.addEarlyKeyEventHandler(_onKey);
     // after the first frame, which must not wait for it, and never while building
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) ref.read(catalogueProvider.notifier).songsWanted(SongsTrigger.stats);
     });
   }
 
-  @override
-  void dispose() {
-    FocusManager.instance.removeEarlyKeyEventHandler(_onKey);
-    _keyboard.dispose();
-    _scroll.dispose();
-    super.dispose();
-  }
-
-  KeyEventResult _onKey(KeyEvent event) {
-    if (!mounted) return KeyEventResult.ignored;
-    // Escape closes the page, as it closes a sheet; not under a sheet or a dialog, which it closes first
-    if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.escape) {
-      if (!nothingOver(context) || isEditingText()) return KeyEventResult.ignored;
-      Navigator.of(context).maybePop();
-      return KeyEventResult.handled;
-    }
-    return _keyboard.handle(event);
-  }
-
   /// Closes the page and what is over it: the app went to a tab (a link of a fiche opened over the page).
   void _close() {
     if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
   }
-
-  // the list for the keyboard: one item per entry, every one a row; ↑ and ↓ stop at those that open something
-
-  @override
-  int get itemCount => _shown?.ranking.length ?? 0;
-
-  @override
-  double offsetOf(int item) => item * _shown!.extent;
-
-  @override
-  double extentOf(int item) => _shown!.extent;
-
-  @override
-  int itemAt(double offset) => (offset / _shown!.extent).floor().clamp(0, math.max(0, itemCount - 1));
-
-  @override
-  bool stopsAt(int item) => _shown!.opens(item);
-
-  @override
-  bool isHeader(int item) => false;
-
-  @override
-  int? headerOf(int item) => null;
-
-  @override
-  int? get pinnedHeader => null;
-
-  @override
-  double get inset => 0;
-
-  @override
-  Object keyOf(int item) => _shown!.keyOf(item);
-
-  @override
-  int itemOf(Object key) => _shown?.itemOf(key) ?? -1;
-
-  @override
-  int? get selected => null;
-
-  @override
-  void choose(int item) => _shown!.open(context, ref, item);
-
-  @override
-  void openDetails(int item) => _shown!.open(context, ref, item);
-
-  @override
-  bool start() => false;
 
   @override
   Widget build(BuildContext context) {
@@ -249,6 +176,8 @@ class _StatsPageState extends ConsumerState<StatsPage> implements ListModel {
             if (!noRoom)
               _CountLine(
                 text: rankingCountLine(view.kind, rankings),
+                // said when it changes: a screen reader hears what the ranking chosen holds, not only its segment
+                live: true,
                 chip: hasMine
                     ? ListChip(label: 'You', icon: Icons.person, selected: mine, onTap: notifier.toggleMine)
                     : null,
@@ -273,6 +202,201 @@ class _StatsPageState extends ConsumerState<StatsPage> implements ListModel {
           ],
         );
       },
+    );
+  }
+}
+
+/// The list of a page of a ranking for its [ListKeyboard], and Escape, which closes the page (as it closes a sheet).
+///
+/// One item per entry, every one a row, all of one extent; ↑ and ↓ stop at those that open something.
+mixin _RankingListModel<W extends ConsumerStatefulWidget> on ConsumerState<W> implements ListModel {
+  final _scroll = ScrollController();
+  late final _keyboard = ListKeyboard(tab: null, model: this, scroll: _scroll);
+
+  /// The ranking as the list was built last, and what its rows open.
+  _Shown? _shown;
+
+  @override
+  void initState() {
+    super.initState();
+    // before the focused widget: a segment would take the arrows, a button Escape
+    FocusManager.instance.addEarlyKeyEventHandler(_onKey);
+  }
+
+  @override
+  void dispose() {
+    FocusManager.instance.removeEarlyKeyEventHandler(_onKey);
+    _keyboard.dispose();
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  KeyEventResult _onKey(KeyEvent event) {
+    if (!mounted) return KeyEventResult.ignored;
+    // not under a sheet, a dialog or another page, which it closes first
+    if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.escape) {
+      if (!nothingOver(context) || isEditingText()) return KeyEventResult.ignored;
+      Navigator.of(context).maybePop();
+      return KeyEventResult.handled;
+    }
+    return _keyboard.handle(event);
+  }
+
+  @override
+  int get itemCount => _shown?.ranking.length ?? 0;
+
+  @override
+  double offsetOf(int item) => item * _shown!.extent;
+
+  @override
+  double extentOf(int item) => _shown!.extent;
+
+  @override
+  int itemAt(double offset) => (offset / _shown!.extent).floor().clamp(0, math.max(0, itemCount - 1));
+
+  @override
+  bool stopsAt(int item) => _shown!.opens(item);
+
+  @override
+  bool isHeader(int item) => false;
+
+  @override
+  int? headerOf(int item) => null;
+
+  @override
+  int? get pinnedHeader => null;
+
+  @override
+  double get inset => 0;
+
+  @override
+  Object keyOf(int item) => _shown!.keyOf(item);
+
+  @override
+  int itemOf(Object key) => _shown?.itemOf(key) ?? -1;
+
+  @override
+  int? get selected => null;
+
+  @override
+  void choose(int item) => _shown!.open(context, ref, item);
+
+  @override
+  void openDetails(int item) => _shown!.open(context, ref, item);
+
+  @override
+  bool start() => false;
+}
+
+/// Opens, over the statistics page, the page of the songs of [entry] (a row of the Artists, Genres or Requesters
+/// ranking), counting the user's own requests alone with [mine]. Its back arrow, the system's back button, the
+/// browser's Back (it has a step of its own, as the statistics page) and Escape return to the ranking, where it was.
+Future<void> showEntrySongs(BuildContext context, RankedEntry entry, {required bool mine}) =>
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => EntrySongsPage(entry: entry, mine: mine),
+      ),
+    );
+
+/// The line of the page of an entry's songs: `25 songs · 717 plays`, `64 songs · 76 requests` for a requester.
+String entrySongsLine(RankedEntry entry, Ranking<Song> songs) =>
+    '${plural(songs.length, 'song')} · ${plural(songs.total, entry is RequesterEntry ? 'request' : 'play')}';
+
+/// The songs of an artist, a genre or a requester, ranked as the Songs ranking: under the name of the entry, pinned,
+/// what the ranking holds, then every song, the most played first. A song opens its fiche.
+///
+/// Its songs are counted once per catalogue, when it opens (one pass over the plays). A refresh brings the songs of
+/// the same entry in the new catalogue (found by its key), or closes the page when the entry is gone; without the
+/// catalogue (cleared), it waits for it as the statistics page does.
+class EntrySongsPage extends ConsumerStatefulWidget {
+  const EntrySongsPage({super.key, required this.entry, required this.mine});
+
+  final RankedEntry entry;
+
+  /// Whether the user's own requests alone are counted ("You" in the ranking it was opened from).
+  final bool mine;
+
+  @override
+  ConsumerState<EntrySongsPage> createState() => _EntrySongsPageState();
+}
+
+class _EntrySongsPageState extends ConsumerState<EntrySongsPage> with _RankingListModel<EntrySongsPage> {
+  /// The name of the entry, as last known: the title while the catalogue is away.
+  String _title = '';
+
+  bool _closing = false;
+
+  /// Back to the ranking: the entry is gone from the catalogue (a refresh). What is over the page goes with it.
+  void _close() {
+    if (_closing) return;
+    _closing = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final route = ModalRoute.of(context);
+      if (route == null || !route.isActive) return;
+      final navigator = Navigator.of(context);
+      navigator.popUntil((r) => identical(r, route));
+      navigator.pop();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final catalogue = ref.watch(currentCatalogueProvider);
+    final Widget body;
+    if (catalogue == null) {
+      _shown = null;
+      body = const CatalogueStatusView(ongLog: true);
+    } else if (!catalogue.hasSongs) {
+      _shown = null;
+      body = const CatalogueStatusView(songs: true);
+    } else {
+      body = _content();
+    }
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(_title, maxLines: 1, overflow: TextOverflow.ellipsis),
+        notificationPredicate: (_) => false,
+      ),
+      body: SafeArea(
+        bottom: false,
+        child: ContentColumn(maxWidth: maxContentWidth, child: body),
+      ),
+    );
+  }
+
+  Widget _content() {
+    final entry = widget.entry;
+    final found = ref.watch(entrySongsProvider((entry, widget.mine)))!;
+    final rankings = found.rankings;
+    final songs = found.songs;
+    if (songs.isEmpty) {
+      // gone with a refresh
+      _shown = null;
+      _close();
+      return const SizedBox.shrink();
+    }
+    _title = rankings.nameOf(entry) ?? _title;
+    final extent = rankingRowExtent(ListMetrics.of(context));
+    final me = ref.watch(myRequesterKeyProvider);
+    final old = _shown;
+    final shown = _shown = old != null && identical(old.ranking, songs) && old.extent == extent && old.me == me
+        ? old
+        : _Songs(rankings, extent, me, songs: songs, unit: entry is RequesterEntry ? 'request' : 'play');
+    final owner = rankings.catalogue.requester(rankings.requesterId)?.name;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _CountLine(text: entrySongsLine(entry, songs), owner: owner),
+        Expanded(
+          child: ListFrame(
+            controller: _scroll,
+            keyboard: _keyboard,
+            songs: true,
+            slivers: [_RankingList(shown: shown, widestRank: _lastRank(songs))],
+          ),
+        ),
+      ],
     );
   }
 }
@@ -312,16 +436,25 @@ class _RankingChoice extends StatelessWidget {
   );
 }
 
-/// The line under the choice: the "You" chip when there is one, and what the ranking holds.
+/// The line under the choice: the "You" chip when there is one, and what the ranking holds; the line of the page of
+/// an entry's songs too, followed by the user's own name ([owner]) when it counts their requests alone.
 class _CountLine extends StatelessWidget {
-  const _CountLine({required this.text, required this.chip});
+  const _CountLine({required this.text, this.chip, this.live = false, this.owner});
 
   final String text;
   final Widget? chip;
 
+  /// A live region: screen readers say it when it changes.
+  final bool live;
+
+  /// The name of the user whose requests alone are counted, shown in orange as in the lists; null for every play.
+  final String? owner;
+
   @override
   Widget build(BuildContext context) {
     final chip = this.chip;
+    final owner = this.owner;
+    final style = TextStyle(fontSize: 12, height: 16 / 12, color: OngColors.of(context).on3);
     // as high without the chip as with it (its tap target): the list under it stays where it is when the chip comes
     // or goes (a refresh brings the user's first request, or takes the last)
     return ConstrainedBox(
@@ -332,11 +465,21 @@ class _CountLine extends StatelessWidget {
           children: [
             if (chip != null) ...[chip, const SizedBox(width: 12)],
             Expanded(
-              child: Text(
-                text,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 12, height: 16 / 12, color: OngColors.of(context).on3),
+              child: Semantics(
+                liveRegion: live,
+                child: owner == null
+                    ? Text(text, maxLines: 1, overflow: TextOverflow.ellipsis, style: style)
+                    : RequesterText(
+                        TextSpan(
+                          children: [
+                            TextSpan(text: '$text · '),
+                            personIcon(style.color!),
+                            ...requesterSpans(context, owner, const [], own: true),
+                          ],
+                        ),
+                        maxLines: 1,
+                        style: style,
+                      ),
               ),
             ),
           ],
@@ -405,7 +548,7 @@ sealed class _Shown {
   void open(BuildContext context, WidgetRef ref, int item);
 
   /// The hint of a row that [opens] something.
-  String get hint => _inOngLogHint;
+  String get hint => _songsHint;
 
   /// The title as a span, for a title that is not plain text (the user's own name).
   InlineSpan? titleSpan(BuildContext context, int item) => null;
@@ -429,13 +572,20 @@ sealed class _Shown {
 }
 
 final class _Songs extends _Shown {
-  _Songs(super.rankings, super.extent, super.me);
+  /// The Songs ranking of [rankings], or [songs] (those of an entry) counted in [unit] (`play`, `request`).
+  _Songs(super.rankings, super.extent, super.me, {Ranking<Song>? songs, this.unit = 'play'}) : _songs = songs;
+
+  final Ranking<Song>? _songs;
+  final String unit;
 
   @override
   RankingKind get kind => RankingKind.songs;
 
   @override
-  late final Ranking<Song> ranking = rankings.songs;
+  late final Ranking<Song> ranking = _songs ?? rankings.songs;
+
+  @override
+  String spokenCount(int item) => plural(ranking.counts[item], unit);
 
   @override
   Object _keyOf(int item) => ranking.entries[item].key;
@@ -477,12 +627,9 @@ final class _Artists extends _Shown {
   @override
   String subtitle(int item) => plural(ranking.entries[item].songCount, 'song');
 
-  /// The Ong Log searching the artist's name (which finds the titles holding it elsewhere too).
   @override
-  void open(BuildContext context, WidgetRef ref, int item) {
-    Navigator.of(context).pop();
-    showInOngLog(ref, query: ranking.entries[item].name, mine: mine);
-  }
+  void open(BuildContext context, WidgetRef ref, int item) =>
+      showEntrySongs(context, ArtistEntry(ranking.entries[item].folded), mine: mine);
 }
 
 final class _Genres extends _Shown {
@@ -506,17 +653,9 @@ final class _Genres extends _Shown {
   @override
   Color barColor(BuildContext context, int item) => genreColors[ranking.entries[item]]!;
 
-  /// The genres of the chips of the Ong Log: not "Other", which has none.
   @override
-  bool opens(int item) => ranking.entries[item] != Genre.other;
-
-  /// The Ong Log on the chip of the genre.
-  @override
-  void open(BuildContext context, WidgetRef ref, int item) {
-    if (!opens(item)) return;
-    Navigator.of(context).pop();
-    showInOngLog(ref, genre: ranking.entries[item], mine: mine);
-  }
+  void open(BuildContext context, WidgetRef ref, int item) =>
+      showEntrySongs(context, GenreEntry(ranking.entries[item]), mine: mine);
 }
 
 final class _Requesters extends _Shown {
@@ -559,12 +698,9 @@ final class _Requesters extends _Shown {
   InlineSpan? titleSpan(BuildContext context, int item) =>
       _own(item) ? TextSpan(children: requesterSpans(context, ranking.entries[item].name, const [], own: true)) : null;
 
-  /// The Ong Log on the requests of the requester, as "Requested by …" of a fiche.
   @override
-  void open(BuildContext context, WidgetRef ref, int item) {
-    Navigator.of(context).pop();
-    showRequesterInOngLog(ref, ranking.entries[item].name);
-  }
+  void open(BuildContext context, WidgetRef ref, int item) =>
+      showEntrySongs(context, RequesterEntry(ranking.entries[item].folded), mine: mine);
 }
 
 /// The rows of a ranking, built lazily, all of one extent.

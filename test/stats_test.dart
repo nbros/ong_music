@@ -13,6 +13,7 @@ import 'package:ong_music/src/ui/layout.dart';
 import 'package:ong_music/src/ui/sheets.dart';
 import 'package:ong_music/src/ui/stats_page.dart';
 import 'package:ong_music/src/ui/view_state.dart';
+import 'package:ong_music/src/ui/widgets.dart';
 
 import 'fixtures.dart';
 import 'ui_harness.dart';
@@ -391,43 +392,168 @@ void main() {
       expect(find.byType(StatsPage), findsOneWidget);
     });
 
-    testWidgets('a requester: their requests in the Ong Log, the page closed', (tester) async {
+    testWidgets('an artist: the ranking of its songs over the page, counted as its row', (tester) async {
+      final handle = tester.ensureSemantics();
+      await pumpApp(tester);
+      await openStats(tester);
+      await showRanking(tester, 'Artists');
+      expect(tester.widget<Semantics>(rows().last).properties.hint, 'Shows the songs');
+      await tester.tap(find.text('Zelda'));
+      await tester.pumpAndSettle();
+      expect(find.byType(EntrySongsPage), findsOneWidget);
+      expect(find.widgetWithText(AppBar, 'Zelda'), findsOneWidget);
+      expect(find.byType(BackButton), findsOneWidget);
+      expect(find.text('2 songs · 2 plays'), findsOneWidget);
+      expect(rowSentences(tester), ['Rank 1, Lost Woods, Zelda, 1 play', 'Rank 1, Song of Storms, Zelda, 1 play']);
+      expect(tester.widget<Semantics>(rows().first).properties.hint, 'Shows the details');
+      // nothing left the statistics
+      expect(container(tester).read(selectedTabProvider), AppTab.about);
+      expect(container(tester).read(playFilterProvider), const PlayFilter());
+      handle.dispose();
+    });
+
+    testWidgets('a genre, "Other" included: its songs', (tester) async {
+      await pumpApp(
+        tester,
+        state: loadedState(
+          testCatalogue(
+            moreSongs: [sRow(date: '2024-03-02 22:00:00', title: 'Odd One', genre: 'SOMETHING ELSE')],
+          ),
+          testNow,
+        ),
+      );
+      await openStats(tester);
+      await showRanking(tester, 'Genres');
+      await tester.tap(find.text('Other'));
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(AppBar, 'Other'), findsOneWidget);
+      expect(rowSentences(tester), ['Rank 1, Odd One, 1 play']);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Popular'));
+      await tester.pumpAndSettle();
+      expect(find.text('1 song · 2 plays'), findsOneWidget);
+      expect(rowSentences(tester), ['Rank 1, I Will Survive, Gloria Gaynor, 2 plays']);
+    });
+
+    testWidgets('a requester: their requests, song by song, in the statistics', (tester) async {
       await pumpApp(tester);
       await openStats(tester);
       await showRanking(tester, 'Requesters');
-      await tester.tap(find.text('MannyHub'));
+      await tester.tap(find.text('jsbach64'));
       await tester.pumpAndSettle();
-      expect(find.byType(StatsPage), findsNothing);
-      expect(selectedTab(tester), 1);
-      expect(container(tester).read(playFilterProvider).query, 'MannyHub');
+      expect(find.widgetWithText(AppBar, 'jsbach64'), findsOneWidget);
+      expect(find.text('2 songs · 2 requests'), findsOneWidget);
+      expect(rowSentences(tester), [
+        'Rank 1, Lost Woods, Zelda, 1 request',
+        'Rank 1, Song of Storms, Zelda, 1 request',
+      ]);
+      expect(container(tester).read(selectedTabProvider), AppTab.about);
+      expect(container(tester).read(playFilterProvider).query, isEmpty);
     });
 
-    testWidgets('an artist: the Ong Log searching it, among the user\'s requests with "You"', (tester) async {
-      await pumpApp(tester, prefs: {'twitchName': 'jsbach64'});
-      await openStats(tester);
-      await showRanking(tester, 'Artists');
-      await tester.tap(find.text('Gloria Gaynor'));
-      await tester.pumpAndSettle();
-      expect(find.byType(StatsPage), findsNothing);
-      expect(selectedTab(tester), 1);
-      expect(container(tester).read(playFilterProvider), const PlayFilter(query: 'Gloria Gaynor'));
+    testWidgets('with "You": the user\'s own requests alone, their name in orange on the line', (tester) async {
+      await pumpApp(tester, prefs: {'twitchName': 'shadowvanta'});
       await openStats(tester);
       await tester.tap(chip('You'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Zelda'));
-      await tester.pumpAndSettle();
-      expect(container(tester).read(playFilterProvider), const PlayFilter(query: 'Zelda', mine: true));
-    });
-
-    testWidgets('a genre: the Ong Log on its chip', (tester) async {
-      await pumpApp(tester);
-      await openStats(tester);
       await showRanking(tester, 'Genres');
       await tester.tap(find.text('Popular'));
       await tester.pumpAndSettle();
+      // I Will Survive was played twice, once at their request
+      expect(rowSentences(tester), ['Rank 1, I Will Survive, Gloria Gaynor, 1 play']);
+      final line = find.descendant(of: find.byType(EntrySongsPage), matching: find.byType(RequesterText));
+      expect(line, findsOneWidget);
+      expect(tester.widget<RequesterText>(line).span.toPlainText(), contains('1 song · 1 play · '));
+      expect(tester.widget<RequesterText>(line).span.toPlainText(), contains('shadowvanta'));
+      // the chip is not there
+      expect(chip('You'), findsNothing);
+    });
+
+    testWidgets('a song of the page of an entry opens its fiche; Escape closes one, then the other', (tester) async {
+      await pumpApp(tester);
+      await openStats(tester);
+      await showRanking(tester, 'Artists');
+      await tester.tap(find.text('Zelda'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Lost Woods'));
+      await tester.pumpAndSettle();
+      expect(tester.widget<SongSheet>(find.byType(SongSheet)).song.track, 'Lost Woods');
+      for (final shown in [EntrySongsPage, StatsPage, AboutPage]) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pumpAndSettle();
+        expect(find.byType(shown), findsOneWidget, reason: '$shown');
+      }
       expect(find.byType(StatsPage), findsNothing);
-      expect(selectedTab(tester), 1);
-      expect(container(tester).read(playFilterProvider).genre?.label, 'Popular');
+    });
+
+    for (final (name, back) in [
+      ('the back arrow', (WidgetTester tester) => tester.tap(find.byType(BackButton))),
+      ('the system Back', (WidgetTester tester) => tester.binding.handlePopRoute()),
+      ('Escape', (WidgetTester tester) => tester.sendKeyEvent(LogicalKeyboardKey.escape)),
+    ]) {
+      testWidgets('$name returns to the ranking, at the place it was left', (tester) async {
+        await pumpApp(
+          tester,
+          state: loadedState(
+            testCatalogue(
+              moreSongs: [
+                for (var i = 0; i < 200; i++) sRow(date: '2024-03-02 23:00:00', title: 'Artist $i - Track $i'),
+              ],
+            ),
+            testNow,
+          ),
+        );
+        await openStats(tester);
+        await showRanking(tester, 'Artists');
+        final position = tester.state<ScrollableState>(rankingScrollable()).position;
+        position.jumpTo(3000);
+        await tester.pumpAndSettle();
+        await tester.tap(rows().hitTestable().first);
+        await tester.pumpAndSettle();
+        expect(find.byType(EntrySongsPage), findsOneWidget);
+        await back(tester);
+        await tester.pumpAndSettle();
+        expect(find.byType(EntrySongsPage), findsNothing);
+        expect(find.byType(StatsPage), findsOneWidget);
+        expect(tester.state<ScrollableState>(rankingScrollable()).position.pixels, 3000);
+        expect(container(tester).read(statsViewProvider).kind, RankingKind.artists);
+      });
+    }
+
+    testWidgets('a refresh: the page of an entry follows it in the new catalogue, and closes when it is gone', (
+      tester,
+    ) async {
+      final app = await pumpApp(tester);
+      await openStats(tester);
+      await showRanking(tester, 'Artists');
+      await tester.tap(find.text('Zelda'));
+      await tester.pumpAndSettle();
+      app.notifier.emit(
+        loadedState(
+          testCatalogue(
+            moreSongs: [sRow(date: '2024-03-02 23:00:00', title: 'zelda - Gerudo Valley')],
+          ),
+          testNow,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('3 songs · 3 plays'), findsOneWidget);
+      expect(find.text('Gerudo Valley'), findsOneWidget);
+      // cleared: it waits, as the statistics do
+      app.notifier.emit(const CatalogueState(isRefreshing: true));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.text('Loading the Ong Log…'), findsOneWidget);
+      expect(find.widgetWithText(AppBar, 'Zelda'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      // back with a catalogue without Zelda: back to the ranking
+      app.notifier.emit(loadedState(catalogueOf(), testNow));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.byType(EntrySongsPage), findsNothing);
+      expect(find.byType(StatsPage), findsOneWidget);
+      expect(find.text('Some song'), findsNothing, reason: 'the ranking of artists: Some song has none');
     });
 
     testWidgets('a tab reached from a fiche over the page closes both', (tester) async {
@@ -483,7 +609,7 @@ void main() {
       expect(browser.left, isFalse);
     });
 
-    testWidgets('in the web app, a requester tapped: the Ong Log in a step of its own, Back returns to About', (
+    testWidgets('in the web app, the page of an entry has a step of its own too: Back, then Back again', (
       tester,
     ) async {
       final browser = FakeBrowser('/about');
@@ -494,10 +620,72 @@ void main() {
       await showRanking(tester, 'Requesters');
       await tester.tap(find.text('MannyHub'));
       await settle(tester);
-      expect(browser.history, ['/about', '/log?q=MannyHub']);
+      expect(browser.history, ['/about', '/about +1', '/about +2']);
       await browser.back();
-      expect(selectedTab(tester), 2);
+      expect(find.byType(EntrySongsPage), findsNothing);
+      expect(find.byType(StatsPage), findsOneWidget);
+      await browser.back();
       expect(find.byType(StatsPage), findsNothing);
+      expect(selectedTab(tester), 2);
+      expect(browser.left, isFalse);
+    });
+  });
+
+  group('refreshes', () {
+    testWidgets('a complete catalogue replaced while the page is open: the ranking chosen stays', (tester) async {
+      final app = await pumpApp(tester);
+      await openStats(tester);
+      await showRanking(tester, 'Genres');
+      app.notifier.emit(
+        loadedState(
+          testCatalogue(
+            moreSongs: [sRow(date: '2024-03-02 23:00:00', title: 'Moana - Shiny', genre: 'DISNEY')],
+          ),
+          testNow,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(container(tester).read(statsViewProvider).kind, RankingKind.genres);
+      expect(find.text('3 genres'), findsOneWidget);
+      expect(rowSentences(tester).last, 'Rank 3, Disney, 1 play, 20.0%');
+    });
+
+    testWidgets('"You" on, then the user\'s requests gone: the chip and its filter go, nothing thrown', (tester) async {
+      final app = await pumpApp(tester, prefs: {'twitchName': 'jsbach64'});
+      await openStats(tester);
+      await tester.tap(chip('You'));
+      await tester.pumpAndSettle();
+      await showRanking(tester, 'Requesters');
+      expect(rowSentences(tester), hasLength(1));
+      // jsbach64 still requested a highlight, but no song
+      app.notifier.emit(
+        loadedState(
+          catalogueOf(
+            highlights: [hRow(title: 'Zelda - Song of Storms', requester: 'jsbach64')],
+            songs: [
+              start('2024-03-01'),
+              for (final requester in ['MannyHub', 'shadowvanta'])
+                sRow(date: '2024-03-01 20:00:00', title: 'Gloria Gaynor - I Will Survive', requester: requester),
+            ],
+          ),
+          testNow,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(chip('You'), findsNothing);
+      expect(container(tester).read(statsViewProvider).mine, isFalse);
+      expect(rowSentences(tester), ['Rank 1, MannyHub, 1 request, 1 song', 'Rank 1, shadowvanta, 1 request, 1 song']);
+    });
+
+    testWidgets('a change of ranking is said: the line of what it holds is a live region', (tester) async {
+      final handle = tester.ensureSemantics();
+      await pumpApp(tester);
+      await openStats(tester);
+      await showRanking(tester, 'Artists');
+      expect(tester.getSemantics(find.text('2 artists')), matchesSemantics(label: '2 artists', isLiveRegion: true));
+      handle.dispose();
     });
   });
 
