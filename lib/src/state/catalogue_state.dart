@@ -881,11 +881,6 @@ class CatalogueNotifier extends Notifier<CatalogueState> {
       return;
     }
     if (generation != _generation) return;
-    // whatever the fetcher (the one over HTTP stops reading beyond it): a code unit is at least a byte of UTF-8
-    if (text.length > file.maxBytes) {
-      logger.w('${file.fileName} not taken: larger than ${file.maxBytes} bytes');
-      return;
-    }
     final copy = CachedSheet(text: text, fetchedAt: ref.read(clockProvider)());
     if (!_takeData(file, copy)) return;
     try {
@@ -901,6 +896,12 @@ class CatalogueNotifier extends Notifier<CatalogueState> {
   /// is not, and what was taken before stays, kept.
   bool _takeData(DataFile file, CachedSheet copy) {
     final previous = _data[file];
+    // whatever gave it, the fetcher (the one over HTTP stops reading beyond the bound) or the copy kept by an
+    // earlier version: a larger text is not parsed
+    if (previous?.text != copy.text && dataFileTooLarge(file, copy.text)) {
+      logger.w('${file.fileName} not taken: larger than ${file.maxBytes} bytes');
+      return false;
+    }
     switch (file) {
       case DataFile.vods:
         if (previous?.text == copy.text) break;

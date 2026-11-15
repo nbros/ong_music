@@ -15,6 +15,7 @@ import 'package:ong_music/src/ui/sheets.dart';
 import 'package:ong_music/src/ui/widgets.dart';
 
 import 'keyboard_test.dart' show enterList, focusUnder, focusedIndex, narrow, press;
+import 'fixtures.dart';
 import 'ui_harness.dart';
 
 // The streams of the test catalogue have no time on their "Stream Start" rows: their keys are their dates.
@@ -292,6 +293,33 @@ void main() {
       await tester.tap(find.descendant(of: find.byType(StreamSheet), matching: find.byType(VodButton)));
       await tester.pumpAndSettle();
       expect(app.effects.opened.last.toString(), 'https://youtu.be/vod3ccccccc?t=7380');
+    });
+
+    testWidgets('open in the pane through a refresh of the sheets: as many buttons as when it opened', (tester) async {
+      final app = await pumpApp(tester, size: const Size(1280, 800));
+      await goToTab(tester, 'Ong Log');
+      // one part when the fiche opens
+      await _arrive(tester, VodFile.parse('date\tpart\tid\n2024-03-02\t1\tvod3ccccccc'));
+      await tester.tap(find.widgetWithText(StreamHeader, 'Sat 2 Mar 2024'));
+      await tester.pumpAndSettle();
+      final button = tester.getRect(find.text('Watch the VOD'));
+      // two parts in the next file, then the sheets again: another object for the same stream
+      await _arrive(tester);
+      app.notifier.emit(
+        loadedState(
+          testCatalogue(
+            moreSongs: [sRow(date: '2024-03-02 23:30:00', title: 'One more song')],
+          ),
+          testNow,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.descendant(of: find.byType(StreamSheet), matching: find.text('One more song')), findsOneWidget);
+      expect(tester.getRect(find.text('Watch the VOD')), button);
+      expect(find.text('Watch the VOD, part 2'), findsNothing);
+      await tester.tap(find.text('Watch the VOD'));
+      await tester.pumpAndSettle();
+      expect(app.effects.opened.last.toString(), 'https://youtu.be/$_second');
     });
 
     testWidgets('open when the file comes: its head stays as it is, nothing pushed down', (tester) async {

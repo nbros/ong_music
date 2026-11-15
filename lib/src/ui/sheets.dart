@@ -993,20 +993,18 @@ class _StreamSheetState extends ConsumerState<StreamSheet> {
   final _controller = ScrollController();
   final _headerKey = GlobalKey();
 
-  /// How many buttons of the VOD of [_vodStream] the head shows: the number of its parts when the fiche first
-  /// showed it. A file of the VODs coming while it is open adds or removes no button, which would move the setlist
-  /// (they show the next time); the buttons shown open the links of the file taken last ([_vodButtons]).
-  LiveStream? _vodStream;
-  int _vodButtonCount = 0;
+  /// How many buttons of the stream's VOD the head shows: the number of its parts when the fiche first showed it,
+  /// for as long as the fiche is open (this state is that of one fiche: its host is keyed by `Fiche.identity`). A
+  /// file of the VODs coming while it is open adds or removes no button, which would move the setlist (they show
+  /// the next time), and neither does a refresh of the sheets, which gives the fiche another object for the same
+  /// stream; the buttons shown open the links of the file taken last ([_vodButtons]).
+  int? _vodButtonCount;
 
-  /// The buttons of the head for [stream]: as many as [_vodButtonCount], each with the current link of its part
-  /// (null when the current file no longer has that part: the button stays, disabled).
-  List<Uri?> _vodButtons(LiveStream stream, List<Uri> current) {
-    if (!identical(_vodStream, stream)) {
-      _vodStream = stream;
-      _vodButtonCount = current.length;
-    }
-    return [for (var i = 0; i < _vodButtonCount; i++) i < current.length ? current[i] : null];
+  /// The buttons of the head: as many as [_vodButtonCount], each with the current link of its part (null when the
+  /// current file no longer has that part: the button stays, disabled).
+  List<Uri?> _vodButtons(List<Uri> current) {
+    final count = _vodButtonCount ??= current.length;
+    return [for (var i = 0; i < count; i++) i < current.length ? current[i] : null];
   }
 
   @override
@@ -1043,7 +1041,7 @@ class _StreamSheetState extends ConsumerState<StreamSheet> {
     final metrics = ListMetrics.of(context);
     final videos = s.highlightIds.length;
     final shape = _paneRowShape(context);
-    final vod = _vodButtons(s, vodLinksFor(catalogue, ref.watch(vodFileProvider))?.streamLinks(s) ?? const []);
+    final vod = _vodButtons(vodLinksFor(catalogue, ref.watch(vodFileProvider))?.streamLinks(s) ?? const []);
     return _SheetBody(
       controller: _controller,
       slivers: [

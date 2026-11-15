@@ -307,6 +307,38 @@ void main() {
       expect(parser.aliases.single!.keyOf('amyy'), parser.aliases.single!.keyOf('amy'));
     });
 
+    test('the bound is in bytes, and holds for a copy kept before: not parsed at the start offline', () async {
+      // two bytes a letter: fewer code units than the bound, more bytes
+      final wide = '$_vods\n#${'é' * (maxVodsBytes ~/ 2)}';
+      expect(wide.length, lessThan(maxVodsBytes));
+      expect(dataFileTooLarge(DataFile.vods, wide), isTrue);
+      expect(dataFileTooLarge(DataFile.vods, '#${'é' * (maxVodsBytes ~/ 2 - 1)}'), isFalse, reason: 'at the bound');
+      expect(dataFileTooLarge(DataFile.vods, _vods), isFalse);
+      for (final text in [wide, '$_vods\n${'#' * maxVodsBytes}']) {
+        branch = FakeDataBranch({
+          DataFile.vods: [const SocketException('offline')],
+          DataFile.aliases: [const SocketException('offline')],
+        });
+        startWith(
+          sheetsAge: const Duration(days: 1),
+          kept: {DataFile.vods: copy(text, age: const Duration(days: 1))},
+        );
+        google.add(const SocketException('offline'));
+        await notifier().idle;
+        expect(container.read(vodFileProvider), isNull, reason: '${text.length} code units');
+      }
+      // and a download of that kind is not taken either
+      branch = FakeDataBranch({
+        DataFile.vods: [wide],
+        DataFile.aliases: [_aliases],
+      });
+      startWith(sheetsAge: const Duration(days: 1));
+      google.add(_sheets('v1'));
+      await notifier().idle;
+      expect(container.read(vodFileProvider), isNull);
+      expect(dataCache.writes, [DataFile.aliases]);
+    });
+
     test('larger than its bound: a failed download, whatever the fetcher', () async {
       final big = '$_vods\n${'#' * maxVodsBytes}';
       final bigTable = '$_aliases${'#' * maxAliasesBytes}';

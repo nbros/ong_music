@@ -7,6 +7,7 @@
 library;
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
@@ -80,6 +81,15 @@ final class NoDataFiles implements DataFileFetcher {
 
   @override
   Future<String> fetch(DataFile file) async => throw StateError('No data files');
+}
+
+/// Whether [text] is larger than [file] may be (`DataFile.maxBytes`), in bytes of UTF-8: counted only when the
+/// number of its code units does not tell (a code unit is one to three bytes).
+bool dataFileTooLarge(DataFile file, String text) {
+  final max = file.maxBytes;
+  if (text.length > max) return true;
+  if (text.length * 3 <= max) return false;
+  return utf8.encode(text).length > max;
 }
 
 /// [DataFileFetcher] over HTTP, read as the sheets are (UTF-8 whatever the declared charset, a [SheetHttpException]
