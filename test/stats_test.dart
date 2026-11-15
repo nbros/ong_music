@@ -6,6 +6,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:ong_music/src/data/rankings.dart';
 import 'package:ong_music/src/state/catalogue_state.dart';
+import 'package:ong_music/src/state/settings_state.dart';
+import 'package:ong_music/src/ui/about_page.dart';
 import 'package:ong_music/src/ui/app.dart';
 import 'package:ong_music/src/ui/layout.dart';
 import 'package:ong_music/src/ui/sheets.dart';
@@ -95,6 +97,41 @@ void main() {
       expect(tester.getRect(find.text('Statistics')), before);
     });
 
+    testWidgets('the tables of the rankings are made ahead once About has stayed on screen, not before', (
+      tester,
+    ) async {
+      final catalogue = testCatalogue();
+      await pumpApp(tester, state: loadedState(catalogue, testNow.subtract(const Duration(hours: 2))));
+      // on another tab: never
+      await tester.pump(rankingsAheadDelay * 3);
+      expect(hasRankingTables(catalogue), isFalse);
+      await goToTab(tester, 'About');
+      expect(hasRankingTables(catalogue), isFalse);
+      await tester.pump(rankingsAheadDelay);
+      expect(hasRankingTables(catalogue), isTrue);
+    });
+
+    testWidgets('they are not made while something moves, nor without the Songs sheet', (tester) async {
+      final catalogue = testCatalogue();
+      final fetchedAt = testNow.subtract(const Duration(hours: 1));
+      final app = await pumpApp(
+        tester,
+        state: CatalogueState(catalogue: catalogue.highlightsOnly, fetchedAt: fetchedAt),
+      );
+      await goToTab(tester, 'About');
+      await tester.pump(rankingsAheadDelay * 2);
+      expect(hasRankingTables(catalogue.highlightsOnly), isFalse);
+      app.notifier.emit(CatalogueState(catalogue: catalogue, fetchedAt: fetchedAt, songsFetchedAt: fetchedAt));
+      await tester.pumpAndSettle();
+      // a frame is waiting when the delay ends (a scroll, an animation): later
+      tester.binding.scheduleFrame();
+      await tester.binding.delayed(rankingsAheadDelay);
+      expect(hasRankingTables(catalogue), isFalse);
+      await tester.pump();
+      await tester.pump(rankingsAheadDelay);
+      expect(hasRankingTables(catalogue), isTrue);
+    });
+
     testWidgets('one button for screen readers', (tester) async {
       final handle = tester.ensureSemantics();
       await pumpApp(tester);
@@ -125,6 +162,22 @@ void main() {
       expect(find.text('2 genres'), findsOneWidget);
       await showRanking(tester, 'Requesters');
       expect(find.text('3 requesters'), findsOneWidget);
+    });
+
+    testWidgets('the list stays where it is when the "You" chip goes and comes back', (tester) async {
+      await pumpApp(tester, prefs: {'twitchName': 'shadowvanta'});
+      await openStats(tester);
+      expect(chip('You'), findsOneWidget);
+      final withChip = tester.getRect(rows().first);
+      final name = container(tester).read(twitchNameProvider.notifier);
+      await name.set('nobody');
+      await tester.pumpAndSettle();
+      expect(chip('You'), findsNothing);
+      expect(tester.getRect(rows().first), withChip);
+      await name.set('shadowvanta');
+      await tester.pumpAndSettle();
+      expect(chip('You'), findsOneWidget);
+      expect(tester.getRect(rows().first), withChip);
     });
 
     testWidgets('no "You" chip without a Twitch name, nor for a name without request', (tester) async {

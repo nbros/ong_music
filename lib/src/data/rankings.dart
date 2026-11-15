@@ -13,15 +13,16 @@ import 'text.dart';
 /// What the statistics page ranks.
 enum RankingKind { songs, artists, genres, requesters }
 
-/// An artist (or work) of the Ong Log: the part of the titles before their first ` - ` (see [splitTitle]), with case
-/// and accents folded, so that `Pokémon` and `pokemon` are one.
+/// An artist (or work) of the Ong Log: the part of the titles before their first ` - ` (see [splitTitle]), merged as
+/// the songs are ([songKey]): whatever the case, the accents and the punctuation, so that `Pokémon` and `pokemon`
+/// are one, and `NieR: Automata` and `NieR Automata`.
 final class Artist {
   const Artist({required this.name, required this.folded, required this.songCount});
 
   /// Its most played spelling.
   final String name;
 
-  /// [fold] of the spellings: the merge key.
+  /// The merge key of its spellings: their [songKey], or their [fold] for a name without letter or digit.
   final String folded;
 
   /// Number of different songs of it among the plays counted.
@@ -161,8 +162,8 @@ final class _Tables {
     return titleSong;
   }();
 
-  /// The artists: the index of the artist of each title (-1 for a title without one), the folded name of each
-  /// artist, its most played spelling, and their alphabetical order.
+  /// The artists: the index of the artist of each title (-1 for a title without one), the merge key of each
+  /// artist (see [Artist.folded]), its most played spelling, and their alphabetical order.
   late final ({Int32List ofTitle, List<String> folds, List<String> names, Int32List order}) artists = () {
     final titles = catalogue.titles;
     final playsOfTitle = Int32List(titles.length);
@@ -178,7 +179,8 @@ final class _Tables {
         ofTitle[t] = -1;
         continue;
       }
-      final a = index.putIfAbsent(fold(artist), () {
+      final key = songKey(artist);
+      final a = index.putIfAbsent(key.isEmpty ? fold(artist) : key, () {
         spellings.add({});
         return spellings.length - 1;
       });
@@ -215,6 +217,19 @@ final class _Tables {
 
   static final Int32List genreOrder = alphabeticalOrder([for (final g in Genre.values) fold(g.label)]);
 }
+
+/// Makes ahead what the rankings of [catalogue] share (the tables, with the alphabetical orders of its songs and of
+/// its artists: most of the cost of the first ranking shown, some tens of milliseconds), so that the statistics page
+/// opens without it. Nothing without the Songs sheet, nor a second time for one catalogue.
+void makeRankingTables(Catalogue catalogue) {
+  if (!catalogue.hasSongs || hasRankingTables(catalogue)) return;
+  CatalogueRankings(catalogue)
+    ..songs
+    ..artists;
+}
+
+/// Whether the tables of the rankings of [catalogue] are made (see [makeRankingTables]).
+bool hasRankingTables(Catalogue catalogue) => _Tables._cache[catalogue] != null;
 
 /// The four rankings of a catalogue, of every play or of the requests of one requester alone (the "You" chip). Each
 /// one is made when first read; the tables they share once per catalogue.

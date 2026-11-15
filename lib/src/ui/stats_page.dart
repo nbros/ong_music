@@ -42,7 +42,7 @@ const String _inOngLogHint = 'Shows them in the Ong Log';
 Future<void> showStatsPage(BuildContext context) =>
     Navigator.of(context).push(MaterialPageRoute<void>(builder: (context) => const StatsPage()));
 
-/// The totals of the head: `1,426 streams · 31,430 plays · 10,644 songs · 1,955 highlights`. The songs are those
+/// The totals of the head: `1,426 streams · 31,508 plays · 10,644 songs · 1,955 highlights`. The songs are those
 /// played live, which the Songs ranking lists.
 String statsTotals(Catalogue catalogue, CatalogueRankings rankings) => [
   plural(catalogue.streamCount, 'stream'),
@@ -322,20 +322,25 @@ class _CountLine extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final chip = this.chip;
-    return Padding(
-      padding: EdgeInsets.fromLTRB(16, chip == null ? 8 : 0, 16, chip == null ? 8 : 0),
-      child: Row(
-        children: [
-          if (chip != null) ...[chip, const SizedBox(width: 12)],
-          Expanded(
-            child: Text(
-              text,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 12, height: 16 / 12, color: OngColors.of(context).on3),
+    // as high without the chip as with it (its tap target): the list under it stays where it is when the chip comes
+    // or goes (a refresh brings the user's first request, or takes the last)
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 48),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Row(
+          children: [
+            if (chip != null) ...[chip, const SizedBox(width: 12)],
+            Expanded(
+              child: Text(
+                text,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 12, height: 16 / 12, color: OngColors.of(context).on3),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

@@ -3,11 +3,13 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:vector_graphics/vector_graphics.dart';
 
 import '../data/catalogue.dart';
+import '../data/rankings.dart';
 import '../data/schedule.dart';
 import '../state/catalogue_state.dart';
 import '../state/settings_state.dart';
@@ -506,17 +508,67 @@ class _LinkTile extends StatelessWidget {
   }
 }
 
+/// How long the About tab stays on screen, with nothing moving, before the tables of the rankings are made ahead
+/// (see [_StatsEntry]).
+const Duration rankingsAheadDelay = Duration(milliseconds: 600);
+
 /// The row that opens the statistics page: an icon, its name and a chevron on a tile of [color], as the link tiles
 /// above it. Nothing in it depends on the data: it stays as it is when the data comes.
-class _StatsEntry extends StatelessWidget {
+///
+/// While the About tab is on screen with the Ong Log's data, it makes ahead what the rankings share
+/// ([makeRankingTables]), once per catalogue, at a moment when nothing moves (no animation, no frame to draw: not
+/// during a scroll): some tens of milliseconds that the opening of the page would otherwise spend in its first
+/// frame.
+class _StatsEntry extends ConsumerStatefulWidget {
   const _StatsEntry({required this.color});
 
   final Color color;
 
   @override
+  ConsumerState<_StatsEntry> createState() => _StatsEntryState();
+}
+
+class _StatsEntryState extends ConsumerState<_StatsEntry> {
+  Timer? _ahead;
+
+  @override
+  void initState() {
+    super.initState();
+    ref.listenManual(selectedTabProvider, (_, _) => _makeAhead(), fireImmediately: true);
+    ref.listenManual(currentCatalogueProvider, (_, _) => _makeAhead());
+  }
+
+  /// Makes the tables after [rankingsAheadDelay], if the tab is About and the catalogue has the Songs sheet; later
+  /// while something moves.
+  void _makeAhead() {
+    _ahead?.cancel();
+    _ahead = null;
+    final catalogue = ref.read(currentCatalogueProvider);
+    if (ref.read(selectedTabProvider) != AppTab.about ||
+        catalogue == null ||
+        !catalogue.hasSongs ||
+        hasRankingTables(catalogue)) {
+      return;
+    }
+    _ahead = Timer(rankingsAheadDelay, () {
+      _ahead = null;
+      final scheduler = SchedulerBinding.instance;
+      if (scheduler.transientCallbackCount > 0 || scheduler.hasScheduledFrame) return _makeAhead();
+      makeRankingTables(catalogue);
+    });
+  }
+
+  @override
+  void dispose() {
+    _ahead?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     void open() => showStatsPage(context);
+    final color = widget.color;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
       child: Semantics(

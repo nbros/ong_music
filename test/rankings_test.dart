@@ -79,6 +79,27 @@ void main() {
       expect([for (final a in artists.entries) a.songCount], [2, 2]);
     });
 
+    test('one artist whatever the punctuation too, as the songs are merged', () {
+      final c = catalogueOf(
+        songs: [
+          start('2024-01-01'),
+          play('NieR: Automata - Weight of the World'),
+          play('NieR: Automata - Weight of the World'),
+          play('NieR Automata - Weight of the World'),
+          play('NieR:Automata - City Ruins'),
+          play('Boney M. - Rasputin'),
+          play('Boney M - Rasputin'),
+          // without letter or digit: by its folded spelling, apart from the others
+          play('!!! - Slyd'),
+        ],
+      );
+      final artists = CatalogueRankings(c).artists;
+      expect([for (final a in artists.entries) a.name], ['NieR: Automata', 'Boney M.', '!!!']);
+      expect(artists.counts, [4, 2, 1]);
+      // "Weight of the World" is one song of one artist, however the artist is written
+      expect([for (final a in artists.entries) a.songCount], [2, 1, 1]);
+    });
+
     test('the plays of titles without artist are counted apart', () {
       expect(rankings.playsWithoutArtist, 2);
       expect(artists.total + rankings.playsWithoutArtist, catalogue.playCount);
