@@ -13,7 +13,7 @@ import 'text.dart';
 ///
 /// A name belongs to one group at most (the tests check it). A name in no group is a requester of its own, as before.
 const requesterAliasTable = r'''
-COREYT0WNS, COREYTOWNZ, COREYTOWNS, COREYTOWN, COREY T OWNS, coreyt, COREYT0WN, coreytownss, coreytow, COREYT0WNZ, COREYT0WNS0
+COREYT0WNS, COREYTOWNZ, COREYTOWNS, COREYTOWN, COREY T OWNS, coreyt, COREYT0WN, coreytownss, coreytow, COREYT0WNZ, COREYT0WNS0, COREYCLOWNS, COREYBROWNS, CORATOWNS, COREYCLOWN, CURRYTOWNS, SnoreyTowns, CORNEYTOWNS, corey t pwns, COREYCITIES, QUARRYTOWNS, CLOWNYTOWNS, CORGITOWNS, TOREYCOWNS, CORACLOWNS, COREYFROWNS, COREYYAWNS, corkeytowns, SPICY CURRYTOWNS, TOW N SCORE, Unicorny Towns, COREYPWNS, CORINATOWNS, COREYCROWNS, COREYTRONS, GLORYTOWNS, COREYCLOWNING, COREYTOES
 thedarkmockrises, tdmr
 jsbach64, jsbach, jsback64
 slithycode, sithycode
