@@ -37,109 +37,109 @@ date	part	id	seconds	posted	title
 	1	yeQP6bFhoXY		2021-01-25	21/01/24 Symphonic Loops by request
 2021-01-26	1	-StYjz3gOl8		2021-01-27	Symphonic Loops 26th Jan 2021
 2021-01-30	1	qjNh05XjLnQ		2021-02-02	2021 01 30 23 13 54
-2021-02-02	1	IsGgbbaDY-w		2021-02-09	2021 02 02 12 11 39
-	1	1L0XrZbQLPI		2021-02-09	Symphonic Loops by ear
-2021-02-05	1	OsJeYDig_Hc		2021-02-09	2021 02 05 13 01 15
-2021-02-06	1	kw9Te7pRF6Y		2021-02-09	2021 02 06 23 23 09
+2021-02-02	1	IsGgbbaDY-w	26476	2021-02-09	2021 02 02 12 11 39
+	1	1L0XrZbQLPI	23244	2021-02-09	Symphonic Loops by ear
+2021-02-05	1	OsJeYDig_Hc	20044	2021-02-09	2021 02 05 13 01 15
+2021-02-06	1	kw9Te7pRF6Y	24532	2021-02-09	2021 02 06 23 23 09
 2021-02-09	1	eHnVwN2BRro	25684	2021-02-09	2021 02 09 12 04 41
 2021-01-29	1	isYzCQndlYo	18216	2021-02-10	2021 01 29 12 37 29
-2021-02-12	1	2q4R3CBlB1w		2021-02-17	2021 02 12 12 11 47
-	1	PskzMrWg5po		2021-02-17	Concert Grand at home.
-2021-02-16	1	mdb43HWuNwc		2021-02-17	2021 02 16 12 26 11
+2021-02-12	1	2q4R3CBlB1w	26674	2021-02-17	2021 02 12 12 11 47
+	1	PskzMrWg5po	24035	2021-02-17	Concert Grand at home.
+2021-02-16	1	mdb43HWuNwc	19440	2021-02-17	2021 02 16 12 26 11
 # corrected by hand (was date 2021-06-07): no stream starts on 2021-06-07 in Sydney; the only stream a day around it without a VOD is that of 2021-06-08; the video (5:42:10) holds the stream (5:22:00, its largest uptime, markers included; 10 minutes of tolerance for the typed uptimes), and no other stream a day around it fits
 2021-06-08	1	V7ReeRhrTUc	20530	2021-06-09	Twitch VOD 2021-06-07
 # corrected by hand (was date 2021-06-03): no stream starts on 2021-06-03 in Sydney; the only stream a day around it without a VOD is that of 2021-06-04; the video (5:46:00) holds the stream (5:18:51, its largest uptime, markers included; 10 minutes of tolerance for the typed uptimes), and no other stream a day around it fits
 2021-06-04	1	WLMW5P7p6rw	20760	2021-06-09	Twitch VOD 2021-06-03
 # corrected by hand (was date 2021-05-31): no stream starts on 2021-05-31 in Sydney; the only stream a day around it without a VOD is that of 2021-06-01; the video (7:22:00) holds the stream (6:49:41, its largest uptime, markers included; 10 minutes of tolerance for the typed uptimes), and no other stream a day around it fits
 2021-06-01	1	FSws__7OpZ4	26520	2021-06-09	Twitch VOD 2021-05-31
-2021-06-06	1	AMMFzVxWgOw		2021-06-09	Twitch VOD 2021-06-06  back to basics congcert grand stream
+2021-06-06	1	AMMFzVxWgOw	21464	2021-06-09	Twitch VOD 2021-06-06  back to basics congcert grand stream
 # corrected by hand (was date (empty)): "11th 06 2021": a month written as a number does not read; the stream of 2021-06-11 has no other VOD
-2021-06-11	1	cM9K22rLazc		2021-06-13	VOD for 11th 06 2021
-2021-06-13	1	9wAPJGt-08c		2021-06-14	Vod for 13 June, 2021
-2021-06-15	1	t3Ov2u7Iyvk		2021-06-20	Vod for 15th of June 2021
-2021-06-18	1	UxY_xWG3tJ4		2021-06-20	VOD for 18th June 2021
-2021-06-20	1	m70EOjQYQd8		2021-06-22	Vod for 20th June 2021
-2021-06-22	1	Z77sYxRDasM		2021-06-22	Vod for 22nd June 2021
-2021-06-25	1	jtPos5vMb_I		2021-06-26	Vod for 25th June, 2021
+2021-06-11	1	cM9K22rLazc	22226	2021-06-13	VOD for 11th 06 2021
+2021-06-13	1	9wAPJGt-08c	20553	2021-06-14	Vod for 13 June, 2021
+2021-06-15	1	t3Ov2u7Iyvk	18686	2021-06-20	Vod for 15th of June 2021
+2021-06-18	1	UxY_xWG3tJ4	22164	2021-06-20	VOD for 18th June 2021
+2021-06-20	1	m70EOjQYQd8	25549	2021-06-22	Vod for 20th June 2021
+2021-06-22	1	Z77sYxRDasM	23765	2021-06-22	Vod for 22nd June 2021
+2021-06-25	1	jtPos5vMb_I	20135	2021-06-26	Vod for 25th June, 2021
 # corrected by hand (was date 2021-06-28): no date: no stream starts on its title date in Sydney, and the duration of the video is unknown (the fetch of the durations stopped at an error page before it), so nothing ties it to the only stream a day around it without a VOD, 2021-06-27
-	1	yNifN1aW6JA		2021-06-29	VOD for 28th June, 2021
-2021-06-29	1	B9Dcl-BR6iU		2021-06-30	Vod for 29th June, 2021
-2021-07-02	1	C9i7naCHbBY		2021-07-02	Vod for 2nd July 2021
-2021-07-04	1	1tPRoJEd5H0		2021-07-05	Vod for 4th July 2021
-2021-07-06	1	NqTTc_hw4Ow		2021-07-07	Vod for 6th July 2021
-2021-07-09	1	Z0vF2viPMgI		2021-07-10	Vod for 9th July, 2021
+	1	yNifN1aW6JA	23793	2021-06-29	VOD for 28th June, 2021
+2021-06-29	1	B9Dcl-BR6iU	21243	2021-06-30	Vod for 29th June, 2021
+2021-07-02	1	C9i7naCHbBY	19833	2021-07-02	Vod for 2nd July 2021
+2021-07-04	1	1tPRoJEd5H0	22807	2021-07-05	Vod for 4th July 2021
+2021-07-06	1	NqTTc_hw4Ow	21493	2021-07-07	Vod for 6th July 2021
+2021-07-09	1	Z0vF2viPMgI	17475	2021-07-10	Vod for 9th July, 2021
 # corrected by hand (was date 2021-07-12): no date: no stream starts on its title date in Sydney, and the video (5:23:57) is too short for the only stream a day around it without a VOD, 2021-07-11 (5:48:08)
 	1	M26zurNgFrM	19437	2021-07-13	VOD for 12th July 2021
-2021-07-13	1	BiQr0dwIjm0		2021-07-14	VOD for 13th July 2021
-2021-07-16	1	eXOwOEDWpzc		2021-07-19	Vod for 16th July, 2021
+2021-07-13	1	BiQr0dwIjm0	23708	2021-07-14	VOD for 13th July 2021
+2021-07-16	1	eXOwOEDWpzc	23664	2021-07-19	Vod for 16th July, 2021
 2021-07-19	1	fFBdfTOmxRs	28637	2021-07-19	VOD for 19th July 2021
 2021-07-23	1	jBk4wqpLgLc	4192	2021-07-27	Vod for 23 July 2021 Pt1
 # corrected by hand (was date 2021-07-23, part 1): "Pt 2" (the title rules read "Part" only); Pt1 (1:09:52) and Pt 2 (6:00:28) cover the largest uptime of the stream, 6:21:44
 2021-07-23	2	_Pu6qIA-V5k	21628	2021-07-27	Vod for 23rd July 2021 Pt 2
-2021-07-25	1	uhxMGlkJ2HI		2021-07-27	Vod for 25th July, 2021
+2021-07-25	1	uhxMGlkJ2HI	21453	2021-07-27	Vod for 25th July, 2021
 # corrected by hand (was date 2021-01-08): "8/1/2021" is 1 August (US month/day): posted on 2021-08-03; read as 8 January it replaced the VOD of 8 January 2021 ("2021 01 08 12 35 08", the start of that stream at 12:31 in Sydney). The stream of 2021-08-01 has no other VOD
-2021-08-01	1	zUVaQn0gWrU		2021-08-03	BON(g)US music! 8/1/2021
-2021-07-30	1	jfK2ztUYWWk		2021-08-03	2021 07 30 14 31 54
-2021-08-03	1	57y8wyP2v_E		2021-08-04	VOD for 3rd August 2021 FP
-2021-08-04	1	8CmgjHHJezc		2021-08-06	Sym(ong)ic loops 4th August 2021
-2021-08-06	1	K3qxMGnGM8E		2021-08-07	2021 08 06 14 58 31
-2021-08-08	1	nGgbbewcjL4		2021-08-13	Vod for 8th August 2021
-2021-08-10	1	lIngPEEsgtk		2021-08-13	Vod for 10th August, 2021
+2021-08-01	1	zUVaQn0gWrU	20186	2021-08-03	BON(g)US music! 8/1/2021
+2021-07-30	1	jfK2ztUYWWk	12628	2021-08-03	2021 07 30 14 31 54
+2021-08-03	1	57y8wyP2v_E	30612	2021-08-04	VOD for 3rd August 2021 FP
+2021-08-04	1	8CmgjHHJezc	28220	2021-08-06	Sym(ong)ic loops 4th August 2021
+2021-08-06	1	K3qxMGnGM8E	26184	2021-08-07	2021 08 06 14 58 31
+2021-08-08	1	nGgbbewcjL4	20723	2021-08-13	Vod for 8th August 2021
+2021-08-10	1	lIngPEEsgtk	23345	2021-08-13	Vod for 10th August, 2021
 # corrected by hand (was date 2021-08-12): no stream starts on 2021-08-12 in Sydney; the only stream a day around it without a VOD is that of 2021-08-11; the video (8:08:31) holds the stream (7:39:58, its largest uptime, markers included; 10 minutes of tolerance for the typed uptimes), and no other stream a day around it fits
 2021-08-11	1	dWJcqB1ptCQ	29311	2021-08-13	VOD for 12/08/2021
-2021-08-13	1	O02Gedw-f-E		2021-08-24	Vod for the 13th of August, 2021
-2021-08-17	1	AAP3amTbPOc		2021-08-24	Vod for 17th August 2021
-2021-08-20	1	mOcNgqTF-_Y		2021-08-24	VOD for 20th August, 2021
-2021-08-22	1	AoScX--w4pw		2021-08-24	VOD for 22nd August, 2021
-2021-08-24	1	v1xyiLCIr5g		2021-08-25	VOD for 24th August 2021
+2021-08-13	1	O02Gedw-f-E	30967	2021-08-24	Vod for the 13th of August, 2021
+2021-08-17	1	AAP3amTbPOc	29628	2021-08-24	Vod for 17th August 2021
+2021-08-20	1	mOcNgqTF-_Y	31164	2021-08-24	VOD for 20th August, 2021
+2021-08-22	1	AoScX--w4pw	23536	2021-08-24	VOD for 22nd August, 2021
+2021-08-24	1	v1xyiLCIr5g	22956	2021-08-25	VOD for 24th August 2021
 2021-08-28	1	8prVHB8Kt_s	34352	2021-09-03	Vod for 28th August, 2021
 # corrected by hand (was date 2021-08-30): no stream starts on 2021-08-30 in Sydney; the only stream a day around it without a VOD is that of 2021-08-29; the video (9:43:09) holds the stream (9:35:35, its largest uptime, markers included; 10 minutes of tolerance for the typed uptimes), and no other stream a day around it fits
 2021-08-29	1	3RTktygOV1k	34989	2021-09-03	VOD for 30th August, 2021
-2021-08-31	1	Y53M_LYVrWU		2021-09-03	VOD for 31st August 2021
-2021-09-03	1	bpOGq0otnzE		2021-09-05	VOD for 3rd September 2021
-2021-09-05	1	sCKGXlYBqz0		2021-09-26	VOD for 5th September 2021
-2021-09-10	1	31r4p4du1ns		2021-09-26	Vod for 10th September, 2021
-2021-09-13	1	5iHRZnmEXfA		2021-09-26	VOD For 13th September 2021 (CAT PIANO)
+2021-08-31	1	Y53M_LYVrWU	28230	2021-09-03	VOD for 31st August 2021
+2021-09-03	1	bpOGq0otnzE	27042	2021-09-05	VOD for 3rd September 2021
+2021-09-05	1	sCKGXlYBqz0	40250	2021-09-26	VOD for 5th September 2021
+2021-09-10	1	31r4p4du1ns	26390	2021-09-26	Vod for 10th September, 2021
+2021-09-13	1	5iHRZnmEXfA	26390	2021-09-26	VOD For 13th September 2021 (CAT PIANO)
 2021-09-14	1	3r6z1R4J1Gs	23652	2021-09-26	VOD for 14th September 2021
-2021-09-17	1	0sZyQqVS7_8		2021-09-26	VOD for the 17th September 2021
+2021-09-17	1	0sZyQqVS7_8	15336	2021-09-26	VOD for the 17th September 2021
 # corrected by hand (was date 2021-09-20): no stream starts on 2021-09-20 in Sydney; the only stream a day around it without a VOD is that of 2021-09-19; the video (6:03:50) holds the stream (6:02:11, its largest uptime, markers included; 10 minutes of tolerance for the typed uptimes), and no other stream a day around it fits
 2021-09-19	1	1_GShqCUerY	21830	2021-09-26	VOD for 20th September 2021
-2021-09-21	1	MhFHSw6zYJo		2021-09-26	VOD for 21st September 2021
-2021-09-24	1	gWvRjtYW67I		2021-09-26	VOD for 24th September 2021
+2021-09-21	1	MhFHSw6zYJo	21010	2021-09-26	VOD for 21st September 2021
+2021-09-24	1	gWvRjtYW67I	25334	2021-09-26	VOD for 24th September 2021
 # corrected by hand (was date 2021-09-27): no stream starts on 2021-09-27 in Sydney; the only stream a day around it without a VOD is that of 2021-09-26; the video (7:26:03) holds the stream (7:25:18, its largest uptime, markers included; 10 minutes of tolerance for the typed uptimes), and no other stream a day around it fits
 2021-09-26	1	KS_kbI7s9Do	26763	2021-10-15	VOD for 27th September, 2021
-2021-09-28	1	FdOZsW6Gwd0		2021-10-15	VOD for 28th September 2021
-2021-10-01	1	SgIkpZ-9pXo		2021-10-15	VOD for 1st October 2021
-2021-10-03	1	DlXMG00Joto		2021-10-15	Vod for 3rd October 2021
-2021-10-05	1	R4lPrl79H-c		2021-10-15	Vod for 5th October 2021
-2021-10-10	1	okTOjNf6Bdk		2021-10-15	Vod for 10th October 2021
+2021-09-28	1	FdOZsW6Gwd0	19733	2021-10-15	VOD for 28th September 2021
+2021-10-01	1	SgIkpZ-9pXo	27241	2021-10-15	VOD for 1st October 2021
+2021-10-03	1	DlXMG00Joto	28560	2021-10-15	Vod for 3rd October 2021
+2021-10-05	1	R4lPrl79H-c	29940	2021-10-15	Vod for 5th October 2021
+2021-10-10	1	okTOjNf6Bdk	26830	2021-10-15	Vod for 10th October 2021
 # corrected by hand (was date 2021-10-12): no date: 2021-10-12 has 3 streams in Sydney, the later ones "(Resumed)" with their uptimes from 0 (2021-10-12 2:08:41, 2021-10-12#2 1:39:32, 2021-10-12#3 0:28:51); the video lasts 7:41:39: it may hold all of them in one video (4:17:04 together), so nothing tells which stream it records
 	1	COE88CRbNKo	27699	2021-10-15	Vod for 12th October 2021
-2021-10-15	1	_OorisEl3OQ		2021-11-02	Vod for 15th October 2021
-2021-10-17	1	Wcr1oTIK0Ps		2021-11-02	Vod for 17th October 2021
-2021-10-19	1	cIXCgh9Y97g		2021-11-02	Vod for 19th October 2021
-2021-10-22	1	hvGPj4a0-no		2021-11-02	Vod for 22nd October 2021
-2021-10-24	1	5bD-OKIoasI		2021-11-02	Vod for 24th October 2021
-2021-10-26	1	Rzg4cC30IWo		2021-11-02	Vod for 26th October 2021
-2021-10-29	1	-pB17Bu42Gk		2021-11-09	Vod for 29th October 2021
-2021-10-31	1	DGVQ0KAY6fs		2021-11-09	vod for 31st October 2021
-2021-11-02	1	cAR75X1a_BA		2021-11-09	Vod for 2nd November 2021
+2021-10-15	1	_OorisEl3OQ	28080	2021-11-02	Vod for 15th October 2021
+2021-10-17	1	Wcr1oTIK0Ps	30410	2021-11-02	Vod for 17th October 2021
+2021-10-19	1	cIXCgh9Y97g	30200	2021-11-02	Vod for 19th October 2021
+2021-10-22	1	hvGPj4a0-no	15360	2021-11-02	Vod for 22nd October 2021
+2021-10-24	1	5bD-OKIoasI	30850	2021-11-02	Vod for 24th October 2021
+2021-10-26	1	Rzg4cC30IWo	16430	2021-11-02	Vod for 26th October 2021
+2021-10-29	1	-pB17Bu42Gk	30630	2021-11-09	Vod for 29th October 2021
+2021-10-31	1	DGVQ0KAY6fs	29380	2021-11-09	vod for 31st October 2021
+2021-11-02	1	cAR75X1a_BA	24720	2021-11-09	Vod for 2nd November 2021
 2021-11-05	1	hUtOKFbRs4A	26470	2021-11-19	Vod for November 5th 2021
-2021-11-07	1	-eSeD4aD2Cw		2021-11-19	Vod for November 7th 2021
+2021-11-07	1	-eSeD4aD2Cw	33270	2021-11-19	Vod for November 7th 2021
 # corrected by hand (was date (empty)): "Vod for November 9th Part 1 2021": the year after the part does not read; the stream of 2021-11-09 has no other VOD
 # posted again on Discord on 2021-11-19: one line
 2021-11-09	1	1ezzInrTDbw	15362	2021-11-19	Vod for November 9th Part 1 2021
 # corrected by hand (was date (empty)): "Vod for November 9th Part 2 2021": the year after the part does not read
-2021-11-09	2	PRFAA7SYUGY		2021-11-19	Vod for November 9th Part 2 2021
-2021-11-12	1	qK5fuYWPhc4		2021-11-19	Vod for November 12th 2021
-2021-11-11	1	8QsPBqCNUwE		2021-12-22	Vod for November 11 2021 Symphongic Loops
-2021-11-28	1	vgae7nFGwFw		2021-12-22	Vod for November 28th, 2021 Symphongic Loops
+2021-11-09	2	PRFAA7SYUGY	6870	2021-11-19	Vod for November 9th Part 2 2021
+2021-11-12	1	qK5fuYWPhc4	26491	2021-11-19	Vod for November 12th 2021
+2021-11-11	1	8QsPBqCNUwE	19462	2021-12-22	Vod for November 11 2021 Symphongic Loops
+2021-11-28	1	vgae7nFGwFw	23059	2021-12-22	Vod for November 28th, 2021 Symphongic Loops
 # corrected by hand (was date 2021-11-29): no stream starts on 2021-11-29 in Sydney; the only stream a day around it without a VOD is that of 2021-11-30; the video (4:21:30) holds the stream (3:26:31, its largest uptime, markers included; 10 minutes of tolerance for the typed uptimes), and no other stream a day around it fits
 2021-11-30	1	Iuv_E4g9VSI	15690	2021-12-22	Vod for November 29th, 2021    Symphongic Loops chill edition
 2021-12-05	1	vUlVv5J3ZoI	33375	2021-12-22	Vod for December 5th, 2021  Symphongic Loops  less chill edition
 # corrected by hand (was date 2021-12-06): no stream starts on 2021-12-06 in Sydney; the only stream a day around it without a VOD is that of 2021-12-07; the video (8:10:54) holds the stream (7:26:55, its largest uptime, markers included; 10 minutes of tolerance for the typed uptimes), and no other stream a day around it fits
 2021-12-07	1	te5mVemrHwI	29454	2021-12-22	Vod for December 6th,  2021  Symphongic Loops  less chill edition
-2021-12-12	1	Jhz7FIFlJ64		2021-12-22	Vod for December 12th, 2021   SymphONGic Loops
+2021-12-12	1	Jhz7FIFlJ64	29262	2021-12-22	Vod for December 12th, 2021   SymphONGic Loops
 # corrected by hand (was date 2021-12-16): no stream starts on 2021-12-16 in Sydney; the only stream a day around it without a VOD is that of 2021-12-17; the video (5:41:05) holds the stream (4:57:26, its largest uptime, markers included; 10 minutes of tolerance for the typed uptimes), and no other stream a day around it fits
 2021-12-17	1	GDInmGxKm0o	20465	2021-12-22	Vod for December 16th, 2021   SymphONGic Loops
 # corrected by hand (was date 2021-12-02): no stream starts on 2021-12-02 in Sydney; the only stream a day around it without a VOD is that of 2021-12-03; the video (9:30:30) holds the stream (9:27:56, its largest uptime, markers included; 10 minutes of tolerance for the typed uptimes), and no other stream a day around it fits
@@ -151,178 +151,178 @@ date	part	id	seconds	posted	title
 2021-12-19	2	K0CzOIXISGQ	25540	2021-12-24	Vod from Devember 19th, 2021   SymphONGic Loops Part 2
 # corrected by hand (was date 2021-12-23): no stream starts on 2021-12-23 in Sydney; the only stream a day around it without a VOD is that of 2021-12-24; the video (5:33:56) holds the stream (4:52:51, its largest uptime, markers included; 10 minutes of tolerance for the typed uptimes), and no other stream a day around it fits
 2021-12-24	1	kL8LChoA1Og	20036	2021-12-27	Vod of December 23rd,  2021  Christmas Pt1
-2021-12-25	1	B5X6Jz0deQU		2021-12-27	Vod for December 25th,  2021 Christmas PtII
+2021-12-25	1	B5X6Jz0deQU	22540	2021-12-27	Vod for December 25th,  2021 Christmas PtII
 # corrected by hand (was date 2021-12-27): no stream starts on 2021-12-27 in Sydney; the only stream a day around it without a VOD is that of 2021-12-28; the video (6:51:07) holds the stream (5:53:18, its largest uptime, markers included; 10 minutes of tolerance for the typed uptimes), and no other stream a day around it fits
 2021-12-28	1	VfsciTnHU5c	24667	2021-12-29	Vod for December 27th,  2021 Music for that weird period between XM...
 # corrected by hand (was date 2021-12-30): no stream starts on 2021-12-30 in Sydney; the only stream a day around it without a VOD is that of 2021-12-31; the video (6:19:09) holds the stream (5:34:48, its largest uptime, markers included; 10 minutes of tolerance for the typed uptimes), and no other stream a day around it fits
 2021-12-31	1	CXGGbdE-zAE	22749	2022-01-02	Vod from December  30th,  2021 Music for that weird period between ...
-2022-01-02	1	a7Cy0L-zdAQ		2022-01-03	Vod for January 2nd, 2022 SympOngic loops and big pianos and things
+2022-01-02	1	a7Cy0L-zdAQ	24883	2022-01-03	Vod for January 2nd, 2022 SympOngic loops and big pianos and things
 2022-01-04	1	onXvzvW5Bq4	18980	2022-01-08	VOD for 4th January 2022
 # corrected by hand (was date 2022-01-15): no stream starts on 2022-01-15 in Sydney; the only stream a day around it without a VOD is that of 2022-01-14; the video (8:52:57) holds the stream (8:03:18, its largest uptime, markers included; 10 minutes of tolerance for the typed uptimes)
 2022-01-14	1	RowzODmgj2k	31977	2022-01-16	Vod for 15th January 2022
-2022-01-18	1	AvPz_lmMKhU		2022-01-18	VOD for 18th January 2022, BROTHER ONG SURPRISE
-2022-01-25	1	ERAYvjHoFFY		2022-01-26	VOD for 25th January, 2022.  Saw, Reciprocating Saw, Hammer percussion
-2022-01-30	1	RWTy2FzZM5Y		2022-02-01	VOD for 2022 01 30 SymphOngic Loops and other noises all
+2022-01-18	1	AvPz_lmMKhU	26757	2022-01-18	VOD for 18th January 2022, BROTHER ONG SURPRISE
+2022-01-25	1	ERAYvjHoFFY	28419	2022-01-26	VOD for 25th January, 2022.  Saw, Reciprocating Saw, Hammer percussion
+2022-01-30	1	RWTy2FzZM5Y	36860	2022-02-01	VOD for 2022 01 30 SymphOngic Loops and other noises all
 2022-02-04	1	ZppNgBwmySc	36609	2022-02-07	Vod for 2022 02 04 12 18 57
-2022-02-11	1	oKy_T8doG3o		2022-02-14	VOD for the 11th of February 2022
+2022-02-11	1	oKy_T8doG3o	20132	2022-02-14	VOD for the 11th of February 2022
 # corrected by hand (was date 2022-02-14): no stream starts on 2022-02-14 in Sydney; the only stream a day around it without a VOD is that of 2022-02-13; the video (8:07:18) holds the stream (8:03:14, its largest uptime, markers included; 10 minutes of tolerance for the typed uptimes), and no other stream a day around it fits
 2022-02-13	1	G8dNFasrFBE	29238	2022-02-18	VOD for 14th Feb 2022
-2022-02-15	1	Lm0016xxFcM		2022-02-18	VOD for 15th of February 2022
-2022-02-18	1	G6eFs59Ycf4		2022-02-22	VOD for 18th February 2022
+2022-02-15	1	Lm0016xxFcM	21580	2022-02-18	VOD for 15th of February 2022
+2022-02-18	1	G6eFs59Ycf4	21213	2022-02-22	VOD for 18th February 2022
 2022-02-21	1	IxviotLcSmE	25818	2022-02-22	VOD for 21st February 2022
 # corrected by hand (was date 2022-02-26): no stream starts on 2022-02-26 in Sydney; of the streams a day around it, that of 2022-02-27 has its own VOD and that of 2022-02-25 none; the video (7:45:14) holds the stream (7:23:16, its largest uptime, markers included; 10 minutes of tolerance for the typed uptimes)
 2022-02-25	1	0MJqaUtNVjg	27914	2022-03-01	VOD for 26th February 2022
 # corrected by hand (was date 2022-02-28): no stream starts on 2022-02-28 in Sydney; the only stream a day around it without a VOD is that of 2022-02-27; the video (6:40:21) holds the stream (6:05:57, its largest uptime, markers included; 10 minutes of tolerance for the typed uptimes), and no other stream a day around it fits
 2022-02-27	1	lBd6Q1U3slw	24021	2022-03-01	VOD for 28th February 2022
-2022-03-01	1	TwWU3VsbLtc		2022-03-08	VOD for the 1st of March, 2022
-2022-03-04	1	iB9flS5YD1c		2022-03-08	VOD for 4th March 2022
+2022-03-01	1	TwWU3VsbLtc	34616	2022-03-08	VOD for the 1st of March, 2022
+2022-03-04	1	iB9flS5YD1c	29437	2022-03-08	VOD for 4th March 2022
 # corrected by hand (was date 2022-03-07): no stream starts on 2022-03-07 in Sydney; the only stream a day around it without a VOD is that of 2022-03-06; the video (5:25:12) holds the stream (5:29:42, its largest uptime, markers included; 10 minutes of tolerance for the typed uptimes), and no other stream a day around it fits
 2022-03-06	1	F34BXxhofms	19512	2022-03-08	VOD for 7th of March 2022
 # corrected by hand (was date 2022-02-23): no stream starts on 2022-02-23 in Sydney; the only stream a day around it without a VOD is that of 2022-02-22; the video (4:41:40) holds the stream (4:05:52, its largest uptime, markers included; 10 minutes of tolerance for the typed uptimes)
 2022-02-22	1	ArutWLL9i-E	16900	2022-03-13	VOD for 23rd February 2022
-2022-03-08	1	7pRPynq_Xvs		2022-03-13	VOD for 8th March 2022
+2022-03-08	1	7pRPynq_Xvs	23906	2022-03-13	VOD for 8th March 2022
 2022-03-11	1	x1moCDNPUf0		2022-03-13	VOD for 11th March 2022, Birthday, Launch of the 80's themed streams
 2022-03-13	1	Bb-PYqFXcqA	29292	2022-03-15	VOD for 13th March 2022, 2nd 80s Stream
-2022-03-15	1	fPdueAuoKwg		2022-03-19	VOD for 15th March, 2022, THE 80'S MARATHON CONTINUES
+2022-03-15	1	fPdueAuoKwg	29426	2022-03-19	VOD for 15th March, 2022, THE 80'S MARATHON CONTINUES
 2022-03-11	1	44s35ySazrY	31823	2022-03-19	VOD for 11th March, 2022, THE BEGINNING OF THE 80's
-2022-03-18	1	iRNxYioK4Gs		2022-03-20	VOD for the 18th of March 2022, 80's continues
-2022-03-22	1	_YydfpFLp3s		2022-03-25	vod for 22nd March 2022
-2022-03-20	1	4nfE68FueyE		2022-03-25	VOD for 20th March 2022 80s continues
-2022-04-22	1	mTbvdZvYgf8		2022-04-23	VOD for the 22nd of April 2022
-2022-04-24	1	cmhOfaXmY54		2022-05-01	VOD for 24th April, 2022
-2022-04-26	1	b23fe5jiw9Y		2022-05-01	VOD for the 26th April 2022
-2022-04-29	1	zrKlVUmJkYw		2022-05-01	VOD for 29th April 2022
+2022-03-18	1	iRNxYioK4Gs	29102	2022-03-20	VOD for the 18th of March 2022, 80's continues
+2022-03-22	1	_YydfpFLp3s	29094	2022-03-25	vod for 22nd March 2022
+2022-03-20	1	4nfE68FueyE	27155	2022-03-25	VOD for 20th March 2022 80s continues
+2022-04-22	1	mTbvdZvYgf8	21625	2022-04-23	VOD for the 22nd of April 2022
+2022-04-24	1	cmhOfaXmY54	22886	2022-05-01	VOD for 24th April, 2022
+2022-04-26	1	b23fe5jiw9Y	15513	2022-05-01	VOD for the 26th April 2022
+2022-04-29	1	zrKlVUmJkYw	20647	2022-05-01	VOD for 29th April 2022
 # posted again on Discord on 2022-05-21: one line
-2022-05-03	1	qT6vmkTpW7U		2022-05-13	VOD for 3rd May 2022, SPECIAL COLLAB WITH MITCH
+2022-05-03	1	qT6vmkTpW7U	28166	2022-05-13	VOD for 3rd May 2022, SPECIAL COLLAB WITH MITCH
 # corrected by hand (was date 2022-05-05): no stream starts on 2022-05-05 in Sydney; the only stream a day around it without a VOD is that of 2022-05-04; the video (7:30:34) holds the stream (7:31:36, its largest uptime, markers included; 10 minutes of tolerance for the typed uptimes), and no other stream a day around it fits
 2022-05-04	1	ooJofPFi7WY	27034	2022-05-21	VOD for 5th May, 2022
 # corrected by hand (was date 2022-05-08): no stream starts on 2022-05-08 in Sydney; the only stream a day around it without a VOD is that of 2022-05-07; the video (6:31:04) holds the stream (5:47:08, its largest uptime, markers included; 10 minutes of tolerance for the typed uptimes), and no other stream a day around it fits
 2022-05-07	1	EkXm3_gHIOk	23464	2022-05-21	VOD for 8th May 2022
-2022-05-10	1	HFjn7b_hGxU		2022-05-21	VOD for 10th May 2022
-2022-05-14	1	Qu2WKGDF-K4		2022-05-21	VOD 14th May 2022
-2022-05-13	1	RcwxsJGqdu4		2022-05-21	VOD for 13th May 2022
-2022-05-17	1	ITRa4YjcHXQ		2022-05-21	VOD for 17th May, 2022, 5 Years!
-2022-05-20	1	NFUSe0EUD_Y		2022-05-21	VOD 20th May 2022
+2022-05-10	1	HFjn7b_hGxU	16273	2022-05-21	VOD for 10th May 2022
+2022-05-14	1	Qu2WKGDF-K4	27748	2022-05-21	VOD 14th May 2022
+2022-05-13	1	RcwxsJGqdu4	23434	2022-05-21	VOD for 13th May 2022
+2022-05-17	1	ITRa4YjcHXQ	28817	2022-05-21	VOD for 17th May, 2022, 5 Years!
+2022-05-20	1	NFUSe0EUD_Y	17327	2022-05-21	VOD 20th May 2022
 2022-04-19	1	-7xLQUifih8	7229	2022-05-21	VOD for 19th April, 2022 Pt 1
 # corrected by hand (was date (empty)): the title has no year; posted on 2022-05-21 with "VOD for 19th April, 2022 Pt 1", the VOD of the same stream
-2022-04-19	2	i_WTEZbkJbY		2022-05-21	VOD for 19th April Part 2
+2022-04-19	2	i_WTEZbkJbY	19387	2022-05-21	VOD for 19th April Part 2
 # corrected by hand (was date 2022-05-22): no stream starts on 2022-05-22 in Sydney; the only stream a day around it without a VOD is that of 2022-05-21; the video (6:05:58) holds the stream (5:12:41, its largest uptime, markers included; 10 minutes of tolerance for the typed uptimes), and no other stream a day around it fits
 2022-05-21	1	-LDlLf2YZ6s	21958	2022-05-22	VOD for 22nd May 2022
-2022-05-27	1	F8pUsldURkI		2022-06-10	VOD for 27th May 2022
+2022-05-27	1	F8pUsldURkI	29932	2022-06-10	VOD for 27th May 2022
 # corrected by hand (was date 2022-05-29): no stream starts on 2022-05-29 in Sydney; the only stream a day around it without a VOD is that of 2022-05-28; the video (6:35:01) holds the stream (6:24:46, its largest uptime, markers included; 10 minutes of tolerance for the typed uptimes), and no other stream a day around it fits
 2022-05-28	1	sMPJrL5pGXw	23701	2022-06-10	VOD for 29th May 2022
 2022-05-31	1	9nkNr9pluJg	25426	2022-06-10	VOD for 31st May, 2022
-2022-06-03	1	n86dPyB2Quw		2022-06-10	VOD for the 3rd June 2022
-2022-06-04	1	kTkqXNdALfc		2022-06-10	Vod for the 4th June 2022
+2022-06-03	1	n86dPyB2Quw	27654	2022-06-10	VOD for the 3rd June 2022
+2022-06-04	1	kTkqXNdALfc	29023	2022-06-10	Vod for the 4th June 2022
 # corrected by hand (was date 2022-07-07): "7th July" is 7 June: posted on 2022-06-10 with the VODs of 3 and 4 June 2022; the stream of 2022-06-07 has no other VOD
-2022-06-07	1	9D9XLN7pjl0		2022-06-10	VOD for 7th July, 2022
-2022-06-10	1	abMjtCqUZw4		2022-06-15	VOD for 10th June 2022
+2022-06-07	1	9D9XLN7pjl0	24109	2022-06-10	VOD for 7th July, 2022
+2022-06-10	1	abMjtCqUZw4	17333	2022-06-15	VOD for 10th June 2022
 # corrected by hand (was date 2022-06-12): no stream starts on 2022-06-12 in Sydney; the only stream a day around it without a VOD is that of 2022-06-11; the video (6:01:25) holds the stream (5:53:56, its largest uptime, markers included; 10 minutes of tolerance for the typed uptimes), and no other stream a day around it fits
 2022-06-11	1	lXuBVWBPtF0	21685	2022-06-15	VOD for 12th June 2022
-2022-06-14	1	wKaykqvcrNI		2022-07-04	VOD for 14th June, 2022
-2022-06-17	1	eehsV0EypbY		2022-07-04	VOD for the 17th June 2022
-2022-06-18	1	JxsNrp7V5j0		2022-07-04	VOD for the 18th of June 2022
-2022-06-28	1	nDrwMlRr_5E		2022-07-04	VOD for 28th June 2022
-2022-07-01	1	zEH9tqXrqks		2022-07-04	VOD for the 1st July 2022
-2022-07-03	1	J82RTya_TeU		2022-07-04	VOD for the 3rd July 2022
-2022-07-05	1	EL8uZaW9UmQ		2022-07-08	VOD for 5th July 2022
-2022-07-08	1	xGHCCILSZ-M		2022-07-09	VOD for the 8th of July 2022
+2022-06-14	1	wKaykqvcrNI	17689	2022-07-04	VOD for 14th June, 2022
+2022-06-17	1	eehsV0EypbY	22810	2022-07-04	VOD for the 17th June 2022
+2022-06-18	1	JxsNrp7V5j0	22466	2022-07-04	VOD for the 18th of June 2022
+2022-06-28	1	nDrwMlRr_5E	18758	2022-07-04	VOD for 28th June 2022
+2022-07-01	1	zEH9tqXrqks	23787	2022-07-04	VOD for the 1st July 2022
+2022-07-03	1	J82RTya_TeU	20032	2022-07-04	VOD for the 3rd July 2022
+2022-07-05	1	EL8uZaW9UmQ	20964	2022-07-08	VOD for 5th July 2022
+2022-07-08	1	xGHCCILSZ-M	20615	2022-07-09	VOD for the 8th of July 2022
 # corrected by hand (was date 2022-07-10): no stream starts on 2022-07-10 in Sydney; the only stream a day around it without a VOD is that of 2022-07-09; the video (6:18:19) holds the stream (5:58:11, its largest uptime, markers included; 10 minutes of tolerance for the typed uptimes), and no other stream a day around it fits
 2022-07-09	1	UkaENulSrRo	22699	2022-07-10	VOD for 10th July 2022
-	1	xCqqGQHuUBY		2022-07-14	VOD for 14th July, Steinway D
-2022-07-17	1	fVqV-4_3tW4		2022-07-17	VOD for 17th July 2022
-2022-07-15	1	5QnrNKJM5Nc		2022-07-20	VOD for the 15th of July 2022
-2022-07-19	1	RA02fzKCqFE		2022-07-20	VOD for the 19th of July, 2022
-2022-07-22	1	icBY9pLFy6Q		2022-07-23	VOD for 22nd of July 2022
-2021-09-12	1	zOw1PRgAyjg		2022-07-23	VOD 2021-09-12 The Most Intense Cat Piano ever
-2022-07-23	1	HWzB7Msp0O0		2022-07-25	VOD for 23rd July 2022
-2022-07-26	1	56AeceRKcjw		2022-07-27	VOD for 26th July 2022
-2022-08-02	1	1Y9-0lNfYwY		2022-08-03	VOD for 2nd August 2022
-2022-08-13	1	UNiSZSR0Ueg		2022-08-17	VOD for the 13th August 2022
-2022-08-09	1	OMNyz-ChZm0		2022-08-19	VOD for the 9th of August 2022
-2022-08-07	1	RuSZBGlWttc		2022-08-19	VOD for the 7th August 2022
-2022-08-05	1	xYRQo-uxsbs		2022-08-19	VOD for the 5th of August 2022
-2022-07-29	1	q7h_A-T8hZs		2022-08-20	VOD for 29th July 2022
+	1	xCqqGQHuUBY	22653	2022-07-14	VOD for 14th July, Steinway D
+2022-07-17	1	fVqV-4_3tW4	21370	2022-07-17	VOD for 17th July 2022
+2022-07-15	1	5QnrNKJM5Nc	34391	2022-07-20	VOD for the 15th of July 2022
+2022-07-19	1	RA02fzKCqFE	25729	2022-07-20	VOD for the 19th of July, 2022
+2022-07-22	1	icBY9pLFy6Q	23950	2022-07-23	VOD for 22nd of July 2022
+2021-09-12	1	zOw1PRgAyjg	37371	2022-07-23	VOD 2021-09-12 The Most Intense Cat Piano ever
+2022-07-23	1	HWzB7Msp0O0	22079	2022-07-25	VOD for 23rd July 2022
+2022-07-26	1	56AeceRKcjw	29993	2022-07-27	VOD for 26th July 2022
+2022-08-02	1	1Y9-0lNfYwY	22018	2022-08-03	VOD for 2nd August 2022
+2022-08-13	1	UNiSZSR0Ueg	25110	2022-08-17	VOD for the 13th August 2022
+2022-08-09	1	OMNyz-ChZm0	21169	2022-08-19	VOD for the 9th of August 2022
+2022-08-07	1	RuSZBGlWttc	21603	2022-08-19	VOD for the 7th August 2022
+2022-08-05	1	xYRQo-uxsbs	18766	2022-08-19	VOD for the 5th of August 2022
+2022-07-29	1	q7h_A-T8hZs	24346	2022-08-20	VOD for 29th July 2022
 # corrected by hand (was date 2022-07-31): no stream starts on 2022-07-31 in Sydney; the only stream a day around it without a VOD is that of 2022-07-30; the video (6:24:26) holds the stream (6:29:39, its largest uptime, markers included; 10 minutes of tolerance for the typed uptimes), and no other stream a day around it fits
 2022-07-30	1	c2yTz3GCun4	23066	2022-08-20	VOD for the 31st July 2022
-2022-08-12	1	tJnbNAPoS2U		2022-08-28	VOD for the 12th of August 2022
-2022-08-16	1	tewx4s9K4QI		2022-08-28	VOD for the 16th August 2022
+2022-08-12	1	tJnbNAPoS2U	26604	2022-08-28	VOD for the 12th of August 2022
+2022-08-16	1	tewx4s9K4QI	27081	2022-08-28	VOD for the 16th August 2022
 2022-08-19	1	-OKfxcAx10g	27405	2022-08-28	VOD for the 19th August 2022
-2022-08-20	1	49-OY-iz9BY		2022-08-28	VOD for the 20th August 2022
+2022-08-20	1	49-OY-iz9BY	25062	2022-08-28	VOD for the 20th August 2022
 2022-08-23	1	izg7JbUIb5E	30054	2022-08-28	VOD for the 23rd of August 2022
-2022-08-26	1	I8qaPURCCWc		2022-08-28	VOD for the 26th August 2022
-2022-08-27	1	J5OQ7ZRI7Ng		2022-08-28	VOD for 27th August 2022
-2022-08-30	1	_Ileima-jVA		2022-09-13	VOD for the 30th of August 2022
-2022-09-02	1	ROyaeD81q8E		2022-09-13	VOD for the 2nd September 2022
-2022-09-03	1	fB-1_F0CQvA		2022-09-13	VOD for the 3rd of September 2022
-2022-09-06	1	Blmm6f2T114		2022-09-13	VOD for the 6th September 2022
-2022-09-09	1	gp5PbibA964		2022-09-13	VOD for the 9th of September 2022
+2022-08-26	1	I8qaPURCCWc	16575	2022-08-28	VOD for the 26th August 2022
+2022-08-27	1	J5OQ7ZRI7Ng	19740	2022-08-28	VOD for 27th August 2022
+2022-08-30	1	_Ileima-jVA	26241	2022-09-13	VOD for the 30th of August 2022
+2022-09-02	1	ROyaeD81q8E	22455	2022-09-13	VOD for the 2nd September 2022
+2022-09-03	1	fB-1_F0CQvA	27373	2022-09-13	VOD for the 3rd of September 2022
+2022-09-06	1	Blmm6f2T114	26248	2022-09-13	VOD for the 6th September 2022
+2022-09-09	1	gp5PbibA964	22787	2022-09-13	VOD for the 9th of September 2022
 # corrected by hand (was date 2022-09-11): no stream starts on 2022-09-11 in Sydney; the only stream a day around it without a VOD is that of 2022-09-10; the video (6:14:46) holds the stream (6:21:21, its largest uptime, markers included; 10 minutes of tolerance for the typed uptimes), and no other stream a day around it fits
 2022-09-10	1	Bb9ehYILQX8	22486	2022-09-13	VOD for the 11th of September 2022
-2022-09-13	1	7z--vhlFeT4		2022-09-13	VOD for the 13th of September 2022
-2022-09-16	1	uWY_P-bew28		2022-09-18	VOD for the 16th of September 2022
-2022-09-17	1	tBJb0RKzqoY		2022-09-18	VOD for the 17th of September 2022
-2022-10-14	1	FY23epU9jGw		2022-10-16	VOD for the 14th October 2022
+2022-09-13	1	7z--vhlFeT4	24685	2022-09-13	VOD for the 13th of September 2022
+2022-09-16	1	uWY_P-bew28	21852	2022-09-18	VOD for the 16th of September 2022
+2022-09-17	1	tBJb0RKzqoY	22793	2022-09-18	VOD for the 17th of September 2022
+2022-10-14	1	FY23epU9jGw	34882	2022-10-16	VOD for the 14th October 2022
 # corrected by hand (was date 2022-10-16): no stream starts on 2022-10-16 in Sydney; the only stream a day around it without a VOD is that of 2022-10-15; the video (7:29:18) holds the stream (7:14:46, its largest uptime, markers included; 10 minutes of tolerance for the typed uptimes), and no other stream a day around it fits
 2022-10-15	1	ukA1xUB5LJ4	26958	2022-10-16	VOD for the 16th of October 2022
-2021-10-21	1	-sREkT06vl0		2022-10-23	VOD for the 21st of October 2021
+2021-10-21	1	-sREkT06vl0	24757	2022-10-23	VOD for the 21st of October 2021
 # corrected by hand (was date 2022-10-23): no date: 2022-10-23 has 2 streams in Sydney, the later ones "(Resumed)" with their uptimes from 0 (2022-10-23 0:23:16, 2022-10-23#2 4:29:23); the video lasts 5:04:34: it may hold all of them in one video (4:52:39 together), so nothing tells which stream it records
 	1	AqTC5ASQWUE	18274	2022-10-23	VOD for the 23rd of October 2022
-2022-10-28	1	U6GQLGl1v3U		2022-11-20	VOD for the 28th October 2022
+2022-10-28	1	U6GQLGl1v3U	22860	2022-11-20	VOD for the 28th October 2022
 # corrected by hand (was date 2022-10-30): no stream starts on 2022-10-30 in Sydney; the only stream a day around it without a VOD is that of 2022-10-29; the video (6:32:53) holds the stream (5:39:56, its largest uptime, markers included; 10 minutes of tolerance for the typed uptimes), and no other stream a day around it fits
 2022-10-29	1	Bw8qugCSoBI	23573	2022-11-20	VOD for the 30th of October 2022
-2022-11-04	1	m-dTBACoOoA		2022-11-20	VOD for the 4th of November 2022
-2022-11-08	1	xwwwlzrbmso		2022-11-20	VOD 8th November 2022
-2022-11-11	1	98KwXaHLIVI		2022-11-20	VOD for the 11th of November 2022
-2022-11-12	1	v3vByltzKi8		2022-11-20	VOD for the 12th of November 2022
-2022-11-18	1	de4R7Vm4U6Y		2022-11-20	VOD for the 18th of November 2022
-2022-11-19	1	o6l9gLbgmPo		2022-11-20	VOD for the 19th of November 2022
-2022-11-25	1	dClzllNiTgY		2022-12-09	VOD for the 25th of November 2022
-2022-11-26	1	7aptWAuv5no		2022-12-09	VOD for the 26th of November, 2022
-2022-11-29	1	l29Ju7SYquw		2022-12-09	VOD for 29th Nov 2022
-2022-12-02	1	-iLqBTnH2Po		2022-12-09	VOD for the 2nd of December 2022
-2022-12-03	1	RPCzEx2IhgI		2022-12-09	VOD for the 3rd of December 2022
-2022-12-09	1	BOpJmeI5PTs		2023-03-29	VOD for the 9th of December 2022
-2022-12-10	1	ZPIZxbMVQQ4		2023-03-29	VOD for the 10th of December 2022
-2022-12-16	1	M4INacabcOo		2023-03-29	VOD for the 16th of December 2022
-2022-12-20	1	svpL7o04BV0		2023-03-29	VOD for the 20th of December 2022
+2022-11-04	1	m-dTBACoOoA	36906	2022-11-20	VOD for the 4th of November 2022
+2022-11-08	1	xwwwlzrbmso	27101	2022-11-20	VOD 8th November 2022
+2022-11-11	1	98KwXaHLIVI	18037	2022-11-20	VOD for the 11th of November 2022
+2022-11-12	1	v3vByltzKi8	23674	2022-11-20	VOD for the 12th of November 2022
+2022-11-18	1	de4R7Vm4U6Y	25520	2022-11-20	VOD for the 18th of November 2022
+2022-11-19	1	o6l9gLbgmPo	27759	2022-11-20	VOD for the 19th of November 2022
+2022-11-25	1	dClzllNiTgY	30553	2022-12-09	VOD for the 25th of November 2022
+2022-11-26	1	7aptWAuv5no	23325	2022-12-09	VOD for the 26th of November, 2022
+2022-11-29	1	l29Ju7SYquw	35006	2022-12-09	VOD for 29th Nov 2022
+2022-12-02	1	-iLqBTnH2Po	35424	2022-12-09	VOD for the 2nd of December 2022
+2022-12-03	1	RPCzEx2IhgI	29110	2022-12-09	VOD for the 3rd of December 2022
+2022-12-09	1	BOpJmeI5PTs	21786	2023-03-29	VOD for the 9th of December 2022
+2022-12-10	1	ZPIZxbMVQQ4	16424	2023-03-29	VOD for the 10th of December 2022
+2022-12-16	1	M4INacabcOo	21187	2023-03-29	VOD for the 16th of December 2022
+2022-12-20	1	svpL7o04BV0	20607	2023-03-29	VOD for the 20th of December 2022
 # corrected by hand (was date 2022-12-22): no date: no stream starts on its title date in Sydney, and the duration of the video is unknown (the fetch of the durations stopped at an error page before it), so nothing ties it to the only stream a day around it without a VOD, 2022-12-23
-	1	yFlxyQDP1OQ		2023-03-29	VOD for the 22nd of December 2022
-2022-12-27	1	_MxJNsikBck		2023-03-29	VOD for the 27th of December 2022
-2022-12-30	1	Cm9Jcu1o7z0		2023-03-29	VOD for the 30th of December 2022
+	1	yFlxyQDP1OQ	25315	2023-03-29	VOD for the 22nd of December 2022
+2022-12-27	1	_MxJNsikBck	22484	2023-03-29	VOD for the 27th of December 2022
+2022-12-30	1	Cm9Jcu1o7z0	22525	2023-03-29	VOD for the 30th of December 2022
 2023-01-17	1	Bs3aUyl2yug	17482	2023-03-29	VOD for the 17th of January 2023 (Part 1)
-2023-01-17	2	PLyC8V_aLKM		2023-03-29	VOD for the 17th of January 2023 (Part 2)
-2023-01-20	1	jBb3GoIE6b8		2023-03-29	VOD for the 20th of January 2023
-2023-01-24	1	Q4sdgMN3VF4		2023-03-29	VOD for the 24th of January 2023
-2023-01-27	1	jColzMbB-oM		2023-03-29	VOD for the 27th of January 2023
-2023-01-29	1	XsMRHNRpWp8		2023-03-29	VOD for the 29th of January 2023
-2023-01-31	1	7ODwTYwc0k0		2023-03-29	VOD for the 31st of January 2023
-2023-02-03	1	4BeAQlA1U4E		2023-03-29	VOD for the 3rd of February 2023
+2023-01-17	2	PLyC8V_aLKM	3383	2023-03-29	VOD for the 17th of January 2023 (Part 2)
+2023-01-20	1	jBb3GoIE6b8	40316	2023-03-29	VOD for the 20th of January 2023
+2023-01-24	1	Q4sdgMN3VF4	23405	2023-03-29	VOD for the 24th of January 2023
+2023-01-27	1	jColzMbB-oM	20786	2023-03-29	VOD for the 27th of January 2023
+2023-01-29	1	XsMRHNRpWp8	30207	2023-03-29	VOD for the 29th of January 2023
+2023-01-31	1	7ODwTYwc0k0	34393	2023-03-29	VOD for the 31st of January 2023
+2023-02-03	1	4BeAQlA1U4E	22184	2023-03-29	VOD for the 3rd of February 2023
 # corrected by hand (was date 2023-02-04): the stream started at 00:02 in Sydney on 5 February, the night of the 4th; the only stream a day around it without a VOD
-2023-02-05	1	65TrczuN-88		2023-03-29	VOD for the 4th of February 2023 (with Charming Jo)
-2023-02-10	1	faYtDkiS2AU		2023-03-29	VOD for the 10th of February 2023
-2023-02-11	1	VkHJ-HPC2tM		2023-03-29	VOD for the 11th of February 2023
+2023-02-05	1	65TrczuN-88	17095	2023-03-29	VOD for the 4th of February 2023 (with Charming Jo)
+2023-02-10	1	faYtDkiS2AU	18849	2023-03-29	VOD for the 10th of February 2023
+2023-02-11	1	VkHJ-HPC2tM	25437	2023-03-29	VOD for the 11th of February 2023
 2023-02-14	1	sNnTf5ymCl0	24027	2023-03-29	VOD for the 14th of February 2023
-2023-02-17	1	_0Y-IDQ9yzY		2023-03-29	VOD for the 17th of February 2023
-2023-02-18	1	TVE97Av1jGQ		2023-03-29	VOD for the 18th of February 2023
+2023-02-17	1	_0Y-IDQ9yzY	34276	2023-03-29	VOD for the 17th of February 2023
+2023-02-18	1	TVE97Av1jGQ	21707	2023-03-29	VOD for the 18th of February 2023
 2023-02-21	1	_O4luYIBHkk	23603	2023-03-29	VOD for the 21st of February 2023
-2023-02-24	1	a_J1VW0mciY		2023-03-29	VOD for the 24th of February 2023
-2023-02-25	1	n-rU1XbMVoE		2023-03-29	VOD for the 25th of February 2023
-2023-02-28	1	qglAvZ0wxWk		2023-03-29	VOD for the 28th of February 2023
-2023-03-03	1	TJgfOHN_IY0		2023-03-29	VOD for the 3rd of March 2023
+2023-02-24	1	a_J1VW0mciY	34147	2023-03-29	VOD for the 24th of February 2023
+2023-02-25	1	n-rU1XbMVoE	31296	2023-03-29	VOD for the 25th of February 2023
+2023-02-28	1	qglAvZ0wxWk	24622	2023-03-29	VOD for the 28th of February 2023
+2023-03-03	1	TJgfOHN_IY0	21947	2023-03-29	VOD for the 3rd of March 2023
 # corrected by hand (was date 2023-03-04): the stream started at 00:04 in Sydney on 5 March, the night of the 4th; the only stream a day around it without a VOD
-2023-03-05	1	u9OSv6-1R84		2023-03-29	VOD for the 4th of March 2023
-2023-03-10	1	OsK4-UpEJZ8		2023-03-29	VOD for the 10th of March, 2023
-2023-03-11	1	l9BhhVmRHqo		2023-03-29	VOD for the 11th of March 2023
-2023-03-14	1	sjBhS63l46Q		2023-03-29	VOD for the 14th of March 2023
-2023-03-18	1	oxFkYMjrbgk		2023-03-29	VOD for the 18th of March 2023
-2023-03-21	1	7xCkad9tRfQ		2023-03-29	VOD for the 21st of March 2023
-2023-03-24	1	0TG092R9c4U		2023-03-29	VOD for the 24th of March 2023
+2023-03-05	1	u9OSv6-1R84	24646	2023-03-29	VOD for the 4th of March 2023
+2023-03-10	1	OsK4-UpEJZ8	26017	2023-03-29	VOD for the 10th of March, 2023
+2023-03-11	1	l9BhhVmRHqo	30579	2023-03-29	VOD for the 11th of March 2023
+2023-03-14	1	sjBhS63l46Q	28196	2023-03-29	VOD for the 14th of March 2023
+2023-03-18	1	oxFkYMjrbgk	28399	2023-03-29	VOD for the 18th of March 2023
+2023-03-21	1	7xCkad9tRfQ	30407	2023-03-29	VOD for the 21st of March 2023
+2023-03-24	1	0TG092R9c4U	26974	2023-03-29	VOD for the 24th of March 2023
 2023-03-25	1	Y3A7OKXwL6M		2023-03-29	VOD for the 25th of March 2023
-2023-03-25	1	EdmL5sot3W0		2023-04-02	VOD for the 25th of March 2023
-2023-03-28	1	ciCZL7VGNvI		2023-04-02	VOD for the 28th of March 2023
-2023-03-31	1	DMKAcMBs8H4		2023-04-02	VOD for the 31st of March 2023
-2023-04-01	1	TgNSYLw5GMQ		2023-04-02	VOD for the 1st of April 2023
+2023-03-25	1	EdmL5sot3W0	29978	2023-04-02	VOD for the 25th of March 2023
+2023-03-28	1	ciCZL7VGNvI	25971	2023-04-02	VOD for the 28th of March 2023
+2023-03-31	1	DMKAcMBs8H4	30285	2023-04-02	VOD for the 31st of March 2023
+2023-04-01	1	TgNSYLw5GMQ	29663	2023-04-02	VOD for the 1st of April 2023
 2023-04-04	1	iOcWdlX1joM		2023-04-04	VOD for the 4th of April 2023
 # posted again on Discord on 2023-04-18: one line
 2023-04-16	1	QY2hDw4dTBo		2023-04-18	[2023-04-16] COLLAB STREAM with JonathanOng !jon !incentives !minorwheel !majorwheel [M'sia, EN]
