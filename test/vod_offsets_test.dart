@@ -247,7 +247,7 @@ void main() {
       final vod = _vod([null, 7200]);
       expect(_positions(c, vod, _offsets(['2024-01-02\t\t-600'])), [null, null]);
       expect(_positions(c, _vod([3600, null]), _offsets(['2024-01-02\t\t-600'])), ['1@1200', '2@1200']);
-      expect(_positions(c, _vod([null]), _offsets(['2024-01-02\t\t+99999'])), ['1@1800', '1@5400']);
+      expect(_positions(c, _vod([null]), _offsets(['2024-01-02\t\t+80000'])), ['1@81800', '1@85400']);
     });
 
     test('placeInVod: the parts end to end', () {
