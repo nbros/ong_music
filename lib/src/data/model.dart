@@ -519,7 +519,13 @@ final class Song {
 /// Somebody who requested songs. Names are merged case- and accent-insensitively.
 final class Requester {
   /// Creates a requester; normally only the parser does this.
-  const Requester({required this.id, required this.name, required this.folded, required this.requestCount});
+  const Requester({
+    required this.id,
+    required this.name,
+    required this.folded,
+    required this.requestCount,
+    this.otherNames = const [],
+  });
 
   /// Index in `Catalogue.requesters`.
   final int id;
@@ -534,6 +540,11 @@ final class Requester {
 
   /// Number of plays they requested (highlights not counted).
   final int requestCount;
+
+  /// The other names of their group (`RequesterAliases`) the sheets hold, each under its most frequent spelling (the
+  /// spellings of [name] itself are not among them), the most written first in both sheets, then in order of first
+  /// appearance; empty for a requester of one name.
+  final List<String> otherNames;
 
   @override
   String toString() => 'Requester#$id($name, $requestCount)';

@@ -437,16 +437,44 @@ class _Requesters {
   int _newCell(String name) {
     final key = _keyOf(name);
     if (key == null) return -1;
-    return _ids.putIfAbsent(key, () {
+    final id = _ids.putIfAbsent(key, () {
       _folds.add(key);
       spellings.putIfAbsent(key, () => {name: 0});
       return _folds.length - 1;
     });
+    // a name of a group met only in the notes of a highlight is one of its other names, under no count
+    if (aliases.isGroup(key)) spellings.putIfAbsent(key, () => {}).putIfAbsent(name, () => 0);
+    return id;
   }
 
-  /// The requester of id [id], with the most frequent of its spellings.
-  Requester requester(int id, int requestCount) =>
-      Requester(id: id, name: _mostFrequent(spellings[_folds[id]]!), folded: _folds[id], requestCount: requestCount);
+  /// The requester of id [id], with the most frequent of its spellings, and for a group of [aliases] its other names.
+  Requester requester(int id, int requestCount) {
+    final key = _folds[id];
+    final counts = spellings[key]!;
+    final name = _mostFrequent(counts);
+    return Requester(
+      id: id,
+      name: name,
+      folded: key,
+      requestCount: requestCount,
+      otherNames: aliases.isGroup(key) ? _otherNames(counts, fold(name)) : const [],
+    );
+  }
+
+  /// The names of [counts] (the spellings of a group) other than [shown] (folded), each under its most frequent
+  /// spelling, the most counted first, then in order of first appearance.
+  static List<String> _otherNames(Map<String, int> counts, String shown) {
+    final byFold = <String, Map<String, int>>{};
+    counts.forEach((name, count) {
+      final f = fold(name);
+      if (f != shown) (byFold[f] ??= {})[name] = count;
+    });
+    final names = [
+      for (final (i, spellings) in byFold.values.indexed)
+        (name: _mostFrequent(spellings), count: spellings.values.fold(0, (sum, n) => sum + n), order: i),
+    ]..sort((a, b) => a.count != b.count ? b.count.compareTo(a.count) : a.order.compareTo(b.order));
+    return List.unmodifiable([for (final n in names) n.name]);
+  }
 
   static String _mostFrequent(Map<String, int> counts) {
     String? best;
@@ -689,7 +717,7 @@ class _SongsBuilder {
   }
 
   /// Adds the spellings of the highlights' sheet to those of the Songs sheet. A name taken from the notes of a
-  /// highlight, never written in a requester cell, is a spelling of its own only when neither sheet has another one.
+  /// highlight, never written in a requester cell, is shown only when neither sheet has another one (it counts 0).
   void _addHighlightSpellings() {
     final spellings = _requesters.spellings;
     _base.requesterSpellings.forEach((key, counts) {
@@ -698,7 +726,12 @@ class _SongsBuilder {
         spellings[key] = {...counts};
       } else {
         counts.forEach((name, count) {
-          if (count > 0) merged[name] = (merged[name] ?? 0) + count;
+          if (count > 0) {
+            merged[name] = (merged[name] ?? 0) + count;
+          } else {
+            // under no count, never the name shown: one of the other names of a group
+            merged.putIfAbsent(name, () => 0);
+          }
         });
       }
     });

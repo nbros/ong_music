@@ -236,6 +236,49 @@ void main() {
     });
   });
 
+  group('the other names of a group', () {
+    final aliases = RequesterAliases([
+      ['Amy', 'amy_alt', 'Amyy', 'amy_absent', 'AmyBis'],
+      ['Bob', 'bob2'],
+    ]);
+
+    test('those the sheets hold, under their own most frequent spelling, the most written first', () {
+      final c = catalogueOf(
+        highlights: [
+          hRow(title: 'v', requester: 'AMYY'),
+          hRow(title: 'w', notes: 'requested by AmyBis'),
+        ],
+        // Amy 3 (amy once), Amyy 2 (Amyy once, AMYY twice, one of them in the highlights), amy_alt 2, Carol alone
+        songs: _songs(['Amy', 'amy_alt', 'Amyy', 'AMYY', 'amy', 'Amy', 'amy_alt', 'Carol']),
+        aliases: aliases,
+      );
+      final amy = c.requesterNamed('amy')!;
+      expect(amy.name, 'Amy');
+      // AMYY and amy_alt twice each: AMYY was met first; AmyBis, in the notes of a highlight alone, last; amy_absent
+      // is in no sheet; amy, a spelling of the name shown, is not another name
+      expect(amy.otherNames, ['AMYY', 'amy_alt', 'AmyBis']);
+      expect(c.requesterNamed('Carol')!.otherNames, isEmpty);
+    });
+
+    test('none for a requester of one name, or a group met under one name alone', () {
+      final c = catalogueOf(songs: _songs(['Bob', 'BOB', 'Carol']), aliases: aliases);
+      expect(c.requesters.map((r) => r.name), ['Bob', 'Carol']);
+      expect(c.requesters.map((r) => r.otherNames), everyElement(isEmpty));
+    });
+
+    test('equal counts in order of first appearance, whatever the order of the table', () {
+      final songs = _songs(['amy_alt', 'AmyBis', 'Amy', 'Amy', 'Amyy']);
+      for (final table in [
+        aliases,
+        RequesterAliases([
+          ['AmyBis', 'Amyy', 'amy_alt', 'Amy'],
+        ]),
+      ]) {
+        expect(catalogueOf(songs: songs, aliases: table).requesters.single.otherNames, ['amy_alt', 'AmyBis', 'Amyy']);
+      }
+    });
+  });
+
   group('a running time in a Requester cell', () {
     test('names no requester, in both sheets', () {
       final c = catalogueOf(

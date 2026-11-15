@@ -129,6 +129,9 @@ final class RequesterAliases {
   /// The key of the requester whose folded name is [folded]: the key of its group, or [folded] itself.
   String keyOf(String folded) => _keys[folded] ?? folded;
 
+  /// Whether [key] ([keyOf]) is that of a group of several names.
+  bool isGroup(String key) => _searchTexts.containsKey(key);
+
   /// What a search looks for in the names of the requester of key [key] ([keyOf]): the folded names of its group,
   /// one per line (a query token never holds a line break, so never spans two names), or [key] itself.
   String searchTextOf(String key) => _searchTexts[key] ?? key;
