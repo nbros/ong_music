@@ -279,6 +279,9 @@ class TestApp {
 ///
 /// The launcher icon has no shortcut, as in the web app, unless [shortcuts]
 /// gives it those of the Android app.
+///
+/// The version of Android is unknown, as on the web, unless [androidSdk]
+/// gives its API level (33 and higher preview what is copied).
 Future<TestApp> pumpApp(
   WidgetTester tester, {
   CatalogueState? state,
@@ -305,6 +308,7 @@ Future<TestApp> pumpApp(
   bool desktop = false,
   bool canShare = true,
   FakeLauncherShortcuts? shortcuts,
+  int? androidSdk,
 }) async {
   // before the size: setting it makes MediaQuery read the clock format again
   tester.platformDispatcher.alwaysUse24HourFormatTestValue = alwaysUse24HourFormat;
@@ -363,6 +367,7 @@ Future<TestApp> pumpApp(
         fontWarmUpPauseProvider.overrideWithValue(fontPause ?? () => Future<void>.delayed(Duration.zero)),
         desktopLookProvider.overrideWithValue(desktop),
         launcherShortcutsProvider.overrideWithValue(shortcuts),
+        androidSdkProvider.overrideWith((ref) async => androidSdk),
         if (pointer != null) pointerProvider.overrideWith(() => PinnedPointer(pointer)),
         thumbnailImageProvider.overrideWithValue((url) => MemoryImage(transparentPng)),
         urlOpenerProvider.overrideWithValue((uri) async {

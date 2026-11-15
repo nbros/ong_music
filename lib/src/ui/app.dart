@@ -11,6 +11,7 @@ import '../state/catalogue_state.dart';
 import '../state/settings_state.dart';
 import '../web/web_platform.dart';
 import 'about_page.dart';
+import 'actions.dart';
 import 'address.dart';
 import 'detail_pane.dart';
 import 'font_warm_up.dart';
@@ -90,6 +91,8 @@ class _OngMusicAppState extends ConsumerState<OngMusicApp> {
     );
     // already in the background at the start: no change of state will tell
     if (ref.read(startsInBackgroundProvider)) ref.read(catalogueProvider.notifier).setForeground(false);
+    // read once, at the start: the confirmation of a copy depends on it (copyAndConfirm)
+    ref.read(androidSdkProvider);
   }
 
   @override

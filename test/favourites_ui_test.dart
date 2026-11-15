@@ -50,10 +50,12 @@ Finder _star() => _inSheet(
 /// The Copy button of the sheet on screen, under the title.
 Finder _copy() => _inSheet(find.byWidgetPredicate((w) => w is IconButton && w.tooltip == 'Copy title and link'));
 
-/// The copy button of the title and the artist, left of the star.
-Finder _copyTitle() => _inSheet(
-  find.byWidgetPredicate((w) => w is IconButton && (w.tooltip == 'Copy title and artist' || w.tooltip == 'Copy title')),
-);
+/// The copy button of the title, left of the star.
+Finder _copyTitle() =>
+    _inSheet(find.byWidgetPredicate((w) => w is IconButton && w.tooltip == 'Copy title' && w.icon is AnimatedSwitcher));
+
+/// The Share button of the sheet on screen, under the copy button of the title.
+Finder _share() => _inSheet(find.byWidgetPredicate((w) => w is IconButton && w.tooltip == 'Share'));
 
 /// The title of the sheet on screen (selectable, so an editable text).
 Finder _title() => _inSheet(find.byType(SelectableText)).first;
@@ -100,17 +102,19 @@ void main() {
         ),
       );
 
-      // 48 px under the finger, its right edge in line with Copy's, level with the title and the artist
+      // 48 px under the finger, on the axis of the button under it (Copy title and link), level with the title and the
+      // artist; the copy button of the title on the axis of Share: two columns of icons
       final star = tester.getRect(_star());
       final copy = tester.getRect(_copy());
       expect(star.size, const Size(48, 48));
-      expect(star.right, copy.right);
+      expect(star.center.dx, copy.center.dx);
+      expect(tester.getRect(_copyTitle()).center.dx, tester.getRect(_share()).center.dx);
       final title = tester.getRect(_title());
       final artist = tester.getRect(_artist('Zelda'));
       expect(star.center.dy, (title.top + artist.bottom) / 2);
       // the title has the room up to the copy button of the title, right beside the star
       final copyTitle = tester.getRect(_copyTitle());
-      expect(copyTitle.right, star.left);
+      expect(star.left - copyTitle.right, 8, reason: 'the space between the buttons under them');
       expect(tester.getRect(_titleBlock()).right, copyTitle.left);
       expect(title.right, lessThanOrEqualTo(copyTitle.left));
       expect(artist.right, lessThanOrEqualTo(copyTitle.left));
@@ -200,11 +204,11 @@ void main() {
           final copyTitle = tester.getRect(_copyTitle());
           final title = tester.getRect(_title());
           final sheet = tester.getRect(find.byType(HighlightSheet));
-          expect(copyTitle.right, star.left, reason: track);
+          expect(star.left - copyTitle.right, 8, reason: track);
           expect(tester.getRect(_titleBlock()).right, copyTitle.left, reason: track);
           expect(title.right, lessThanOrEqualTo(copyTitle.left), reason: track);
-          expect(star.right, tester.getRect(_copy()).right, reason: track);
-          expect(star.right, lessThanOrEqualTo(sheet.right - 20), reason: track);
+          expect(star.center.dx, tester.getRect(_copy()).center.dx, reason: track);
+          expect(star.right, lessThanOrEqualTo(sheet.right), reason: track);
           if (artist == null) {
             expect(title.height, closeTo(26 * scale, 1), reason: 'one line');
             expect(star.center.dy, title.center.dy, reason: 'level with the title');

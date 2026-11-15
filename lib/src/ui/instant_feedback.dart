@@ -375,7 +375,6 @@ class AppInkWell extends StatefulWidget {
   const AppInkWell({
     super.key,
     required this.onTap,
-    this.onLongPress,
     this.customBorder,
     this.borderRadius,
     this.hoverColor,
@@ -386,10 +385,6 @@ class AppInkWell extends StatefulWidget {
   });
 
   final VoidCallback? onTap;
-
-  /// A long press with a finger or a stylus, with the haptic feedback of the platform, and the long press action of
-  /// screen readers. Not with a mouse in the desktop look: a slow click still activates the control.
-  final VoidCallback? onLongPress;
   final ShapeBorder? customBorder;
   final BorderRadius? borderRadius;
   final Color? hoverColor;
@@ -456,7 +451,6 @@ class _AppInkWellState extends State<AppInkWell> with AutomaticKeepAliveClientMi
     if (!AppLayout.desktopOf(context)) {
       return InkWell(
         onTap: widget.onTap,
-        onLongPress: widget.onLongPress,
         customBorder: widget.customBorder,
         borderRadius: widget.borderRadius,
         hoverColor: widget.hoverColor,
@@ -485,7 +479,6 @@ class _AppInkWellState extends State<AppInkWell> with AutomaticKeepAliveClientMi
           onExit: (_) => states.update(WidgetState.hovered, false),
           child: Semantics(
             onTap: enabled && !widget.excludeFromSemantics ? _activate : null,
-            onLongPress: widget.excludeFromSemantics ? null : widget.onLongPress,
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               excludeFromSemantics: true,
@@ -497,47 +490,20 @@ class _AppInkWellState extends State<AppInkWell> with AutomaticKeepAliveClientMi
                       _activate();
                     }
                   : null,
-              child: _TouchLongPress(
-                onLongPress: widget.onLongPress,
-                child: StateLayer(
-                  states: states,
-                  hover: overlay?.resolve(const {WidgetState.hovered}) ?? widget.hoverColor ?? theme.hoverColor,
-                  focus: overlay?.resolve(const {WidgetState.focused}) ?? theme.focusColor,
-                  press:
-                      overlay?.resolve(const {WidgetState.pressed}) ??
-                      theme.colorScheme.onSurface.withValues(alpha: pressStateOpacity),
-                  shape: shape,
-                  child: widget.child,
-                ),
+              child: StateLayer(
+                states: states,
+                hover: overlay?.resolve(const {WidgetState.hovered}) ?? widget.hoverColor ?? theme.hoverColor,
+                focus: overlay?.resolve(const {WidgetState.focused}) ?? theme.focusColor,
+                press:
+                    overlay?.resolve(const {WidgetState.pressed}) ??
+                    theme.colorScheme.onSurface.withValues(alpha: pressStateOpacity),
+                shape: shape,
+                child: widget.child,
               ),
             ),
           ),
         ),
       ),
-    );
-  }
-}
-
-/// [onLongPress] for a long press with a finger or a stylus, with the haptic feedback of the platform; [child] alone
-/// without it. A mouse held down does not take part: its slow click stays a click.
-class _TouchLongPress extends StatelessWidget {
-  const _TouchLongPress({required this.onLongPress, required this.child});
-
-  final VoidCallback? onLongPress;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final onLongPress = this.onLongPress;
-    if (onLongPress == null) return child;
-    return GestureDetector(
-      excludeFromSemantics: true,
-      supportedDevices: const {PointerDeviceKind.touch, PointerDeviceKind.stylus, PointerDeviceKind.invertedStylus},
-      onLongPress: () {
-        Feedback.forLongPress(context);
-        onLongPress();
-      },
-      child: child,
     );
   }
 }
