@@ -376,7 +376,7 @@ void main() {
       expect(find.text('Updated 1 hour ago'), findsOneWidget);
       app.notifier.emit(withSongs(songsAt: testNow.subtract(const Duration(hours: 3))));
       await tester.pumpAndSettle();
-      expect(find.text('7 songs · 3 streams'), findsOneWidget);
+      expect(find.text('7 plays · 3 streams'), findsOneWidget);
       expect(find.textContaining('Found 2 requests by jsbach64'), findsOneWidget);
       expect(find.text('Updated 3 hours ago'), findsOneWidget);
       app.notifier.emit(

@@ -27,7 +27,7 @@ void main() {
       app.notifier.emit(CatalogueState(catalogue: complete, fetchedAt: fetchedAt, songsFetchedAt: fetchedAt));
       await tester.pump();
       await tester.pumpAndSettle();
-      expect(find.textContaining(' songs · '), findsOneWidget);
+      expect(find.text('4 plays · 2 streams'), findsOneWidget);
       if (name.isNotEmpty) expect(find.textContaining('Found '), findsOneWidget);
       expect(tester.getRect(below).top, top);
       expect((pos().pixels, pos().maxScrollExtent), (p0, max0));

@@ -11,6 +11,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../data/catalogue.dart';
 import '../data/model.dart';
+import '../data/rankings.dart';
 import '../state/catalogue_state.dart';
 import '../state/new_highlights_state.dart';
 import 'address.dart';
@@ -188,6 +189,45 @@ void showRequesterInOngLog(WidgetRef ref, String name) {
   ref.read(playFilterProvider.notifier).searchOnly(name);
   ref.read(selectedTabProvider.notifier).select(AppTab.ongLog);
   FocusManager.instance.primaryFocus?.unfocus();
+}
+
+// ------------------------------------------------------------------ the statistics page
+
+/// What the statistics page shows: one of its rankings, of every play or of the user's own requests alone ([mine],
+/// the "You" chip).
+@immutable
+final class StatsView {
+  const StatsView({this.kind = RankingKind.songs, this.mine = false});
+
+  final RankingKind kind;
+  final bool mine;
+
+  @override
+  bool operator ==(Object other) => other is StatsView && other.kind == kind && other.mine == mine;
+
+  @override
+  int get hashCode => Object.hash(kind, mine);
+}
+
+/// What the statistics page shows; kept while it is closed, so that it opens again on the same ranking.
+final statsViewProvider = NotifierProvider<StatsViewNotifier, StatsView>(StatsViewNotifier.new);
+
+/// Holds the [StatsView] of the statistics page.
+class StatsViewNotifier extends Notifier<StatsView> {
+  @override
+  StatsView build() {
+    // the "You" chip is gone (Twitch name changed, refresh): its filter goes with it, and does not come back with it
+    ref.listen(myPlayCountProvider, (_, count) {
+      if (count == 0 && state.mine) state = StatsView(kind: state.kind);
+    });
+    return const StatsView();
+  }
+
+  /// Shows the ranking of [kind].
+  void show(RankingKind kind) => state = StatsView(kind: kind, mine: state.mine);
+
+  /// Ranks only the user's own requests, or every play again ("You").
+  void toggleMine() => state = StatsView(kind: state.kind, mine: !state.mine);
 }
 
 // ------------------------------------------------------------------ fiches and the detail pane

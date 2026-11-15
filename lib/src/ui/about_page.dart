@@ -3,11 +3,13 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:vector_graphics/vector_graphics.dart';
 
 import '../data/catalogue.dart';
+import '../data/rankings.dart';
 import '../data/schedule.dart';
 import '../state/catalogue_state.dart';
 import '../state/settings_state.dart';
@@ -20,6 +22,7 @@ import 'instant_feedback.dart';
 import 'layout.dart';
 import 'list_scaffold.dart';
 import 'outside_link.dart';
+import 'stats_page.dart';
 import 'theme.dart';
 import 'view_state.dart';
 import 'widgets.dart';
@@ -152,6 +155,8 @@ class AboutPage extends ConsumerWidget {
           },
         ),
       ),
+      // under the links: the statistics are those of his streams, not a setting of the app
+      _StatsEntry(color: expanded ? scheme.surfaceContainerHigh : scheme.surfaceContainer),
       const InstallSection(),
     ];
     final settings = [
@@ -507,6 +512,113 @@ class _LinkTile extends StatelessWidget {
   }
 }
 
+/// How long the About tab stays on screen, with nothing moving, before the tables of the rankings are made ahead
+/// (see [_StatsEntry]).
+const Duration rankingsAheadDelay = Duration(milliseconds: 600);
+
+/// The row that opens the statistics page: an icon, its name and a chevron on a tile of [color], as the link tiles
+/// above it. Nothing in it depends on the data: it stays as it is when the data comes.
+///
+/// While the About tab is on screen with the Ong Log's data, it makes ahead what the rankings share
+/// ([makeRankingTables]), once per catalogue, at a moment when nothing moves (no animation, no frame to draw: not
+/// during a scroll): some tens of milliseconds that the opening of the page would otherwise spend in its first
+/// frame.
+class _StatsEntry extends ConsumerStatefulWidget {
+  const _StatsEntry({required this.color});
+
+  final Color color;
+
+  @override
+  ConsumerState<_StatsEntry> createState() => _StatsEntryState();
+}
+
+class _StatsEntryState extends ConsumerState<_StatsEntry> {
+  Timer? _ahead;
+
+  @override
+  void initState() {
+    super.initState();
+    ref.listenManual(selectedTabProvider, (_, _) => _makeAhead(), fireImmediately: true);
+    ref.listenManual(currentCatalogueProvider, (_, _) => _makeAhead());
+  }
+
+  /// Makes the tables after [rankingsAheadDelay], if the tab is About and the catalogue has the Songs sheet; later
+  /// while something moves.
+  void _makeAhead() {
+    _ahead?.cancel();
+    _ahead = null;
+    final catalogue = ref.read(currentCatalogueProvider);
+    if (ref.read(selectedTabProvider) != AppTab.about ||
+        catalogue == null ||
+        !catalogue.hasSongs ||
+        hasRankingTables(catalogue)) {
+      return;
+    }
+    _ahead = Timer(rankingsAheadDelay, () {
+      _ahead = null;
+      final scheduler = SchedulerBinding.instance;
+      if (scheduler.transientCallbackCount > 0 || scheduler.hasScheduledFrame) return _makeAhead();
+      makeRankingTables(catalogue);
+    });
+  }
+
+  @override
+  void dispose() {
+    _ahead?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    void open() => showStatsPage(context);
+    final color = widget.color;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+      child: Semantics(
+        button: true,
+        label: statsTitle,
+        // the ink well's own action goes with its semantics
+        onTap: open,
+        excludeSemantics: true,
+        child: Material(
+          color: color,
+          // the corners of the install card under it, as wide as it
+          borderRadius: BorderRadius.circular(16),
+          clipBehavior: Clip.antiAlias,
+          child: AppInkWell(
+            onTap: open,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 56),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 12, 8),
+                child: Row(
+                  spacing: 14,
+                  children: [
+                    Icon(Icons.leaderboard, size: 22, color: scheme.onSurface),
+                    Expanded(
+                      child: Text(
+                        statsTitle,
+                        style: TextStyle(
+                          fontSize: 15,
+                          height: 20 / 15,
+                          fontWeight: FontWeight.w500,
+                          color: scheme.onSurface,
+                        ),
+                      ),
+                    ),
+                    Icon(Icons.chevron_right, size: 22, color: OngColors.of(context).on3),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _SectionTitle extends StatelessWidget {
   const _SectionTitle(this.text, {this.top = 24});
 
@@ -694,7 +806,7 @@ class _DataSectionState extends ConsumerState<_DataSection> {
                       // what the Songs sheet counts, on one line of its own: its room is there before it is in
                       Text(
                         state.hasSongs
-                            ? '${plural(state.playCount, 'song')} · ${plural(state.streamCount, 'stream')}'
+                            ? '${plural(state.playCount, 'play')} · ${plural(state.streamCount, 'stream')}'
                             : ' ',
                         style: small,
                         maxLines: 1,

@@ -741,6 +741,9 @@ void main() {
       // the name is cleared, then typed again
       await selectBoth();
       await goToTab(tester, 'About');
+      // in view: at the bottom edge, the handle of its cursor would lie over the navigation bar
+      await tester.ensureVisible(twitchNameField());
+      await tester.pumpAndSettle();
       await tester.enterText(twitchNameField(), '');
       await tester.pump();
       await expectUnfiltered();
@@ -829,7 +832,8 @@ void main() {
       await goToTab(tester, 'About');
       await tester.scrollUntilVisible(find.text('Clear downloaded data'), 200, scrollable: aboutScrollable());
       expect(find.text('Updated 2 hours ago'), findsOneWidget);
-      expect(find.text('4 songs · 2 streams'), findsOneWidget);
+      // the songs played, not the different songs: plays
+      expect(find.text('4 plays · 2 streams'), findsOneWidget);
       expect(find.textContaining('at most every 6 hours'), findsOneWidget);
       await tapVisible(tester, find.text('Refresh'));
       expect(app.notifier.refreshes, 1);

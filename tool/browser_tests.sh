@@ -16,6 +16,8 @@ tests=(
   # what reads numbers in the sheets and in the calendar: integers are JavaScript numbers in one build and 64-bit in
   # the other (and on the VM, where `flutter test` runs them)
   test/parser_test.dart
+  # (the order of the rankings packs code units in integers of 51 bits)
+  test/rankings_test.dart
   test/schedule_test.dart
   test/text_test.dart
 )

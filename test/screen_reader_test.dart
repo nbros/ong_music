@@ -81,6 +81,9 @@ void main() {
     await pumpApp(tester);
     await goToTab(tester, 'About');
     await tester.scrollUntilVisible(find.text('Optional'), 200, scrollable: aboutScrollable());
+    // in view, not only built below it
+    await tester.ensureVisible(find.text('Optional'));
+    await tester.pumpAndSettle();
     final field = tester.getSemantics(find.byType(TextField).hitTestable());
     expect(field.label, contains('Your Twitch name'));
     expect(field.getSemanticsData().flagsCollection.isTextField, isTrue);

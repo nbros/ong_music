@@ -17,6 +17,15 @@ String formatCount(int n) {
   return out.toString();
 }
 
+/// The share of [count] in [total], in percent: `39.3%`, `0.4%`; `<0.1%` for a share that would round to nothing,
+/// `0%` for none (or a [total] of 0).
+String formatShare(int count, int total) {
+  if (count <= 0 || total <= 0) return '0%';
+  final tenths = (count * 1000 / total).round();
+  if (tenths == 0) return '<0.1%';
+  return '${tenths ~/ 10}.${tenths % 10}%';
+}
+
 /// `1 song`, `12 songs`: [n] formatted, then [singular] or [plural]
 /// (default: [singular] + `s`).
 String plural(int n, String singular, [String? plural]) =>
