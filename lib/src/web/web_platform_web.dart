@@ -205,6 +205,18 @@ bool? browserUses24HourClock() {
 /// Whether the page is hidden right now (a tab opened behind another one).
 bool pageIsHidden() => web.document.hidden;
 
+/// Whether the page is visible, following its `visibilitychange` events: the
+/// app lifecycle misses the first showing of a tab opened behind another one
+/// (the engine starts at "resumed", and that showing sets it again, which
+/// tells nobody). One for the app's lifetime (its listener is never removed).
+ValueListenable<bool>? pageVisibility() => _pageVisibility;
+
+final ValueNotifier<bool> _pageVisibility = () {
+  final visible = ValueNotifier(!web.document.hidden);
+  web.document.addEventListener('visibilitychange', ((web.Event _) => visible.value = !web.document.hidden).toJS);
+  return visible;
+}();
+
 String _hex(Color color) => '#${(color.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0')}';
 
 /// Colours the browser bars (theme-color) and the page behind the app with

@@ -13,7 +13,6 @@ import '../data/model.dart';
 import '../state/catalogue_state.dart';
 import '../state/new_highlights_state.dart';
 import '../state/settings_state.dart';
-import '../web/web_platform.dart';
 import 'actions.dart';
 import 'format.dart';
 import 'layout.dart';
@@ -53,6 +52,9 @@ class _HighlightsPageState extends ConsumerState<HighlightsPage> implements List
   late final KnownHighlightsNotifier _visit;
   late final AppLifecycleListener _lifecycle;
 
+  /// The visibility of the page, in a browser.
+  ValueListenable<bool>? _pageVisibility;
+
   @override
   void initState() {
     super.initState();
@@ -61,19 +63,21 @@ class _HighlightsPageState extends ConsumerState<HighlightsPage> implements List
     FocusManager.instance.addEarlyKeyEventHandler(_onKey);
     _visit = ref.read(knownHighlightsProvider.notifier);
     _lifecycle = AppLifecycleListener(onStateChange: (_) => _syncVisit());
+    _pageVisibility = ref.read(pageVisibilityProvider)?..addListener(_syncVisit);
     ref.listenManual(selectedTabProvider, (_, _) => _syncVisit());
     // after the first frame: never while building
     WidgetsBinding.instance.addPostFrameCallback((_) => _syncVisit());
   }
 
-  /// In sight: the app in the foreground (hidden or paused out of it), and in a browser the page visible.
+  /// In sight: the app in the foreground (hidden or paused out of it), and in a browser the page visible (followed
+  /// by itself: the lifecycle does not tell when a tab opened behind another one is first shown).
   void _syncVisit() {
     if (!mounted) return;
     final lifecycle = WidgetsBinding.instance.lifecycleState;
     final foreground =
         lifecycle == null || lifecycle == AppLifecycleState.resumed || lifecycle == AppLifecycleState.inactive;
     _visit.sync(
-      inSight: foreground && !pageIsHidden(),
+      inSight: foreground && (_pageVisibility?.value ?? true),
       listOnScreen: ref.read(selectedTabProvider) == AppTab.highlights,
     );
   }
@@ -173,6 +177,7 @@ class _HighlightsPageState extends ConsumerState<HighlightsPage> implements List
   void dispose() {
     FocusManager.instance.removeEarlyKeyEventHandler(_onKey);
     _lifecycle.dispose();
+    _pageVisibility?.removeListener(_syncVisit);
     _keyboard.dispose();
     _search.dispose();
     _scroll.dispose();

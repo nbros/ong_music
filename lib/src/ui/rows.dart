@@ -145,8 +145,13 @@ class HighlightRow extends StatelessWidget {
             ),
           ),
           // over the thumbnail, inside its corner: nothing of the row moves when it comes or goes; said after the
-          // rest of the row
-          if (isNew) const Positioned(left: 16 + 4, top: 8 + 4, child: NewMark()),
+          // rest of the row; the pointer goes through it, to the thumbnail's own link (with a mouse) or to the row
+          if (isNew)
+            const Positioned(
+              left: 16 + 4,
+              top: 8 + 4,
+              child: IgnorePointer(child: NewMark()),
+            ),
           if (onMore != null)
             Positioned(
               top: 0,

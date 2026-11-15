@@ -1,5 +1,7 @@
 import 'dart:ui' show Color;
 
+import 'package:flutter/foundation.dart' show ValueListenable;
+
 import 'browser_history.dart';
 import 'embedded_video.dart';
 import 'font_network.dart';
@@ -42,6 +44,10 @@ bool canShareText() => true;
 /// Whether the page is hidden right now (a tab opened behind another one);
 /// false outside a browser.
 bool pageIsHidden() => false;
+
+/// Whether the page is visible, following the browser: null outside a
+/// browser, where the app lifecycle tells it.
+ValueListenable<bool>? pageVisibility() => null;
 
 /// Colours the browser bars (theme-color) and the page behind the app.
 void setBrowserTheme({required Color background, required bool dark}) {}

@@ -287,7 +287,7 @@ class _TopBarLink extends StatefulWidget {
 
   final String label;
 
-  /// Whether the label has the count of the new highlights, over its top end corner (it moves nothing).
+  /// Whether the label has the count of the new highlights, above its end (it moves nothing).
   final bool newCount;
   final double labelWidth;
   final double padding;
@@ -367,8 +367,15 @@ class _TopBarLinkState extends State<_TopBarLink> {
     );
   }
 
-  /// The count over the end of the label, above its line of text: in the free space of the bar, never over a
-  /// label, even with the narrowest padding.
-  Widget _withCount(Widget label) =>
-      widget.newCount ? NewHighlightsBadge(offset: const Offset(10, -13), child: label) : label;
+  /// The count above the line of [label], its right edge at the end of the link (the label and its padding): over
+  /// the end of its own label at most, never over the next one, whatever the padding and the count (`99+`).
+  Widget _withCount(Widget label) => widget.newCount
+      ? Stack(
+          clipBehavior: Clip.none,
+          children: [
+            label,
+            Positioned(top: -13, right: -widget.padding, child: const NewHighlightsBadge()),
+          ],
+        )
+      : label;
 }

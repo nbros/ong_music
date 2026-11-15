@@ -3,12 +3,18 @@
 /// on the Highlights destination of the navigation.
 library;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../state/new_highlights_state.dart';
+import '../web/web_platform.dart';
 import 'format.dart';
 import 'theme.dart';
+
+/// Whether the page is visible, in a browser ([pageVisibility]); null in the
+/// native apps. Overridden in tests.
+final pageVisibilityProvider = Provider<ValueListenable<bool>?>((ref) => pageVisibility());
 
 /// The word of the mark of a new highlight's row, and of the chip that keeps
 /// only the new highlights.
@@ -40,18 +46,15 @@ class NewMark extends StatelessWidget {
   }
 }
 
-/// [child], the icon or the label of the Highlights destination of the
-/// navigation, with the count of the new highlights over its top end corner
-/// while there are any: drawn over what is around it, it moves nothing. Said
-/// as [newHighlightsLabel], with the destination.
+/// [child], the icon of the Highlights destination of the navigation, with
+/// the count of the new highlights over its top end corner while there are
+/// any: drawn over what is around it, it moves nothing. Without [child], the
+/// count alone (nothing without new highlights), for the caller to place.
+/// Said as [newHighlightsLabel], with the destination.
 class NewHighlightsBadge extends ConsumerWidget {
-  const NewHighlightsBadge({super.key, required this.child, this.offset});
+  const NewHighlightsBadge({super.key, this.child});
 
-  final Widget child;
-
-  /// [Badge.offset]: where the count is from the top end corner of [child]
-  /// (the default of [Badge] when null).
-  final Offset? offset;
+  final Widget? child;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -59,7 +62,6 @@ class NewHighlightsBadge extends ConsumerWidget {
     final ong = OngColors.of(context);
     return Badge(
       isLabelVisible: count > 0,
-      offset: offset,
       backgroundColor: ong.brand,
       textColor: ong.onBrand,
       label: Semantics(

@@ -23,6 +23,7 @@ import 'package:ong_music/src/ui/fullscreen_button.dart';
 import 'package:ong_music/src/ui/install_banner.dart';
 import 'package:ong_music/src/ui/layout.dart';
 import 'package:ong_music/src/ui/nav_rail.dart';
+import 'package:ong_music/src/ui/new_highlights.dart';
 import 'package:ong_music/src/ui/outside_link.dart';
 import 'package:ong_music/src/ui/top_bar.dart';
 import 'package:ong_music/src/ui/video_preview.dart';
@@ -268,6 +269,9 @@ class TestApp {
 /// (default: a timer of zero).
 /// The app has the phone and tablet look, whatever the platform of the test,
 /// unless [desktop] gives it the desktop look (top bar, instant feedback).
+///
+/// The page's visibility is [pageVisibility], as in the web app; none, as in
+/// the native apps, by default.
 Future<TestApp> pumpApp(
   WidgetTester tester, {
   CatalogueState? state,
@@ -293,6 +297,7 @@ Future<TestApp> pumpApp(
   Future<void> Function()? fontPause,
   bool desktop = false,
   bool canShare = true,
+  ValueListenable<bool>? pageVisibility,
 }) async {
   // before the size: setting it makes MediaQuery read the clock format again
   tester.platformDispatcher.alwaysUse24HourFormatTestValue = alwaysUse24HourFormat;
@@ -356,6 +361,7 @@ Future<TestApp> pumpApp(
           return true;
         }),
         canShareProvider.overrideWithValue(canShare),
+        pageVisibilityProvider.overrideWithValue(pageVisibility),
         textSharerProvider.overrideWithValue((text) async {
           if (!effects.shareWorks) return false;
           effects.shared.add(text);
