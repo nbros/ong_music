@@ -136,8 +136,13 @@ const watchInTheVodText = 'Watch in the VOD';
 /// Opening the full recording of a stream from its start: the button of its fiche (approved by the user).
 const watchTheVodText = 'Watch the VOD';
 
-/// The button of part [part] of the recording of a stream in several videos (a proposal, not approved yet).
+/// The full name of the button of part [part] of the recording of a stream in several videos: what screen readers
+/// say and its tooltip shows ([vodPartText] is written on it).
 String watchTheVodPartText(int part) => 'Watch the VOD, part $part';
+
+/// What the button of part [part] of the recording of a stream in several videos shows: short, so that its buttons
+/// stand side by side on one line; the icon says a player opens (approved by the user).
+String vodPartText(int part) => 'VOD $part';
 
 /// The star of a highlight, as a button of its fiche and as an item of the menu of its row.
 const addToFavouritesText = 'Add to favourites';

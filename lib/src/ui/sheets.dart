@@ -1106,7 +1106,9 @@ class _StreamSheetState extends ConsumerState<StreamSheet> {
 }
 
 /// A button of the head of the fiche of a stream: its VOD from the start ([watchTheVodText]), or part [part] of it
-/// when it has several videos ([watchTheVodPartText]), opened on YouTube. Disabled, in its place, without [link].
+/// when it has several videos, short ([vodPartText]: the buttons of the parts stand on one line, a second one only
+/// when they do not fit), its full name ([watchTheVodPartText]) for screen readers and as its tooltip; opened on
+/// YouTube. Disabled, in its place, without [link].
 class _VodButton extends StatelessWidget {
   const _VodButton({required this.link, this.part});
 
@@ -1116,11 +1118,30 @@ class _VodButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final part = this.part;
-    final label = part == null ? watchTheVodText : watchTheVodPartText(part);
+    final name = part == null ? watchTheVodText : watchTheVodPartText(part);
+    final shown = part == null ? watchTheVodText : vodPartText(part);
     final link = this.link;
-    if (link == null) return _button(context, label, null);
-    return VodLink(link: link, label: label, builder: (context, open) => _button(context, label, open));
+    if (link == null) return _named(name, shown, _button(context, shown, null), null);
+    return VodLink(
+      link: link,
+      label: name,
+      builder: (context, open) => _named(name, shown, _button(context, shown, open), open),
+    );
   }
+
+  /// [button] under its full [name] when it shows another text ([shown]): one node for screen readers, and the
+  /// tooltip.
+  static Widget _named(String name, String shown, Widget button, VoidCallback? open) => name == shown
+      ? button
+      : Semantics(
+          container: true,
+          button: true,
+          enabled: open != null,
+          label: name,
+          onTap: open,
+          excludeSemantics: true,
+          child: Tooltip(message: name, excludeFromSemantics: true, child: button),
+        );
 
   static Widget _button(BuildContext context, String label, VoidCallback? open) => FilledButton.tonalIcon(
     onPressed: open,

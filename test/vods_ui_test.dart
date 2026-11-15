@@ -259,9 +259,9 @@ void main() {
       await tester.tap(find.widgetWithText(StreamHeader, 'Sat 2 Mar 2024'));
       await tester.pumpAndSettle();
       expect(find.text('Watch the VOD'), findsNothing);
-      await tester.tap(find.text('Watch the VOD, part 2'));
+      await tester.tap(find.text('VOD 2'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Watch the VOD, part 1'));
+      await tester.tap(find.text('VOD 1'));
       await tester.pumpAndSettle();
       expect(app.effects.opened.map((u) => '$u'), ['https://youtu.be/$_secondPart2', 'https://youtu.be/$_second']);
       // its setlist has the buttons of the rows too
@@ -275,18 +275,18 @@ void main() {
       await tester.tap(find.widgetWithText(StreamHeader, 'Sat 2 Mar 2024'));
       await tester.pumpAndSettle();
       final head = [
-        for (final label in ['Watch the VOD, part 1', 'Watch the VOD, part 2']) tester.getRect(find.text(label)),
+        for (final label in ['VOD 1', 'VOD 2']) tester.getRect(find.text(label)),
       ];
       // part 1 re-uploaded, part 2 gone
       await _arrive(tester, VodFile.parse('date\tpart\tid\n2024-03-02\t1\tvod3ccccccc'));
       expect([
-        for (final label in ['Watch the VOD, part 1', 'Watch the VOD, part 2']) tester.getRect(find.text(label)),
+        for (final label in ['VOD 1', 'VOD 2']) tester.getRect(find.text(label)),
       ], head);
-      await tester.tap(find.text('Watch the VOD, part 1'));
+      await tester.tap(find.text('VOD 1'));
       await tester.pumpAndSettle();
       expect(app.effects.opened.map((u) => '$u'), ['https://youtu.be/vod3ccccccc']);
       // the part the file no longer has: disabled, in its place
-      await tester.tap(find.text('Watch the VOD, part 2'));
+      await tester.tap(find.text('VOD 2'));
       await tester.pumpAndSettle();
       expect(app.effects.opened, hasLength(1));
       // the plays of its setlist: the new file too (one part of unknown length: I Will Survive at 2:03:00)
@@ -316,7 +316,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.descendant(of: find.byType(StreamSheet), matching: find.text('One more song')), findsOneWidget);
       expect(tester.getRect(find.text('Watch the VOD')), button);
-      expect(find.text('Watch the VOD, part 2'), findsNothing);
+      expect(find.text('VOD 2'), findsNothing);
       await tester.tap(find.text('Watch the VOD'));
       await tester.pumpAndSettle();
       expect(app.effects.opened.last.toString(), 'https://youtu.be/$_second');

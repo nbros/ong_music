@@ -274,10 +274,33 @@ class _ThumbnailLinkState extends State<_ThumbnailLink> {
   );
 }
 
-/// Whether a play whose stream has a VOD reaching it, and that has no video of its own, shows a [VodButton] in its
-/// row, where the plays with a video show theirs ([PlayRow], [HistoryRow]): a proposal the user judges on
-/// screenshots, turned off here alone. The item of the menu of a play (`watchInTheVodText`) stays either way.
+/// Whether a play whose stream has a VOD reaching it, and that has no video of its own, may show a [VodButton] in its
+/// row, where the plays with a video show theirs ([PlayRow], [HistoryRow]), when the row has room for it
+/// ([vodButtonsFit]). The item of the menu of a play (`watchInTheVodText`) stays either way.
 const showVodButtons = true;
+
+/// The least width the column of the title of a row keeps beside a [VodButton], at text scale 1: the room of a title
+/// of normal length. A list shows the buttons only when its rows keep it ([vodButtonsFit]).
+///
+/// About 22 characters of the title's style (Roboto Medium 15 px, about 8 px a character): three track names of the
+/// Ong Log in four hold within 22 characters (median 16, 75th percentile 22, November 2026). Scaled with the text
+/// ([vodButtonsFit]), so that the same names fit at any text size. At 412 dp and normal text an Ong Log row keeps
+/// 256 px; at 360 dp 204; at 320 dp with large text far less, and the buttons go.
+const double vodButtonTitleRoom = 176;
+
+/// What a [VodButton] takes from the column of the title of a row, beside the type icon that is always there: its
+/// 48 px, then the 6 px before the icon; the 24 px of the icon itself.
+const double _vodButtonAndIcon = 48 + 6 + PlayTypeIcon.width;
+
+/// Whether rows whose column of the title would be [titleColumn] px wide beside a [VodButton] show the buttons of the
+/// VODs: when it keeps [vodButtonTitleRoom] scaled as the title's text is. The same answer for every row of a list
+/// (it depends on the width the list gives its rows and on the text scale, never on a row's content nor on the VODs):
+/// a list shows the buttons in all its rows that have one, or in none, and only a change of the width of the window
+/// or of the text scale changes it. Without them, its rows are as without the file of the VODs.
+bool vodButtonsFit(BuildContext context, double titleColumn) {
+  final scale = MediaQuery.textScalerOf(context).scale(15) / 15;
+  return titleColumn >= vodButtonTitleRoom * scale;
+}
 
 /// The link of [play] in the VOD of its stream for the button of its row ([showVodButtons]): null when it has a video
 /// (its own button stays), when the button is off, or when no VOD reaches it. Watches the VODs: a row gets its button
@@ -354,59 +377,63 @@ class PlayRow extends ConsumerWidget {
       height: metrics.playRow,
       child: Padding(
         padding: EdgeInsets.fromLTRB(start, 0, 14, 0),
-        child: Row(
-          children: [
-            SizedBox(
-              width: metrics.timeWidth,
-              child: Text(
-                formatPlayTime(p, ref.watch(wallTimeProvider)),
-                maxLines: 1,
-                style: TextStyle(fontSize: 12, color: ong.on3, fontFeatures: const [FontFeature.tabularFigures()]),
+        // the room of the row decides whether a VOD button shows (the same for every row of the list)
+        child: LayoutBuilder(
+          builder: (context, constraints) => Row(
+            children: [
+              SizedBox(
+                width: metrics.timeWidth,
+                child: Text(
+                  formatPlayTime(p, ref.watch(wallTimeProvider)),
+                  maxLines: 1,
+                  style: TextStyle(fontSize: 12, color: ong.on3, fontFeatures: const [FontFeature.tabularFigures()]),
+                ),
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  MarkedText(
-                    p.track,
-                    tokens: tokens,
-                    style: TextStyle(
-                      fontSize: 15,
-                      height: 20 / 15,
-                      fontWeight: FontWeight.w500,
-                      color: scheme.onSurface,
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    MarkedText(
+                      p.track,
+                      tokens: tokens,
+                      style: TextStyle(
+                        fontSize: 15,
+                        height: 20 / 15,
+                        fontWeight: FontWeight.w500,
+                        color: scheme.onSurface,
+                      ),
                     ),
-                  ),
-                  if (subtitle.isNotEmpty)
-                    RequesterText(
-                      TextSpan(children: subtitle),
-                      maxLines: 1,
-                      style: TextStyle(fontSize: 13, height: 18 / 13, color: scheme.onSurfaceVariant),
-                    ),
-                ],
+                    if (subtitle.isNotEmpty)
+                      RequesterText(
+                        TextSpan(children: subtitle),
+                        maxLines: 1,
+                        style: TextStyle(fontSize: 13, height: 18 / 13, color: scheme.onSurfaceVariant),
+                      ),
+                  ],
+                ),
               ),
-            ),
-            if (video != null && video.youtubeId != null)
-              VideoLink(
-                highlight: video,
-                label: VideoPill.label,
-                onOpen: () => onVideo(video),
-                builder: (context, open) => VideoPill(onPressed: open),
-              )
-            else if (vod != null)
-              VodLink(
-                link: vod,
-                label: VodButton.label,
-                builder: (context, open) => VodButton(onPressed: open),
-              )
-            else
+              if (video != null && video.youtubeId != null)
+                VideoLink(
+                  highlight: video,
+                  label: VideoPill.label,
+                  onOpen: () => onVideo(video),
+                  builder: (context, open) => VideoPill(onPressed: open),
+                )
+              else if (vod != null &&
+                  vodButtonsFit(context, constraints.maxWidth - metrics.timeWidth - 12 - _vodButtonAndIcon))
+                VodLink(
+                  link: vod,
+                  label: VodButton.label,
+                  builder: (context, open) => VodButton(onPressed: open),
+                )
+              else
+                const SizedBox(width: 6),
               const SizedBox(width: 6),
-            const SizedBox(width: 6),
-            PlayTypeIcon(p.type),
-          ],
+              PlayTypeIcon(p.type),
+            ],
+          ),
         ),
       ),
     );
@@ -576,57 +603,60 @@ class HistoryRow extends ConsumerWidget {
         height: metrics.historyRow,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 0, end, 0),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      formatFullDate(catalogue.streamOf(p).date),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 15, height: 20 / 15, color: scheme.onSurface),
-                    ),
-                    const SizedBox(height: 2),
-                    RequesterText(
-                      TextSpan(
-                        children: [
-                          if (requester == null)
-                            const TextSpan(text: 'No requester')
-                          else
-                            ...requesterSpans(
-                              context,
-                              requester.name,
-                              const [],
-                              own: catalogue.isRequester(requester.id, me),
-                            ),
-                          if (p.flag != PlayFlag.none) TextSpan(text: ' · ${p.flag.label}'),
-                        ],
+          // the room of the row decides whether a VOD button shows (the same for every row of the list)
+          child: LayoutBuilder(
+            builder: (context, constraints) => Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        formatFullDate(catalogue.streamOf(p).date),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 15, height: 20 / 15, color: scheme.onSurface),
                       ),
-                      maxLines: 1,
-                      style: TextStyle(fontSize: 12, height: 16 / 12, color: ong.on3),
-                    ),
-                  ],
+                      const SizedBox(height: 2),
+                      RequesterText(
+                        TextSpan(
+                          children: [
+                            if (requester == null)
+                              const TextSpan(text: 'No requester')
+                            else
+                              ...requesterSpans(
+                                context,
+                                requester.name,
+                                const [],
+                                own: catalogue.isRequester(requester.id, me),
+                              ),
+                            if (p.flag != PlayFlag.none) TextSpan(text: ' · ${p.flag.label}'),
+                          ],
+                        ),
+                        maxLines: 1,
+                        style: TextStyle(fontSize: 12, height: 16 / 12, color: ong.on3),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              if (video != null && video.youtubeId != null)
-                VideoLink(
-                  highlight: video,
-                  label: VideoPill.label,
-                  onOpen: () => onVideo(video),
-                  builder: (context, open) => VideoPill(onPressed: open),
-                )
-              else if (vod != null)
-                VodLink(
-                  link: vod,
-                  label: VodButton.label,
-                  builder: (context, open) => VodButton(onPressed: open),
-                ),
-              const SizedBox(width: 6),
-              PlayTypeIcon(p.type),
-            ],
+                if (video != null && video.youtubeId != null)
+                  VideoLink(
+                    highlight: video,
+                    label: VideoPill.label,
+                    onOpen: () => onVideo(video),
+                    builder: (context, open) => VideoPill(onPressed: open),
+                  )
+                else if (vod != null && vodButtonsFit(context, constraints.maxWidth - _vodButtonAndIcon))
+                  VodLink(
+                    link: vod,
+                    label: VodButton.label,
+                    builder: (context, open) => VodButton(onPressed: open),
+                  ),
+                const SizedBox(width: 6),
+                PlayTypeIcon(p.type),
+              ],
+            ),
           ),
         ),
       ),
