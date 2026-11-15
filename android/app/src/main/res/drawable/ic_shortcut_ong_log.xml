@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The icon of the Ong Log (Material "queue_music", the icon of the tab) shortcut of the launcher icon on Android 7.1, without adaptive icons: the glyph
+     (24 dp) on a circle (44 dp) in a 48 dp square, the shape of the shortcut icons of that version. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <path android:fillColor="@color/shortcut_background" android:pathData="M24,2a22,22 0,1 0,0.001 0z" />
+    <group android:translateX="12" android:translateY="12">
+        <path android:fillColor="@color/shortcut_glyph" android:pathData="M15,6H3v2h12V6zM15,10H3v2h12v-2zM3,16h8v-2H3v2zM17,6v8.18c-0.31,-0.11 -0.65,-0.18 -1,-0.18 -1.66,0 -3,1.34 -3,3s1.34,3 3,3 3,-1.34 3,-3V8h3V6h-5z" />
+    </group>
+</vector>

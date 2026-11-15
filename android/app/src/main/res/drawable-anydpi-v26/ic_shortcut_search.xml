@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The icon of the Search (Material "search") shortcut of the launcher icon (Android 8+): an adaptive icon, shaped by the
+     launcher as the other shortcuts of its menu, in the app's tonal colours (values-night: dark theme). -->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/shortcut_background" />
+    <foreground android:drawable="@drawable/ic_shortcut_search_glyph" />
+    <monochrome android:drawable="@drawable/ic_shortcut_search_glyph" />
+</adaptive-icon>

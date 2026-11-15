@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The glyph of the Favourites (Material "star", the star chip and the star of a fiche) shortcut of the launcher icon, in the middle of an adaptive icon (see
+     drawable-anydpi-v26/ic_shortcut_favourites.xml). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group android:translateX="36" android:translateY="36" android:scaleX="1.5" android:scaleY="1.5">
+        <path android:fillColor="@color/shortcut_glyph" android:pathData="M12,17.27L18.18,21l-1.64,-7.03L22,9.24l-7.19,-0.61L12,2 9.19,8.63 2,9.24l5.46,4.73L5.82,21z" />
+    </group>
+</vector>

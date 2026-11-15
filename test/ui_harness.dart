@@ -21,6 +21,7 @@ import 'package:ong_music/src/ui/app.dart';
 import 'package:ong_music/src/ui/font_warm_up.dart';
 import 'package:ong_music/src/ui/fullscreen_button.dart';
 import 'package:ong_music/src/ui/install_banner.dart';
+import 'package:ong_music/src/ui/launcher_shortcuts.dart';
 import 'package:ong_music/src/ui/layout.dart';
 import 'package:ong_music/src/ui/nav_rail.dart';
 import 'package:ong_music/src/ui/outside_link.dart';
@@ -272,6 +273,9 @@ class TestApp {
 /// (default: a timer of zero).
 /// The app has the phone and tablet look, whatever the platform of the test,
 /// unless [desktop] gives it the desktop look (top bar, instant feedback).
+///
+/// The launcher icon has no shortcut, as in the web app, unless [shortcuts]
+/// gives it those of the Android app.
 Future<TestApp> pumpApp(
   WidgetTester tester, {
   CatalogueState? state,
@@ -297,6 +301,7 @@ Future<TestApp> pumpApp(
   Future<void> Function()? fontPause,
   bool desktop = false,
   bool canShare = true,
+  FakeLauncherShortcuts? shortcuts,
 }) async {
   // before the size: setting it makes MediaQuery read the clock format again
   tester.platformDispatcher.alwaysUse24HourFormatTestValue = alwaysUse24HourFormat;
@@ -353,6 +358,7 @@ Future<TestApp> pumpApp(
         fontKitRegistrationProvider.overrideWithValue(fontKitRegistration ?? (fonts) async {}),
         fontWarmUpPauseProvider.overrideWithValue(fontPause ?? () => Future<void>.delayed(Duration.zero)),
         desktopLookProvider.overrideWithValue(desktop),
+        launcherShortcutsProvider.overrideWithValue(shortcuts),
         if (pointer != null) pointerProvider.overrideWith(() => PinnedPointer(pointer)),
         thumbnailImageProvider.overrideWithValue((url) => MemoryImage(transparentPng)),
         urlOpenerProvider.overrideWithValue((uri) async {
@@ -753,4 +759,26 @@ class _FakePlayerViewState extends State<FakePlayerView> {
 
   @override
   Widget build(BuildContext context) => const ColoredBox(color: Colors.black);
+}
+
+/// The shortcuts of the launcher icon of the Android app, used by the test: [launch] is the one the app is opened
+/// with, if any; [offered] lists what the app showed in the launcher's menu, each time.
+class FakeLauncherShortcuts implements LauncherShortcuts {
+  FakeLauncherShortcuts({this.launch});
+
+  final AppShortcut? launch;
+  final offered = <List<AppShortcut>>[];
+  void Function(AppShortcut shortcut)? _onShortcut;
+
+  @override
+  Future<void> listen(void Function(AppShortcut shortcut) onShortcut) async {
+    _onShortcut = onShortcut;
+    if (launch case final launch?) onShortcut(launch);
+  }
+
+  @override
+  Future<void> offer(List<AppShortcut> shortcuts) async => offered.add(shortcuts);
+
+  /// A tap on [shortcut] in the launcher's menu while the app runs.
+  void use(AppShortcut shortcut) => _onShortcut!(shortcut);
 }

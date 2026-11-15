@@ -16,6 +16,7 @@ import 'detail_pane.dart';
 import 'font_warm_up.dart';
 import 'highlights_page.dart';
 import 'install_banner.dart';
+import 'launcher_shortcuts.dart';
 import 'layout.dart';
 import 'nav_rail.dart';
 import 'ong_log_page.dart';
@@ -114,23 +115,26 @@ class _OngMusicAppState extends ConsumerState<OngMusicApp> {
     final themes = _themes != null && !fallbackChanged && _themes!.desktop == desktop
         ? _themes!
         : _themes = _buildThemes(desktop: desktop, fallback: fallback);
-    return MaterialApp.router(
-      title: 'Ong Music',
-      debugShowCheckedModeBanner: false,
-      themeMode: ref.watch(themePreferenceProvider).themeMode,
-      theme: themes.light,
-      darkTheme: themes.dark,
-      themeAnimationDuration: fallbackChanged ? Duration.zero : kThemeAnimationDuration,
-      builder: (context, child) => FontWarmUpScope(
-        child: AppLayout(
-          child: _browserUses24HourClock == true
-              ? MediaQuery(data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true), child: child!)
-              : child!,
+    return LauncherShortcutsScope(
+      navigatorKey: _router.navigatorKey,
+      child: MaterialApp.router(
+        title: 'Ong Music',
+        debugShowCheckedModeBanner: false,
+        themeMode: ref.watch(themePreferenceProvider).themeMode,
+        theme: themes.light,
+        darkTheme: themes.dark,
+        themeAnimationDuration: fallbackChanged ? Duration.zero : kThemeAnimationDuration,
+        builder: (context, child) => FontWarmUpScope(
+          child: AppLayout(
+            child: _browserUses24HourClock == true
+                ? MediaQuery(data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true), child: child!)
+                : child!,
+          ),
         ),
+        routerDelegate: _router,
+        routeInformationParser: const AppAddressParser(),
+        routeInformationProvider: _addressBar,
       ),
-      routerDelegate: _router,
-      routeInformationParser: const AppAddressParser(),
-      routeInformationProvider: _addressBar,
     );
   }
 }

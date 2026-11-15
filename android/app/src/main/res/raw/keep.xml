@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Kept by the resource shrinker of release builds: the icons of the launcher shortcuts are looked up by name
+     (lib/src/ui/launcher_shortcuts.dart), which the shrinker does not see. -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/ic_shortcut_*" />

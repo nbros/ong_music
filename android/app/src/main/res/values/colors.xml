@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="ic_launcher_background">#F3D2C3</color>
+    <!-- The shortcuts of the launcher icon: primaryContainer and onPrimaryContainer of the light theme
+         (lightScheme, lib/src/ui/theme.dart); values-night has the dark ones. -->
+    <color name="shortcut_background">#FFDCC4</color>
+    <color name="shortcut_glyph">#6A3100</color>
 </resources>

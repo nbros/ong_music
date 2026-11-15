@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The shortcuts of the launcher icon in the dark theme of the system: primaryContainer and
+         onPrimaryContainer of the dark theme (darkScheme, lib/src/ui/theme.dart). -->
+    <color name="shortcut_background">#6B3200</color>
+    <color name="shortcut_glyph">#FFDCC4</color>
+</resources>
