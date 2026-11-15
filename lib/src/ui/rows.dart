@@ -17,12 +17,14 @@ import '../data/model.dart';
 import '../state/catalogue_state.dart';
 import 'format.dart';
 import 'instant_feedback.dart';
+import 'new_highlights.dart';
 import 'outside_link.dart';
 import 'theme.dart';
 import 'widgets.dart';
 
 /// A row of the Highlights list: thumbnail, track, artist, genre · date ·
-/// requester, and a ⋮ button.
+/// requester, and a ⋮ button; a highlight new since the last visit has the
+/// `New` mark over the top left corner of its thumbnail.
 ///
 /// In the list of an expanded window ([selected] not null), the row has the
 /// selection and hover states of [InsetRoundedBorder.row], and no ⋮ button
@@ -39,6 +41,7 @@ class HighlightRow extends StatelessWidget {
     this.onMore,
     this.selected,
     this.onThumbnail,
+    this.isNew = false,
   });
 
   final Highlight highlight;
@@ -64,6 +67,9 @@ class HighlightRow extends StatelessWidget {
   /// Opens the video from the thumbnail: with a mouse, in an expanded window
   /// (with touch, the thumbnail is part of the row).
   final VoidCallback? onThumbnail;
+
+  /// Whether the highlight is new since the last visit ([NewMark]).
+  final bool isNew;
 
   @override
   Widget build(BuildContext context) {
@@ -138,6 +144,9 @@ class HighlightRow extends StatelessWidget {
               ],
             ),
           ),
+          // over the thumbnail, inside its corner: nothing of the row moves when it comes or goes; said after the
+          // rest of the row
+          if (isNew) const Positioned(left: 16 + 4, top: 8 + 4, child: NewMark()),
           if (onMore != null)
             Positioned(
               top: 0,

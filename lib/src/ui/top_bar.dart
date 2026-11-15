@@ -12,6 +12,7 @@ import 'package:material_ui/material_ui.dart';
 import '../state/settings_state.dart';
 import 'fullscreen_button.dart';
 import 'nav_rail.dart';
+import 'new_highlights.dart';
 import 'outside_link.dart';
 import 'theme.dart';
 import 'widgets.dart';
@@ -177,6 +178,7 @@ class AppTopBar extends ConsumerWidget {
                             linkSemantics: false,
                             builder: (context, open) => _TopBarLink(
                               label: destinations[i].label,
+                              newCount: destinations[i].newCount,
                               labelWidth: labelWidths[i],
                               padding: layout.linkPadding,
                               selected: i == selectedIndex,
@@ -275,6 +277,7 @@ class ThemeButton extends ConsumerWidget {
 class _TopBarLink extends StatefulWidget {
   const _TopBarLink({
     required this.label,
+    required this.newCount,
     required this.labelWidth,
     required this.padding,
     required this.selected,
@@ -283,6 +286,9 @@ class _TopBarLink extends StatefulWidget {
   });
 
   final String label;
+
+  /// Whether the label has the count of the new highlights, over its top end corner (it moves nothing).
+  final bool newCount;
   final double labelWidth;
   final double padding;
   final bool selected;
@@ -325,15 +331,17 @@ class _TopBarLinkState extends State<_TopBarLink> {
             child: Stack(
               alignment: Alignment.center,
               children: [
-                SizedBox(
-                  width: widget.labelWidth,
-                  child: Text(
-                    widget.label,
-                    maxLines: 1,
-                    softWrap: false,
-                    textAlign: TextAlign.center,
-                    style: AppTopBar._linkStyle.copyWith(
-                      color: _pressed ? color.withValues(alpha: color.a * 0.7) : color,
+                _withCount(
+                  SizedBox(
+                    width: widget.labelWidth,
+                    child: Text(
+                      widget.label,
+                      maxLines: 1,
+                      softWrap: false,
+                      textAlign: TextAlign.center,
+                      style: AppTopBar._linkStyle.copyWith(
+                        color: _pressed ? color.withValues(alpha: color.a * 0.7) : color,
+                      ),
                     ),
                   ),
                 ),
@@ -358,4 +366,9 @@ class _TopBarLinkState extends State<_TopBarLink> {
       ),
     );
   }
+
+  /// The count over the end of the label, above its line of text: in the free space of the bar, never over a
+  /// label, even with the narrowest padding.
+  Widget _withCount(Widget label) =>
+      widget.newCount ? NewHighlightsBadge(offset: const Offset(10, -13), child: label) : label;
 }

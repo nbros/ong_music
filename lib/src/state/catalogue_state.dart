@@ -21,6 +21,7 @@ import '../data/sheet_snapshot.dart';
 import '../data/sheets.dart';
 import '../data/slices.dart';
 import '../logger.dart';
+import 'new_highlights_state.dart';
 import 'settings_state.dart';
 
 /// A kept sheet older than this is refreshed in the background.
@@ -1083,7 +1084,13 @@ class CatalogueNotifier extends Notifier<CatalogueState> {
 @immutable
 final class HighlightFilter {
   /// Creates a filter; the defaults match everything.
-  const HighlightFilter({this.query = '', this.genre, this.mine = false, this.favourites = false});
+  const HighlightFilter({
+    this.query = '',
+    this.genre,
+    this.mine = false,
+    this.favourites = false,
+    this.onlyNew = false,
+  });
 
   /// Search text (see `tokenize`).
   final String query;
@@ -1097,16 +1104,20 @@ final class HighlightFilter {
   /// Only the user's favourites (the star chip, see [favouritesProvider]).
   final bool favourites;
 
+  /// Only the new highlights (the "New" chip, see `newHighlightKeysProvider`).
+  final bool onlyNew;
+
   @override
   bool operator ==(Object other) =>
       other is HighlightFilter &&
       other.query == query &&
       other.genre == genre &&
       other.mine == mine &&
-      other.favourites == favourites;
+      other.favourites == favourites &&
+      other.onlyNew == onlyNew;
 
   @override
-  int get hashCode => Object.hash(query, genre, mine, favourites);
+  int get hashCode => Object.hash(query, genre, mine, favourites, onlyNew);
 }
 
 /// The Ong Log list filters.
@@ -1180,8 +1191,8 @@ int? _myRequesterId(Ref ref, bool mine, Provider<int> count) =>
     mine && ref.watch(count) > 0 ? ref.watch(myRequesterProvider)!.id : null;
 
 /// Highlights matching a filter, newest first, with the counts of the chips
-/// ("You" counts the user's requests, the star the favourites); null without
-/// catalogue.
+/// ("You" counts the user's requests, the star the favourites, "New" the new
+/// highlights); null without catalogue.
 final highlightResultsProvider = Provider.autoDispose.family<HighlightResults?, HighlightFilter>((ref, filter) {
   final catalogue = ref.watch(currentCatalogueProvider);
   if (catalogue == null) return null;
@@ -1193,6 +1204,9 @@ final highlightResultsProvider = Provider.autoDispose.family<HighlightResults?, 
     keys: ref.watch(favouritesProvider),
     // as for "You": no filter on favourites while the list holds none (the chip is gone)
     onlyKeys: filter.favourites && ref.watch(favouriteCountProvider) > 0,
+    newKeys: ref.watch(newHighlightKeysProvider),
+    // the same for the new ones
+    onlyNew: filter.onlyNew && ref.watch(newHighlightCountProvider) > 0,
   );
 });
 

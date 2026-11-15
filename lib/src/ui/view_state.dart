@@ -12,6 +12,7 @@ import 'package:material_ui/material_ui.dart';
 import '../data/catalogue.dart';
 import '../data/model.dart';
 import '../state/catalogue_state.dart';
+import '../state/new_highlights_state.dart';
 import 'address.dart';
 
 /// The three destinations of the navigation bar.
@@ -47,42 +48,47 @@ class HighlightFilterNotifier extends Notifier<HighlightFilter> {
   HighlightFilter build() {
     // the "You" chip is gone (Twitch name changed, refresh): its filter goes with it, and does not come back with it
     ref.listen(myHighlightCountProvider, (_, count) {
-      if (count == 0 && state.mine) {
-        state = HighlightFilter(query: state.query, genre: state.genre, favourites: state.favourites);
-      }
+      if (count == 0 && state.mine) state = _with(mine: false);
     });
     // the star chip is gone (last star removed, refresh): the same
     ref.listen(favouriteCountProvider, (_, count) {
-      if (count == 0 && state.favourites) {
-        state = HighlightFilter(query: state.query, genre: state.genre, mine: state.mine);
-      }
+      if (count == 0 && state.favourites) state = _with(favourites: false);
+    });
+    // the "New" chip is gone (the visit ended, refresh): the same
+    ref.listen(newHighlightCountProvider, (_, count) {
+      if (count == 0 && state.onlyNew) state = _with(onlyNew: false);
     });
     // the query of the address the web app was opened on
     final initial = ref.read(initialAddressProvider);
     return initial.tab == AppTab.highlights ? HighlightFilter(query: initial.query) : const HighlightFilter();
   }
 
-  void setQuery(String query) =>
-      state = HighlightFilter(query: query, genre: state.genre, mine: state.mine, favourites: state.favourites);
+  /// The filter with these changed, the rest as it is.
+  HighlightFilter _with({String? query, Genre? Function()? genre, bool? mine, bool? favourites, bool? onlyNew}) =>
+      HighlightFilter(
+        query: query ?? state.query,
+        genre: genre == null ? state.genre : genre(),
+        mine: mine ?? state.mine,
+        favourites: favourites ?? state.favourites,
+        onlyNew: onlyNew ?? state.onlyNew,
+      );
+
+  void setQuery(String query) => state = _with(query: query);
 
   /// Removes every chip filter, keeps the query ("All").
   void clearChips() => state = HighlightFilter(query: state.query);
 
   /// Selects [genre], or all genres when it is null or already selected.
-  void toggleGenre(Genre? genre) => state = HighlightFilter(
-    query: state.query,
-    genre: genre == state.genre ? null : genre,
-    mine: state.mine,
-    favourites: state.favourites,
-  );
+  void toggleGenre(Genre? genre) => state = _with(genre: () => genre == state.genre ? null : genre);
 
   /// Shows only the user's own requests, or all of them again ("You").
-  void toggleMine() =>
-      state = HighlightFilter(query: state.query, genre: state.genre, mine: !state.mine, favourites: state.favourites);
+  void toggleMine() => state = _with(mine: !state.mine);
 
   /// Shows only the favourites, or all highlights again (the star chip).
-  void toggleFavourites() =>
-      state = HighlightFilter(query: state.query, genre: state.genre, mine: state.mine, favourites: !state.favourites);
+  void toggleFavourites() => state = _with(favourites: !state.favourites);
+
+  /// Shows only the new highlights, or all of them again ("New").
+  void toggleNew() => state = _with(onlyNew: !state.onlyNew);
 }
 
 /// Filters of the Ong Log list.

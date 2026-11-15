@@ -18,6 +18,7 @@ import 'highlights_page.dart';
 import 'install_banner.dart';
 import 'layout.dart';
 import 'nav_rail.dart';
+import 'new_highlights.dart';
 import 'ong_log_page.dart';
 import 'theme.dart';
 import 'top_bar.dart';
@@ -41,9 +42,9 @@ double listPaneWidth(double width) => (0.4 * width).clamp(360, 520);
 
 /// The three destinations, in the order of [AppTab].
 const List<NavDestination> _destinations = [
-  (icon: Icons.video_library, label: 'Highlights'),
-  (icon: Icons.queue_music, label: 'Ong Log'),
-  (icon: Icons.person, label: 'About'),
+  (icon: Icons.video_library, label: 'Highlights', newCount: true),
+  (icon: Icons.queue_music, label: 'Ong Log', newCount: false),
+  (icon: Icons.person, label: 'About', newCount: false),
 ];
 
 /// The light and dark themes of a look with [fontFamilyFallback] (see [fontFallbackProvider]).
@@ -271,7 +272,11 @@ class _AppShellState extends ConsumerState<AppShell> {
                           destinations: [
                             // no tooltip: it would only repeat the label under the icon
                             for (final d in _destinations)
-                              NavigationDestination(icon: Icon(d.icon), label: d.label, tooltip: ''),
+                              NavigationDestination(
+                                icon: d.newCount ? NewHighlightsBadge(child: Icon(d.icon)) : Icon(d.icon),
+                                label: d.label,
+                                tooltip: '',
+                              ),
                           ],
                         ),
                       ),

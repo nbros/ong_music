@@ -8,13 +8,15 @@ import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'layout.dart';
+import 'new_highlights.dart';
 
 /// The largest text scale of the labels of the rail: the limit Material gives
 /// the labels of its navigation bar.
 const double maxRailLabelTextScale = 1.3;
 
-/// A destination of the navigation: its icon and its label.
-typedef NavDestination = ({IconData icon, String label});
+/// A destination of the navigation: its icon, its label, and whether it shows
+/// the count of the new highlights ([NewHighlightsBadge]).
+typedef NavDestination = ({IconData icon, String label, bool newCount});
 
 /// The rail, [railWidth] wide plus the safe area on its left, as high as the
 /// window.
@@ -152,10 +154,13 @@ class _RailDestinationState extends State<_RailDestination> {
                       width: 56,
                       height: 32,
                       decoration: BoxDecoration(color: indicator, borderRadius: BorderRadius.circular(16)),
-                      child: Icon(
-                        widget.destination.icon,
-                        size: 24,
-                        color: selected ? scheme.onSecondaryContainer : scheme.onSurfaceVariant,
+                      alignment: Alignment.center,
+                      child: _withCount(
+                        Icon(
+                          widget.destination.icon,
+                          size: 24,
+                          color: selected ? scheme.onSecondaryContainer : scheme.onSurfaceVariant,
+                        ),
                       ),
                     ),
                     // As large as the labels of the bottom bar get, no more: at that size "Highlights" still
@@ -184,4 +189,6 @@ class _RailDestinationState extends State<_RailDestination> {
       ),
     );
   }
+
+  Widget _withCount(Widget icon) => widget.destination.newCount ? NewHighlightsBadge(child: icon) : icon;
 }

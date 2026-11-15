@@ -11,17 +11,24 @@ import 'package:material_ui/material_ui.dart';
 import '../data/catalogue.dart';
 import '../data/model.dart';
 import '../state/catalogue_state.dart';
+import '../state/new_highlights_state.dart';
 import '../state/settings_state.dart';
+import '../web/web_platform.dart';
 import 'actions.dart';
 import 'format.dart';
 import 'layout.dart';
 import 'list_scaffold.dart';
+import 'new_highlights.dart';
 import 'rows.dart';
 import 'sheets.dart';
 import 'view_state.dart';
 import 'widgets.dart';
 
 /// The Highlights tab.
+///
+/// Tells [KnownHighlightsNotifier] whether the app is in sight and whether the
+/// list is the tab selected (the page is built at startup whatever the tab):
+/// what makes a visit, and ends it.
 class HighlightsPage extends ConsumerStatefulWidget {
   const HighlightsPage({super.key});
 
@@ -43,12 +50,32 @@ class _HighlightsPageState extends ConsumerState<HighlightsPage> implements List
   /// Whether the first frame of the list was reported ([SongsTrigger.highlightsShown]).
   bool _listShown = false;
 
+  late final KnownHighlightsNotifier _visit;
+  late final AppLifecycleListener _lifecycle;
+
   @override
   void initState() {
     super.initState();
     _search = TextEditingController(text: ref.read(highlightFilterProvider).query);
     // before the focused widget: the search field would move its cursor with the arrows
     FocusManager.instance.addEarlyKeyEventHandler(_onKey);
+    _visit = ref.read(knownHighlightsProvider.notifier);
+    _lifecycle = AppLifecycleListener(onStateChange: (_) => _syncVisit());
+    ref.listenManual(selectedTabProvider, (_, _) => _syncVisit());
+    // after the first frame: never while building
+    WidgetsBinding.instance.addPostFrameCallback((_) => _syncVisit());
+  }
+
+  /// In sight: the app in the foreground (hidden or paused out of it), and in a browser the page visible.
+  void _syncVisit() {
+    if (!mounted) return;
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    final foreground =
+        lifecycle == null || lifecycle == AppLifecycleState.resumed || lifecycle == AppLifecycleState.inactive;
+    _visit.sync(
+      inSight: foreground && !pageIsHidden(),
+      listOnScreen: ref.read(selectedTabProvider) == AppTab.highlights,
+    );
   }
 
   // the list for the keyboard: one item per highlight shown, every one a row
@@ -145,6 +172,7 @@ class _HighlightsPageState extends ConsumerState<HighlightsPage> implements List
   @override
   void dispose() {
     FocusManager.instance.removeEarlyKeyEventHandler(_onKey);
+    _lifecycle.dispose();
     _keyboard.dispose();
     _search.dispose();
     _scroll.dispose();
@@ -174,12 +202,14 @@ class _HighlightsPageState extends ConsumerState<HighlightsPage> implements List
     final notifier = ref.read(highlightFilterProvider.notifier);
     final myCount = ref.watch(myHighlightCountProvider);
     final favouriteCount = ref.watch(favouriteCountProvider);
-    // without own highlight there is no "You" chip, and no filter on it; the same for the favourites
+    final newCount = ref.watch(newHighlightCountProvider);
+    // without own highlight there is no "You" chip, and no filter on it; the same for the favourites and the new ones
     final mine = filter.mine && myCount > 0;
     final favourites = filter.favourites && favouriteCount > 0;
+    final onlyNew = filter.onlyNew && newCount > 0;
     final counts = results.counts;
     final noRoom = FiltersOutOfRoom.of(context);
-    final anyChip = filter.genre != null || mine || favourites;
+    final anyChip = filter.genre != null || mine || favourites || onlyNew;
     return Column(
       children: [
         ListSearchField(
@@ -197,6 +227,14 @@ class _HighlightsPageState extends ConsumerState<HighlightsPage> implements List
               ListChip(label: 'All', selected: !anyChip, onTap: notifier.clearChips),
               // each count is what the list would show with that chip selected, the rest unchanged; each chip keeps
               // the width of its count over the whole catalogue, the largest it can show
+              if (newCount > 0)
+                ListChip(
+                  label: newLabel,
+                  count: counts.newKeys,
+                  maxCount: newCount,
+                  selected: onlyNew,
+                  onTap: notifier.toggleNew,
+                ),
               if (favouriteCount > 0)
                 ListChip(
                   label: 'Favourites',
@@ -277,6 +315,7 @@ typedef _BuiltRow = ({
   Highlight highlight,
   String? requester,
   bool own,
+  bool isNew,
   List<String> tokens,
   int currentYear,
   bool expanded,
@@ -296,6 +335,7 @@ class _HighlightListState extends ConsumerState<_HighlightList> {
     final catalogue = widget.catalogue;
     final results = widget.results;
     final me = ref.watch(myRequesterKeyProvider);
+    final newKeys = ref.watch(newHighlightKeysProvider);
     final currentYear = ref.watch(clockProvider)().toLocal().year;
     final expanded = AppLayout.modeOf(context) == WindowMode.expanded;
     final mouse = expanded && AppLayout.mouseOf(context);
@@ -318,11 +358,13 @@ class _HighlightListState extends ConsumerState<_HighlightList> {
           final requester = catalogue.highlightsOnly.requester(h.requesterId);
           final name = requester?.name;
           final own = requester != null && catalogue.isRequester(requester.id, me);
+          final isNew = newKeys.contains(h.key);
           final built = _current[key] ?? _previous[key];
           if (built != null &&
               identical(built.highlight, h) &&
               built.requester == name &&
               built.own == own &&
+              built.isNew == isNew &&
               listEquals(built.tokens, results.tokens) &&
               built.currentYear == currentYear &&
               built.expanded == expanded &&
@@ -347,6 +389,7 @@ class _HighlightListState extends ConsumerState<_HighlightList> {
                 highlight: h,
                 requester: name,
                 own: own,
+                isNew: isNew,
                 tokens: results.tokens,
                 currentYear: currentYear,
                 selected: ref.watch(
@@ -362,6 +405,7 @@ class _HighlightListState extends ConsumerState<_HighlightList> {
               highlight: h,
               requester: name,
               own: own,
+              isNew: isNew,
               tokens: results.tokens,
               currentYear: currentYear,
               onTap: () => h.youtubeId == null ? showHighlightSheet(context, now(), h) : openVideo(context, ref, h),
@@ -372,6 +416,7 @@ class _HighlightListState extends ConsumerState<_HighlightList> {
             highlight: h,
             requester: name,
             own: own,
+            isNew: isNew,
             tokens: results.tokens,
             currentYear: currentYear,
             expanded: expanded,
