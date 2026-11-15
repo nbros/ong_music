@@ -831,7 +831,7 @@ void main() {
       expect(find.text('Updated 2 hours ago'), findsOneWidget);
       expect(find.text('4 songs · 2 streams'), findsOneWidget);
       expect(find.textContaining('at most every 6 hours'), findsOneWidget);
-      await tester.tap(find.text('Refresh'));
+      await tapVisible(tester, find.text('Refresh'));
       expect(app.notifier.refreshes, 1);
 
       final clear = find.widgetWithText(TextButton, 'Clear');
@@ -881,8 +881,7 @@ void main() {
       await pumpApp(tester);
       await goToTab(tester, 'About');
       await tester.scrollUntilVisible(find.text('Licences'), 200, scrollable: aboutScrollable());
-      await tester.tap(find.text('Licences'));
-      await tester.pumpAndSettle();
+      await tapVisible(tester, find.text('Licences'));
       expect(
         tester.widget<LicensePage>(find.byType(LicensePage)).applicationName,
         'Ong Music',

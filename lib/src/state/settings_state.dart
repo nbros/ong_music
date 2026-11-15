@@ -163,12 +163,28 @@ class FavouritesNotifier extends Notifier<Set<String>> {
     final k = highlight.key;
     final add = !state.contains(k);
     state = Set.unmodifiable(add ? {...state, k} : ({...state}..remove(k)));
+    return _persist((stored) => add ? {...stored, k} : ({...stored}..remove(k)));
+  }
+
+  /// Adds the highlights of [keys] that are not favourites yet, after the
+  /// others and in the order of [keys], and persists the list as [toggle]
+  /// does; removes none. Returns how many were added.
+  int addAll(Iterable<String> keys) {
+    final added = {...keys}.difference(state);
+    if (added.isEmpty) return 0;
+    state = Set.unmodifiable({...state, ...added});
+    _persist((stored) => {...stored, ...added});
+    return added.length;
+  }
+
+  /// Writes [change] of the list in the storage, read again first, after the writes still to do.
+  Future<void> _persist(Set<String> Function(Set<String> stored) change) {
     final prefs = ref.read(sharedPreferencesProvider);
     _pending++;
     return _writes = _writes.then((_) async {
       try {
         await prefs.reload();
-        final merged = add ? {..._stored(prefs), k} : ({..._stored(prefs)}..remove(k));
+        final merged = change(_stored(prefs));
         // false, not an exception, when the platform could not write
         if (!await prefs.setStringList(key, merged.toList())) logger.w('The favourites were not stored');
         // what the other windows added shows here too, once no later change of this one waits

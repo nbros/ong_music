@@ -13,6 +13,7 @@ import '../state/catalogue_state.dart';
 import '../state/settings_state.dart';
 import '../state/twitch_state.dart';
 import 'actions.dart';
+import 'favourites_transfer.dart';
 import 'format.dart';
 import 'install_banner.dart';
 import 'instant_feedback.dart';
@@ -158,6 +159,9 @@ class AboutPage extends ConsumerWidget {
       const _ThemeSelector(),
       const _SectionTitle('Your Twitch name'),
       const _TwitchNameField(),
+      // what is the user's own, after their name; before the data of the app
+      const _SectionTitle(favouritesSectionTitle),
+      const FavouritesSection(),
       const _SectionTitle('Data'),
       const _DataSection(),
     ];

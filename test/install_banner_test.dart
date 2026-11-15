@@ -254,8 +254,7 @@ void main() {
         tester.getRect(note('Also on Android')).top,
         greaterThan(tester.getRect(find.text('Clear downloaded data')).bottom),
       );
-      await tester.tap(note('Google Play'));
-      await tester.pump();
+      await tapVisible(tester, note('Google Play'));
       expect(app.effects.opened, [Uri.parse(playStoreUrl)]);
     });
 

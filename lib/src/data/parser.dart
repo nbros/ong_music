@@ -110,6 +110,11 @@ String? _requesterCell(String cell) {
 
 final _uptime = RegExp(r'^(\d+):(\d\d):(\d\d)$');
 final _youtube = RegExp(r'(?:youtu\.be/|v=)([\w-]{11})');
+
+/// The ids of the YouTube videos linked in [text], in their order: the forms of
+/// the "Link to Video" cells (`youtu.be/<id>`, `youtube.com/watch?v=<id>`),
+/// wherever they are in it.
+Iterable<String> youtubeIdsIn(String text) => _youtube.allMatches(text).map((m) => m[1]!);
 final _requestedBy = RegExp(r'requested by "?([^"\s,.;]+)"?', caseSensitive: false);
 final _digits = RegExp(r'^\d+$');
 
