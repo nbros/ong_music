@@ -130,8 +130,9 @@ final class VodsTool {
     final Object? decoded;
     try {
       decoded = jsonDecode(offsetsJson);
-    } on FormatException catch (e) {
-      throw FormatException('The offsets are not JSON: ${e.message}', offsetsJson);
+    } on FormatException {
+      // (not the message of the parser: the JavaScript one says something else)
+      throw FormatException('The offsets are not JSON', offsetsJson);
     }
     if (decoded is! List) throw FormatException('The offsets are not a JSON array', offsetsJson);
     return OffsetFile.replace(offsetsTsv, stream, [for (final (i, o) in decoded.indexed) offsetFromJson(o, i)]);
@@ -180,6 +181,19 @@ final class VodsTool {
     final at = DateTime.fromMillisecondsSinceEpoch(minute * Duration.millisecondsPerMinute, isUtc: true);
     return '${at.toIso8601String().substring(0, 19)}Z';
   }
+}
+
+/// The message of the error [e] of a call of the JS module: what its JS `Error` says.
+String vodsToolErrorMessage(Object e) => switch (e) {
+  FormatException(:final message, :final source) => source == null ? message : '$message: ${_short(source)}',
+  StateError(:final message) => message,
+  ArgumentError(:final message) => '$message',
+  _ => '$e',
+};
+
+String _short(Object? source) {
+  final text = '$source';
+  return text.length <= 200 ? text : '${text.substring(0, 200)}...';
 }
 
 /// The last [size] values made, by key.

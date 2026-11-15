@@ -42,24 +42,13 @@ String _string(JSAny? value, String name) {
   throw ArgumentError('$name must be a string');
 }
 
-/// [call], whose errors JavaScript gets as an `Error` with their message ([_CallError]).
+/// [call], whose errors JavaScript gets as an `Error` with their message ([_CallError], [vodsToolErrorMessage]).
 T _guard<T>(T Function() call) {
   try {
     return call();
-  } on FormatException catch (e) {
-    throw _CallError(e.source == null ? e.message : '${e.message}: ${_short(e.source)}');
-  } on StateError catch (e) {
-    throw _CallError(e.message);
-  } on ArgumentError catch (e) {
-    throw _CallError('${e.message}');
   } catch (e) {
-    throw _CallError('$e');
+    throw _CallError(vodsToolErrorMessage(e));
   }
-}
-
-String _short(Object? source) {
-  final text = '$source';
-  return text.length <= 200 ? text : '${text.substring(0, 200)}...';
 }
 
 void main() {

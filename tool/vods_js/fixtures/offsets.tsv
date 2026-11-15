@@ -1,0 +1,11 @@
+# offsets of the tests
+date	uptime	offset	note
+2024-01-02		-20	late start
+2024-01-02	0:30:00	+5	exact
+2024-01-02	1:00:00+	-10	from the end of part 1
+
+2024-01-02	2:00:00+	30
+2024-01-02#2		-900	first
+2024-01-02#2	0:00:00+	-1000	the same cell: wins
+2024-01-05	9:99:99	3	does not read
+2030-01-01		5	no stream
