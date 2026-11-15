@@ -1,5 +1,5 @@
-// The files of the branch `data` (vods.tsv, aliases.txt): downloaded with the sheets, kept, read again offline, and
-// never in the way of the catalogue.
+// The files of the branch `data` (vods.tsv, aliases.txt, offsets.tsv): downloaded with the sheets, kept, read again
+// offline, and never in the way of the catalogue.
 import 'dart:async';
 import 'dart:io';
 
@@ -48,6 +48,9 @@ class FakeDataBranch implements DataFileFetcher {
 final _missing = Uri.parse('https://raw.githubusercontent.com/nbros/ong_music/data/x');
 
 const _vods = 'date\tpart\tid\tseconds\tposted\ttitle\n2024-01-02\t1\tabcdefghijk\t21600\t2024-01-03\tVOD';
+
+/// The stream of the tests ([_sheets]) starts 600 s into its VOD: its play at 0:30:00 is at 1200 s.
+const _offsets = 'date\tuptime\toffset\tnote\n2024-01-02\t\t-600\tlate start\n';
 
 /// Amy and her other name, the table of the tests.
 const _aliases = 'Amy, Amyy\n';
@@ -126,7 +129,8 @@ void main() {
         expect(state().lastError, isNull, reason: 'not an error of the sheets');
         expect(state().songsError, isNull);
         expect(container.read(vodFileProvider), isNull);
-        expect(branch.calls, {DataFile.vods: 1, DataFile.aliases: 1});
+        expect(container.read(vodOffsetsProvider), isNull);
+        expect(branch.calls, {DataFile.vods: 1, DataFile.aliases: 1, DataFile.offsets: 1});
         expect(dataCache.writes, isEmpty);
         expect(parser.aliases, [same(RequesterAliases.bundled)]);
         expect(identical(state().catalogue!.aliases, RequesterAliases.bundled), isTrue);
@@ -140,7 +144,7 @@ void main() {
       });
       startWith(sheetsAge: const Duration(hours: 1));
       await notifier().idle;
-      expect(branch.calls.values, [1, 1], reason: 'asked at the start, none being kept');
+      expect(branch.calls.values, [1, 1, 1], reason: 'asked at the start, none being kept');
       // what shows the state again: the Songs sheet asked for
       notifier().songsWanted(SongsTrigger.ongLog);
       await notifier().idle;
@@ -180,7 +184,11 @@ void main() {
       expect(parser.of(highlights), ['v1', 'v2']);
       expect(parser.aliases.last!.keyOf('amyy'), parser.aliases.last!.keyOf('amy'));
       expect(joined(), isTrue);
-      expect(branch.calls, {DataFile.vods: 2, DataFile.aliases: 2}, reason: 'asked with each download of the sheet');
+      expect(branch.calls, {
+        DataFile.vods: 2,
+        DataFile.aliases: 2,
+        DataFile.offsets: 2,
+      }, reason: 'asked with each download of the sheet');
     });
 
     test('the catalogue never waits for them; nothing is shown of them until they come', () async {
@@ -377,7 +385,7 @@ void main() {
       expect(container.read(vodFileProvider)!.lines.single.id, 'abcdefghijk');
       expect(parser.aliases.single!.keyOf('amyy'), parser.aliases.single!.keyOf('amy'));
       expect(joined(), isTrue);
-      expect(dataCache.reads.toSet(), {DataFile.vods, DataFile.aliases});
+      expect(dataCache.reads.toSet(), {DataFile.vods, DataFile.aliases, DataFile.offsets});
     });
 
     test('a kept table that does not read: the bundled one', () async {
@@ -391,16 +399,27 @@ void main() {
       () async {
         startWith(
           sheetsAge: const Duration(hours: 1),
-          kept: {DataFile.vods: copy(_vods), DataFile.aliases: copy(_aliases)},
+          kept: {DataFile.vods: copy(_vods), DataFile.aliases: copy(_aliases), DataFile.offsets: copy(_offsets)},
         );
         await notifier().idle;
         expect(google.total, 0);
-        expect(branch.calls.values, [0, 0]);
+        expect(branch.calls.values, [0, 0, 0]);
 
-        startWith(sheetsAge: const Duration(hours: 1), kept: {DataFile.vods: copy(_vods)});
+        startWith(
+          sheetsAge: const Duration(hours: 1),
+          kept: {DataFile.vods: copy(_vods), DataFile.offsets: copy(_offsets)},
+        );
         await notifier().idle;
         expect(google.total, 0);
-        expect(branch.calls.values, [1, 1], reason: 'the table missing');
+        expect(branch.calls.values, [1, 1, 1], reason: 'the table missing');
+
+        branch = FakeDataBranch();
+        startWith(
+          sheetsAge: const Duration(hours: 1),
+          kept: {DataFile.vods: copy(_vods), DataFile.aliases: copy(_aliases)},
+        );
+        await notifier().idle;
+        expect(branch.calls.values, [1, 1, 1], reason: 'the offsets missing (as long as the branch has none)');
 
         branch = FakeDataBranch();
         startWith(
@@ -408,10 +427,11 @@ void main() {
           kept: {
             DataFile.vods: copy(_vods, age: const Duration(hours: 7)),
             DataFile.aliases: copy(_aliases),
+            DataFile.offsets: copy(_offsets),
           },
         );
         await notifier().idle;
-        expect(branch.calls.values, [1, 1], reason: 'the VODs stale');
+        expect(branch.calls.values, [1, 1, 1], reason: 'the VODs stale');
       },
     );
 
@@ -419,18 +439,221 @@ void main() {
       branch = FakeDataBranch({
         DataFile.vods: [_vods],
         DataFile.aliases: [_aliases],
+        DataFile.offsets: [_offsets],
       });
       startWith(
         sheetsAge: const Duration(hours: 1),
-        kept: {DataFile.vods: copy(_vods), DataFile.aliases: copy(_aliases)},
+        kept: {DataFile.vods: copy(_vods), DataFile.aliases: copy(_aliases), DataFile.offsets: copy(_offsets)},
       );
       await notifier().idle;
       google.add(_sheets('v1'));
       await notifier().clearDownloadedData();
       await notifier().idle;
       expect(dataCache.clears, 1);
-      expect(dataCache.values.keys.toSet(), {DataFile.vods, DataFile.aliases});
-      expect(branch.calls.values, [1, 1]);
+      expect(dataCache.values.keys.toSet(), {DataFile.vods, DataFile.aliases, DataFile.offsets});
+      expect(branch.calls.values, [1, 1, 1]);
+    });
+  });
+
+  group('offsets.tsv', () {
+    /// The link of the play of the sheets in its VOD, as the rows ask for it.
+    String? link() {
+      final c = state().catalogue!;
+      final links = vodLinksFor(c, container.read(vodFileProvider), container.read(vodOffsetsProvider));
+      return links?.linkOf(c.plays.single)?.toString();
+    }
+
+    Future<void> showSongs() async {
+      notifier().songsWanted(SongsTrigger.ongLog);
+      await notifier().idle;
+      expect(state().hasSongs, isTrue);
+    }
+
+    test('downloaded with the others: taken at once, the links move, and kept', () async {
+      branch = FakeDataBranch({
+        DataFile.vods: [_vods],
+        DataFile.offsets: [_offsets],
+      });
+      startWith();
+      google.add(_sheets('v1'));
+      await showSongs();
+      expect(link(), 'https://youtu.be/abcdefghijk?t=1200');
+      expect(container.read(vodOffsetsProvider)!.lines.single.offset.seconds, -600);
+      expect(dataCache.values[DataFile.offsets]!.text, _offsets);
+      expect(dataCache.values[DataFile.offsets]!.fetchedAt, _now);
+    });
+
+    test('missing (404, the branch without it): the links at the uptime, no error, nothing kept', () async {
+      branch = FakeDataBranch({
+        DataFile.vods: [_vods],
+      });
+      startWith();
+      google.add(_sheets('v1'));
+      await showSongs();
+      expect(container.read(vodOffsetsProvider), isNull);
+      expect(link(), 'https://youtu.be/abcdefghijk?t=1800');
+      expect(state().lastError, isNull);
+      expect(state().songsError, isNull);
+      expect(dataCache.values.containsKey(DataFile.offsets), isFalse);
+    });
+
+    test('after the VODs: the links at the uptime, then moved when it comes', () async {
+      branch = FakeDataBranch({
+        DataFile.vods: [_vods],
+        DataFile.offsets: [_offsets],
+      });
+      final gate = branch.gate(DataFile.offsets);
+      startWith();
+      google.add(_sheets('v1'));
+      notifier().songsWanted(SongsTrigger.ongLog);
+      await pumpEventQueue();
+      expect(link(), 'https://youtu.be/abcdefghijk?t=1800');
+      final before = vodLinksFor(state().catalogue!, container.read(vodFileProvider), null);
+      gate.complete();
+      await notifier().idle;
+      expect(link(), 'https://youtu.be/abcdefghijk?t=1200');
+      expect(
+        identical(
+          vodLinksFor(state().catalogue!, container.read(vodFileProvider), container.read(vodOffsetsProvider)),
+          before,
+        ),
+        isFalse,
+        reason: 'made again with the offsets',
+      );
+    });
+
+    test('a play the offset puts before the start of the recording has no link', () async {
+      branch = FakeDataBranch({
+        DataFile.vods: [_vods],
+        DataFile.offsets: ['date\tuptime\toffset\tnote\n2024-01-02\t\t-1801\n'],
+      });
+      startWith();
+      google.add(_sheets('v1'));
+      await showSongs();
+      expect(link(), isNull);
+    });
+
+    for (final (name, answer) in [
+      ('an error of a proxy', 'upstream connect error or disconnect/reset before headers. reset reason: overflow'),
+      ('an empty answer', ''),
+      ('a vods.tsv', _vods),
+    ]) {
+      test(
+        '$name, status 200: no file; the kept offsets stay, in use and kept, at the next start offline too',
+        () async {
+          branch = FakeDataBranch({
+            DataFile.vods: [_vods],
+            DataFile.offsets: [answer],
+          });
+          startWith(
+            sheetsAge: const Duration(days: 1),
+            kept: {DataFile.offsets: copy(_offsets, age: const Duration(days: 1))},
+          );
+          google.add(_sheets('v1'));
+          await showSongs();
+          expect(link(), 'https://youtu.be/abcdefghijk?t=1200');
+          expect(dataCache.writes, isNot(contains(DataFile.offsets)));
+          expect(dataCache.values[DataFile.offsets]!.text, _offsets);
+          final kept = dataCache;
+          branch = FakeDataBranch({
+            DataFile.vods: [const SocketException('offline')],
+            DataFile.aliases: [const SocketException('offline')],
+            DataFile.offsets: [const SocketException('offline')],
+          });
+          startWith(sheetsAge: const Duration(days: 1), cache: kept);
+          google.add(const SocketException('offline'));
+          await showSongs();
+          expect(link(), 'https://youtu.be/abcdefghijk?t=1200');
+        },
+      );
+    }
+
+    test('a text that is no file and nothing kept: the links at the uptime', () async {
+      branch = FakeDataBranch({
+        DataFile.vods: [_vods],
+        DataFile.offsets: ['<p>Rate limited</p>'],
+      });
+      startWith();
+      google.add(_sheets('v1'));
+      await showSongs();
+      expect(container.read(vodOffsetsProvider), isNull);
+      expect(link(), 'https://youtu.be/abcdefghijk?t=1800');
+    });
+
+    test('the header alone is a real file without any offset: taken and kept, the kept one dropped', () async {
+      const header = '# offsets\ndate\tuptime\toffset\tnote\n';
+      branch = FakeDataBranch({
+        DataFile.vods: [_vods],
+        DataFile.offsets: [header],
+      });
+      startWith(
+        sheetsAge: const Duration(days: 1),
+        kept: {DataFile.offsets: copy(_offsets, age: const Duration(days: 1))},
+      );
+      google.add(_sheets('v1'));
+      await showSongs();
+      expect(container.read(vodOffsetsProvider)!.isEmpty, isTrue);
+      expect(link(), 'https://youtu.be/abcdefghijk?t=1800');
+      expect(dataCache.values[DataFile.offsets]!.text, header);
+    });
+
+    test('offline: the kept copy taken at the start', () async {
+      branch = FakeDataBranch({
+        for (final file in DataFile.values) file: [const SocketException('offline')],
+      });
+      startWith(
+        sheetsAge: const Duration(days: 1),
+        kept: {DataFile.vods: copy(_vods), DataFile.offsets: copy(_offsets)},
+      );
+      google.add(const SocketException('offline'));
+      await showSongs();
+      expect(link(), 'https://youtu.be/abcdefghijk?t=1200');
+      expect(dataCache.reads, contains(DataFile.offsets));
+    });
+
+    test('an unchanged file is not taken again', () async {
+      branch = FakeDataBranch({
+        DataFile.offsets: [_offsets],
+      });
+      startWith(
+        sheetsAge: const Duration(days: 1),
+        kept: {DataFile.offsets: copy(_offsets, age: const Duration(days: 1))},
+      );
+      final taken = [];
+      container.listen(vodOffsetsProvider, (_, next) => taken.add(next));
+      google.add(_sheets('v1'));
+      await notifier().idle;
+      expect(taken, hasLength(1), reason: 'the kept copy only');
+      expect(dataCache.values[DataFile.offsets]!.fetchedAt, _now, reason: 'kept again, with its new time');
+    });
+
+    test('its bound, 256 KB in bytes, holds for a download and for a kept copy', () async {
+      expect(maxOffsetsBytes, 256 * 1024);
+      expect(DataFile.offsets.maxBytes, maxOffsetsBytes);
+      final wide = '$_offsets#${'é' * (maxOffsetsBytes ~/ 2)}';
+      expect(wide.length, lessThan(maxOffsetsBytes));
+      expect(dataFileTooLarge(DataFile.offsets, wide), isTrue);
+      expect(dataFileTooLarge(DataFile.offsets, 'é' * (maxOffsetsBytes ~/ 2)), isFalse, reason: 'at the bound');
+      // a download
+      branch = FakeDataBranch({
+        DataFile.vods: [_vods],
+        DataFile.offsets: [wide],
+      });
+      startWith();
+      google.add(_sheets('v1'));
+      await showSongs();
+      expect(container.read(vodOffsetsProvider), isNull);
+      expect(dataCache.writes, isNot(contains(DataFile.offsets)));
+      expect(link(), 'https://youtu.be/abcdefghijk?t=1800');
+      // a copy kept larger (by an earlier version), at the start offline
+      branch = FakeDataBranch({
+        for (final file in DataFile.values) file: [const SocketException('offline')],
+      });
+      startWith(sheetsAge: const Duration(days: 1), kept: {DataFile.vods: copy(_vods), DataFile.offsets: copy(wide)});
+      google.add(const SocketException('offline'));
+      await showSongs();
+      expect(container.read(vodOffsetsProvider), isNull);
+      expect(link(), 'https://youtu.be/abcdefghijk?t=1800');
     });
   });
 
@@ -441,6 +664,7 @@ void main() {
         'https://raw.githubusercontent.com/nbros/ong_music/data/vods.tsv',
       );
       expect(DataFileUrls.of(DataFile.aliases).toString(), endsWith('/data/aliases.txt'));
+      expect(DataFileUrls.of(DataFile.offsets).toString(), endsWith('/data/offsets.tsv'));
     });
 
     test('a 200 is the file, as UTF-8; a 404 or a web page throws', () async {
@@ -519,8 +743,12 @@ void main() {
       expect(read.text, _vods);
       expect(read.fetchedAt, _now);
       expect(await cache.read(DataFile.aliases), isNull);
+      await cache.write(DataFile.offsets, CachedSheet(text: _offsets, fetchedAt: _now));
+      expect((await cache.read(DataFile.offsets))!.text, _offsets);
+      expect(File('${dir.path}/data/offsets.tsv').existsSync(), isTrue);
       await cache.clear();
       expect(await cache.read(DataFile.vods), isNull);
+      expect(await cache.read(DataFile.offsets), isNull);
     });
 
     test('a text without its time is no copy (a write that did not finish)', () async {

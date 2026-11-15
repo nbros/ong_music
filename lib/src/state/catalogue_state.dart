@@ -23,6 +23,7 @@ import '../data/sheet_prefetch.dart';
 import '../data/sheet_snapshot.dart';
 import '../data/sheets.dart';
 import '../data/slices.dart';
+import '../data/vod_offsets.dart';
 import '../data/vods.dart';
 import '../logger.dart';
 import 'new_highlights_state.dart';
@@ -359,8 +360,9 @@ final class _SongsInput {
 ///   the start when their kept copies are missing or older than [catalogueMaxAge]: never waited for, never retried
 ///   but with the sheets, their failures (a 404 while the branch does not exist) logged only. Their kept copies are
 ///   read at the start, the table of names (`aliases.txt`) before the first parse of the highlights. A file that
-///   reads is kept and taken: the VODs at once ([vodFileProvider]: the actions of the VODs appear), the table of names
-///   by the next parse of the highlights ([_aliases]), without a parse of its own.
+///   reads is kept and taken: the VODs at once ([vodFileProvider]: the actions of the VODs appear), their offsets at
+///   once ([vodOffsetsProvider]: the links move), the table of names by the next parse of the highlights
+///   ([_aliases]), without a parse of its own.
 ///
 /// To retry or reload, call [refresh]; `ref.invalidate(catalogueProvider)` also
 /// works but drops the catalogue in memory, so the UI goes back to loading.
@@ -476,15 +478,14 @@ class CatalogueNotifier extends Notifier<CatalogueState> {
     Catalogue? catalogue;
     // false once the cache was read and holds nothing usable; not when it could not be read
     var kept = true;
-    // the kept data files, read with the highlights: the table of names before their first parse, the VODs whenever
-    // they come (unless a download came first)
+    // the kept data files, read with the highlights: the table of names before their first parse, the VODs and their
+    // offsets whenever they come (unless a download came first)
     final dataCache = ref.read(dataFileCacheProvider);
     final keptAliases = _readKeptData(dataCache, DataFile.aliases);
-    final keptVods = _readKeptData(dataCache, DataFile.vods).then((copy) {
-      if (copy != null && generation == _generation && !_data.containsKey(DataFile.vods)) {
-        _takeData(DataFile.vods, copy);
-      }
+    Future<void> takeKept(DataFile file) => _readKeptData(dataCache, file).then((copy) {
+      if (copy != null && generation == _generation && !_data.containsKey(file)) _takeData(file, copy);
     });
+    final keptVods = Future.wait([takeKept(DataFile.vods), takeKept(DataFile.offsets)]);
     try {
       cached = await _repo.readCache(Sheet.highlights, isAbandoned: () => generation != _generation);
       final aliases = await keptAliases;
@@ -890,10 +891,11 @@ class CatalogueNotifier extends Notifier<CatalogueState> {
     }
   }
 
-  /// Takes [copy] as the content of [file] if it reads: the VODs at once ([vodFileProvider]), the table of names for
-  /// the next parse of the highlights. Returns whether it was taken: a text that is no `vods.tsv` (without its header,
-  /// `VodFile.isFile`: an error answered with status 200) or a table that does not read (`RequesterAliases.tryParse`)
-  /// is not, and what was taken before stays, kept.
+  /// Takes [copy] as the content of [file] if it reads: the VODs and their offsets at once ([vodFileProvider],
+  /// [vodOffsetsProvider]), the table of names for the next parse of the highlights. Returns whether it was taken: a
+  /// text that is no `vods.tsv` or `offsets.tsv` (without its header, `VodFile.isFile`, `OffsetFile.isFile`: an error
+  /// answered with status 200) or a table that does not read (`RequesterAliases.tryParse`) is not, and what was taken
+  /// before stays, kept.
   bool _takeData(DataFile file, CachedSheet copy) {
     final previous = _data[file];
     // whatever gave it, the fetcher (the one over HTTP stops reading beyond the bound) or the copy kept by an
@@ -910,6 +912,13 @@ class CatalogueNotifier extends Notifier<CatalogueState> {
           return false;
         }
         ref.read(vodFileProvider.notifier).take(VodFile.parse(copy.text));
+      case DataFile.offsets:
+        if (previous?.text == copy.text) break;
+        if (!OffsetFile.isFile(copy.text)) {
+          logger.w('${file.fileName} is no file of offsets (no header): not taken');
+          return false;
+        }
+        ref.read(vodOffsetsProvider.notifier).take(OffsetFile.parse(copy.text));
       case DataFile.aliases:
         final aliases = previous?.text == copy.text ? _aliases : RequesterAliases.tryParse(copy.text);
         if (aliases == null) {
