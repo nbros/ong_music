@@ -74,10 +74,10 @@ void main() {
   CatalogueState state() => container.read(catalogueProvider);
 
   /// Starts the app: the sheets kept [sheetsAge] ago (none when null), the data files of [kept].
-  void startWith({Duration? sheetsAge, Map<DataFile, CachedSheet>? kept}) {
+  void startWith({Duration? sheetsAge, Map<DataFile, CachedSheet>? kept, MemoryDataFileCache? cache}) {
     google = FakeGoogle();
     parser = RecordingParser();
-    dataCache = MemoryDataFileCache(kept);
+    dataCache = cache ?? MemoryDataFileCache(kept);
     container = ProviderContainer.test(
       overrides: [
         sheetFetcherProvider.overrideWithValue(google),
@@ -240,6 +240,93 @@ void main() {
     });
   });
 
+  group('answers that are not the file', () {
+    for (final (name, answer) in [
+      ('an error of a proxy', 'upstream connect error or disconnect/reset before headers. reset reason: overflow'),
+      ('an empty answer', ''),
+      ('a table of another kind', 'id\tdate\tpart\nabcdefghijk\t2024-01-02\t1\n'),
+    ]) {
+      test('$name, status 200: the VODs kept stay, in use and kept, at the next start offline too', () async {
+        branch = FakeDataBranch({
+          DataFile.vods: [answer],
+          DataFile.aliases: [_aliases],
+        });
+        startWith(
+          sheetsAge: const Duration(days: 1),
+          kept: {DataFile.vods: copy(_vods, age: const Duration(days: 1))},
+        );
+        google.add(_sheets('v1'));
+        await notifier().idle;
+        expect(container.read(vodFileProvider)!.lines.single.id, 'abcdefghijk');
+        expect(dataCache.writes, [DataFile.aliases], reason: 'the table only');
+        expect(dataCache.values[DataFile.vods]!.text, _vods);
+        // the next start, offline
+        final kept = dataCache;
+        branch = FakeDataBranch({
+          DataFile.vods: [const SocketException('offline')],
+          DataFile.aliases: [const SocketException('offline')],
+        });
+        startWith(sheetsAge: const Duration(days: 1), cache: kept);
+        google.add(const SocketException('offline'));
+        await notifier().idle;
+        expect(container.read(vodFileProvider)!.lines.single.id, 'abcdefghijk');
+      });
+    }
+
+    test('the header alone is a real file without any VOD: taken and kept', () async {
+      const header = '# the VODs\n\ndate\tpart\tid\tseconds\tposted\ttitle\n';
+      branch = FakeDataBranch({
+        DataFile.vods: [header],
+      });
+      startWith(
+        sheetsAge: const Duration(days: 1),
+        kept: {DataFile.vods: copy(_vods, age: const Duration(days: 1))},
+      );
+      google.add(_sheets('v1'));
+      await notifier().idle;
+      expect(container.read(vodFileProvider)!.isEmpty, isTrue);
+      expect(dataCache.values[DataFile.vods]!.text, header);
+    });
+
+    test('a table of names that does not read: the kept one stays kept, and is the next start\'s', () async {
+      branch = FakeDataBranch({
+        DataFile.aliases: ['upstream connect error or disconnect/reset before headers'],
+      });
+      startWith(
+        sheetsAge: const Duration(days: 1),
+        kept: {DataFile.aliases: copy(_aliases, age: const Duration(days: 1))},
+      );
+      google.add(_sheets('v1'));
+      await notifier().idle;
+      expect(dataCache.writes, isEmpty);
+      expect(dataCache.values[DataFile.aliases]!.text, _aliases);
+      final kept = dataCache;
+      branch = FakeDataBranch();
+      startWith(sheetsAge: const Duration(hours: 1), cache: kept);
+      await notifier().idle;
+      expect(parser.aliases.single!.keyOf('amyy'), parser.aliases.single!.keyOf('amy'));
+    });
+
+    test('larger than its bound: a failed download, whatever the fetcher', () async {
+      final big = '$_vods\n${'#' * maxVodsBytes}';
+      final bigTable = '$_aliases${'#' * maxAliasesBytes}';
+      branch = FakeDataBranch({
+        DataFile.vods: [big],
+        DataFile.aliases: [bigTable],
+      });
+      startWith(
+        sheetsAge: const Duration(days: 1),
+        kept: {DataFile.aliases: copy(_aliases, age: const Duration(days: 1))},
+      );
+      google.add(_sheets('v1'));
+      await notifier().idle;
+      expect(container.read(vodFileProvider), isNull);
+      expect(dataCache.writes, isEmpty);
+      expect(maxVodsBytes, 2 * 1024 * 1024);
+      expect(maxAliasesBytes, 256 * 1024);
+    });
+  });
+
   group('kept copies', () {
     test('offline: the kept VODs shown, the kept table given to the first parse', () async {
       branch = FakeDataBranch({
@@ -341,6 +428,40 @@ void main() {
       );
       await expectLater(page.fetch(DataFile.vods), throwsA(isA<SheetNotCsvException>()));
       expect(asked.map((u) => u.path), ['/nbros/ong_music/data/vods.tsv', '/nbros/ong_music/data/aliases.txt']);
+    });
+
+    test('beyond its bound, the body is not read further: a failure', () async {
+      var sent = 0;
+      Stream<List<int>> body() async* {
+        // 64 KB at a time, for ever unless the reader stops
+        for (var i = 0; i < 1000; i++) {
+          sent++;
+          yield List.filled(64 * 1024, 0x23);
+        }
+      }
+
+      final fetcher = HttpDataFileFetcher(
+        client: MockClient.streaming((request, _) async => http.StreamedResponse(body(), 200)),
+      );
+      await expectLater(fetcher.fetch(DataFile.aliases), throwsA(isA<DataFileTooLargeException>()));
+      expect(sent, lessThan(10), reason: 'stopped after 256 KB');
+      sent = 0;
+      await expectLater(fetcher.fetch(DataFile.vods), throwsA(isA<DataFileTooLargeException>()));
+      expect(sent, lessThan(40), reason: 'stopped after 2 MB');
+      // a declared length beyond the bound: not read at all
+      sent = 0;
+      final declared = HttpDataFileFetcher(
+        client: MockClient.streaming(
+          (request, _) async => http.StreamedResponse(body(), 200, contentLength: maxAliasesBytes + 1),
+        ),
+      );
+      await expectLater(declared.fetch(DataFile.aliases), throwsA(isA<DataFileTooLargeException>()));
+      expect(sent, lessThanOrEqualTo(1));
+      // at the bound: read
+      final exact = HttpDataFileFetcher(
+        client: MockClient((request) async => http.Response.bytes(List.filled(maxAliasesBytes, 0x23), 200)),
+      );
+      expect((await exact.fetch(DataFile.aliases)).length, maxAliasesBytes);
     });
 
     test('a silence is a failure, not a wait for ever', () async {

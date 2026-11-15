@@ -151,6 +151,28 @@ void main() {
       expect(file.lines[2].seconds, 300);
     });
 
+    test('is a file only with its header first: date, part, id', () {
+      for (final text in [
+        'date\tpart\tid\tseconds\tposted\ttitle\n',
+        'date\tpart\tid',
+        '\uFEFF# comment\r\n\r\n  \nDate\t Part \tID\tseconds\r\n2026-11-10\t1\tabcdefghijk\r\n',
+      ]) {
+        expect(VodFile.isFile(text), isTrue, reason: text);
+      }
+      for (final text in [
+        '',
+        '# only a comment\n',
+        'upstream connect error or disconnect/reset before headers',
+        '<!DOCTYPE html><html></html>',
+        '2026-11-10\t1\tabcdefghijk\ndate\tpart\tid',
+        'date\tpart\nid',
+        'date,part,id\n',
+        'id\tdate\tpart',
+      ]) {
+        expect(VodFile.isFile(text), isFalse, reason: text);
+      }
+    });
+
     test('anything but a table is a file without VOD', () {
       for (final text in ['', 'nothing', '<!DOCTYPE html><html></html>', _header, '\n\n\n']) {
         final file = VodFile.parse(text);

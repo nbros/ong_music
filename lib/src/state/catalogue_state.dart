@@ -881,6 +881,11 @@ class CatalogueNotifier extends Notifier<CatalogueState> {
       return;
     }
     if (generation != _generation) return;
+    // whatever the fetcher (the one over HTTP stops reading beyond it): a code unit is at least a byte of UTF-8
+    if (text.length > file.maxBytes) {
+      logger.w('${file.fileName} not taken: larger than ${file.maxBytes} bytes');
+      return;
+    }
     final copy = CachedSheet(text: text, fetchedAt: ref.read(clockProvider)());
     if (!_takeData(file, copy)) return;
     try {
@@ -891,13 +896,19 @@ class CatalogueNotifier extends Notifier<CatalogueState> {
   }
 
   /// Takes [copy] as the content of [file] if it reads: the VODs at once ([vodFileProvider]), the table of names for
-  /// the next parse of the highlights. Returns whether it was taken: a table that does not read is not
-  /// (`RequesterAliases.tryParse`), and the one in use stays.
+  /// the next parse of the highlights. Returns whether it was taken: a text that is no `vods.tsv` (without its header,
+  /// `VodFile.isFile`: an error answered with status 200) or a table that does not read (`RequesterAliases.tryParse`)
+  /// is not, and what was taken before stays, kept.
   bool _takeData(DataFile file, CachedSheet copy) {
     final previous = _data[file];
     switch (file) {
       case DataFile.vods:
-        if (previous?.text != copy.text) ref.read(vodFileProvider.notifier).take(VodFile.parse(copy.text));
+        if (previous?.text == copy.text) break;
+        if (!VodFile.isFile(copy.text)) {
+          logger.w('${file.fileName} is no file of VODs (no header): not taken');
+          return false;
+        }
+        ref.read(vodFileProvider.notifier).take(VodFile.parse(copy.text));
       case DataFile.aliases:
         final aliases = previous?.text == copy.text ? _aliases : RequesterAliases.tryParse(copy.text);
         if (aliases == null) {

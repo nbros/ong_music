@@ -7,6 +7,7 @@
 library;
 
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
@@ -14,20 +15,42 @@ import 'data_file_cache_stub.dart'
     if (dart.library.io) 'data_file_cache_io.dart'
     if (dart.library.js_interop) 'data_file_cache_web.dart'
     as platform;
+import 'page_thread.dart';
 import 'sheets.dart';
+
+/// The largest `vods.tsv` taken, in bytes: today about 100 KB, a line per video (a thousand a decade). Beyond, the
+/// download counts as failed: it is read on the thread of the page.
+const int maxVodsBytes = 2 * 1024 * 1024;
+
+/// The largest `aliases.txt` taken, in bytes: today about 4 KB.
+const int maxAliasesBytes = 256 * 1024;
 
 /// A file of the branch `data`.
 enum DataFile {
   /// The VODs of the streams (`VodFile`).
-  vods('vods.tsv'),
+  vods('vods.tsv', maxVodsBytes),
 
   /// The groups of names of one requester (`RequesterAliases.tryParse`).
-  aliases('aliases.txt');
+  aliases('aliases.txt', maxAliasesBytes);
 
-  const DataFile(this.fileName);
+  const DataFile(this.fileName, this.maxBytes);
 
   /// Its name in the branch, and in the cache.
   final String fileName;
+
+  /// The largest download of it taken ([maxVodsBytes], [maxAliasesBytes]).
+  final int maxBytes;
+}
+
+/// A download of a data file larger than its [DataFile.maxBytes]: its body is not read further.
+class DataFileTooLargeException implements Exception {
+  /// Creates the exception.
+  const DataFileTooLargeException(this.file);
+
+  final DataFile file;
+
+  @override
+  String toString() => '${file.fileName} larger than ${file.maxBytes} bytes';
 }
 
 /// Where the files are read.
@@ -59,8 +82,10 @@ final class NoDataFiles implements DataFileFetcher {
   Future<String> fetch(DataFile file) async => throw StateError('No data files');
 }
 
-/// [DataFileFetcher] over HTTP, read as the sheets are ([getSheetText]: UTF-8, a web page refused). The files are
-/// small (tens of kilobytes): a shorter silence than the sheets', and the whole download within [maxDuration].
+/// [DataFileFetcher] over HTTP, read as the sheets are (UTF-8 whatever the declared charset, a [SheetHttpException]
+/// for an answer that is not a 200, a [SheetNotCsvException] for a web page), and at most [DataFile.maxBytes] of it:
+/// beyond, the body is not read further and a [DataFileTooLargeException] is thrown. The files are small: a shorter
+/// silence than the sheets', and the whole download within [maxDuration].
 final class HttpDataFileFetcher implements DataFileFetcher {
   /// Uses [client] (a new one per fetch when null).
   HttpDataFileFetcher({
@@ -77,11 +102,32 @@ final class HttpDataFileFetcher implements DataFileFetcher {
   Future<String> fetch(DataFile file) async {
     final client = _client ?? http.Client();
     try {
-      return await getSheetText(client, DataFileUrls.of(file), timeout).timeout(maxDuration);
+      return await _get(client, file, timeout).timeout(maxDuration);
     } finally {
       if (_client == null) client.close();
     }
   }
+}
+
+Future<String> _get(http.Client client, DataFile file, Duration timeout) async {
+  final uri = DataFileUrls.of(file);
+  final response = await client.send(http.Request('GET', uri)).timeout(timeout);
+  if (response.statusCode != 200) {
+    unawaited(response.stream.listen(null).cancel());
+    throw SheetHttpException(uri, response.statusCode);
+  }
+  final declared = response.contentLength;
+  if (declared != null && declared > file.maxBytes) {
+    unawaited(response.stream.listen(null).cancel());
+    throw DataFileTooLargeException(file);
+  }
+  final bytes = BytesBuilder(copy: false);
+  // leaving the loop (by the exception) stops listening to the body
+  await for (final chunk in response.stream.timeout(timeout)) {
+    bytes.add(chunk);
+    if (bytes.length > file.maxBytes) throw DataFileTooLargeException(file);
+  }
+  return sheetCsv(decodeUtf8(bytes.takeBytes()), uri);
 }
 
 /// Keeps the last good download of each file, with its time ([CachedSheet]), apart from the sheets: files under

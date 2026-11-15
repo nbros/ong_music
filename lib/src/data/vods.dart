@@ -119,6 +119,24 @@ final class VodFile {
   /// A file without any line.
   static final empty = VodFile.parse('');
 
+  /// Whether [text] is a `vods.tsv` at all: its first line that is neither blank nor a comment is the header, which
+  /// begins with the cells `date`, `part`, `id` (trimmed, any case). Anything else (a message of a proxy, a page of
+  /// an error answered with status 200) is no file, not a file without VOD: a download of it counts as failed. The
+  /// header alone is a real file without any line.
+  static bool isFile(String text) {
+    for (var line in text.split('\n')) {
+      if (line.startsWith('\uFEFF')) line = line.substring(1);
+      final trimmed = line.trim();
+      if (trimmed.isEmpty || trimmed.startsWith('#')) continue;
+      final cells = line.split('\t');
+      return cells.length >= 3 &&
+          cells[0].trim().toLowerCase() == 'date' &&
+          cells[1].trim().toLowerCase() == 'part' &&
+          cells[2].trim().toLowerCase() == 'id';
+    }
+    return false;
+  }
+
   /// Reads [text], the content of `vods.tsv`.
   factory VodFile.parse(String text) {
     final lines = <VodLine>[];
