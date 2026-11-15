@@ -57,7 +57,7 @@ List<RowMenuItem> playMenuItems(
 ) {
   final video = catalogue.highlightOf(play);
   final id = video?.youtubeId;
-  final vod = vodLinksFor(catalogue, ref.read(vodFileProvider))?.linkOf(play);
+  final vod = vodLinksFor(catalogue, ref.read(vodFileProvider), ref.read(vodOffsetsProvider))?.linkOf(play);
   return [
     (icon: Icons.copy, label: copyTitleText, onSelected: () => copyAndConfirm(context, songCopyText(play.title))),
     if (video != null && id != null)

@@ -3,12 +3,14 @@
 /// Pure Dart. The VODs are unlisted YouTube videos, listed by `vods.tsv`, a file of the branch `data` of the
 /// repository (see its README.md), downloaded and kept as the sheets are (`DataFiles`). A line of the file names a
 /// stream by the date of its start in Sydney, that of the title of the VOD, and its rank among the streams of that
-/// date ([StreamKey]); a play is opened at its uptime in the part of the VOD it falls in ([VodLinks]).
+/// date ([StreamKey]); a play is opened at its uptime, moved by the offset `offsets.tsv` gives it when the recording
+/// does not start with the stream ([OffsetFile]), in the part of the VOD it falls in ([VodLinks]).
 library;
 
 import 'catalogue.dart';
 import 'model.dart';
 import 'sydney_zone.dart';
+import 'vod_offsets.dart';
 
 /// A stream as `vods.tsv` names it: the date of its start in Sydney, and its rank among the streams of the sheet
 /// that started on that date (1 for the first). Written `2022-05-08`, `2022-05-08#2` for the second.
@@ -296,42 +298,48 @@ typedef VodPosition = ({int part, VodLine video, int seconds});
 /// The VODs of the streams of one catalogue: the link of each play and of each stream. Valid only with the catalogue
 /// it was made for, as its ids.
 final class VodLinks {
-  /// The VODs [file] gives the streams of [catalogue].
-  VodLinks(this.catalogue, this.file) : keys = streamKeys(catalogue) {
+  /// The VODs [file] gives the streams of [catalogue], with the offsets of [offsets] (none when null).
+  VodLinks(this.catalogue, this.file, [OffsetFile? offsets])
+    : offsets = offsets ?? OffsetFile.empty,
+      keys = streamKeys(catalogue) {
     _vods = [for (final key in keys) file.vodOf(key)];
+    _offsets = [for (final key in keys) this.offsets.of(key)];
   }
 
   final Catalogue catalogue;
   final VodFile file;
+  final OffsetFile offsets;
 
   /// The key of each stream, by id.
   final List<StreamKey> keys;
 
   late final List<List<VodLine>?> _vods;
+  late final List<StreamOffsets?> _offsets;
 
   /// The parts of the VOD of [stream], null when it has none.
   List<VodLine>? vodOf(LiveStream stream) => _vods[stream.id];
 
-  /// Where [play] is in the VOD of its stream, or null:
-  /// - in part 1 at its uptime `u` when `u` is before the end of part 1, or when the VOD has one part; otherwise in
-  ///   part 2 at `u` minus the length of part 1, when that is before the end of part 2 or part 2 is the last; and so
-  ///   on: the parts follow each other without a gap. No margin is added: the uptimes are those the moderators typed;
-  /// - none when the stream has no VOD, the play no uptime (or `0:00:00`, the placeholder of the rows typed without
-  ///   one: no song starts a stream), a length needed for the subtraction is unknown, or the position is not before
-  ///   the end of a part whose length is known.
+  /// The offsets of [stream] that count, null when `offsets.tsv` has none for it.
+  StreamOffsets? offsetsOf(LiveStream stream) => _offsets[stream.id];
+
+  /// The line of `offsets.tsv` that applies to [play] ([StreamOffsets.at]), null when none does (its offset is 0) or
+  /// the play has no uptime (or `0:00:00`).
+  VodOffset? offsetOf(Play play) {
+    final uptime = catalogue.uptimeOf(play);
+    if (uptime == null || uptime == 0) return null;
+    return _offsets[play.streamId]?.at(uptime);
+  }
+
+  /// Where [play] is in the VOD of its stream, or null: at its uptime `u` plus its offset ([offsetOf], 0 when none
+  /// applies), placed in the parts by [placeInVod]. No margin is added: the uptimes are those the moderators typed.
+  /// None when the stream has no VOD, the play no uptime (or `0:00:00`, the placeholder of the rows typed without one:
+  /// no song starts a stream), the position is negative (before the start of the recording), or [placeInVod] places
+  /// it nowhere.
   VodPosition? positionOf(Play play) {
     final vod = _vods[play.streamId];
     final uptime = catalogue.uptimeOf(play);
     if (vod == null || uptime == null || uptime == 0) return null;
-    var at = uptime;
-    for (var i = 0; i < vod.length; i++) {
-      final length = vod[i].seconds;
-      if (i == vod.length - 1) return length == null || at < length ? (part: i + 1, video: vod[i], seconds: at) : null;
-      if (length == null) return null;
-      if (at < length) return (part: i + 1, video: vod[i], seconds: at);
-      at -= length;
-    }
-    return null;
+    return placeInVod(vod, uptime + (offsetOf(play)?.seconds ?? 0));
   }
 
   /// The link of [play] in the VOD of its stream ([positionOf]), or null.
@@ -345,6 +353,23 @@ final class VodLinks {
   List<Uri> streamLinks(LiveStream stream) => [
     for (final part in _vods[stream.id] ?? const <VodLine>[]) vodUrl(part.id),
   ];
+}
+
+/// Where the position [at] (seconds from the start of the VOD, all its parts end to end) is in [vod], or null: in
+/// part 1 at [at] when it is before the end of part 1, or when the VOD has one part; otherwise in part 2 at [at] minus
+/// the length of part 1, when that is before the end of part 2 or part 2 is the last; and so on: the parts follow each
+/// other without a gap. Null when [at] is negative (before the start of the recording), a length needed for the
+/// subtraction is unknown, or the position is not before the end of a part whose length is known.
+VodPosition? placeInVod(List<VodLine> vod, int at) {
+  if (at < 0) return null;
+  for (var i = 0; i < vod.length; i++) {
+    final length = vod[i].seconds;
+    if (i == vod.length - 1) return length == null || at < length ? (part: i + 1, video: vod[i], seconds: at) : null;
+    if (length == null) return null;
+    if (at < length) return (part: i + 1, video: vod[i], seconds: at);
+    at -= length;
+  }
+  return null;
 }
 
 /// `https://youtu.be/<id>?t=<seconds>`, without `t` at 0.

@@ -1,5 +1,6 @@
-/// The files of the branch `data` of the repository: the VODs of the streams (`vods.tsv`) and the groups of names of
-/// one requester (`aliases.txt`), edited by hand and by a browser extension, read from raw.githubusercontent.com.
+/// The files of the branch `data` of the repository: the VODs of the streams (`vods.tsv`), their offsets
+/// (`offsets.tsv`) and the groups of names of one requester (`aliases.txt`), edited by hand and by a browser extension,
+/// read from raw.githubusercontent.com.
 ///
 /// Downloaded when the sheets are (`CatalogueNotifier`), kept as they are and read again offline. Never needed: when
 /// the branch, the network or the cache is missing, the app is as it was before them (no VOD, the table of names it
@@ -26,20 +27,26 @@ const int maxVodsBytes = 2 * 1024 * 1024;
 /// The largest `aliases.txt` taken, in bytes: today about 4 KB.
 const int maxAliasesBytes = 256 * 1024;
 
+/// The largest `offsets.tsv` taken, in bytes: a line per stream or per play corrected, a few dozen bytes each.
+const int maxOffsetsBytes = 256 * 1024;
+
 /// A file of the branch `data`.
 enum DataFile {
   /// The VODs of the streams (`VodFile`).
   vods('vods.tsv', maxVodsBytes),
 
   /// The groups of names of one requester (`RequesterAliases.tryParse`).
-  aliases('aliases.txt', maxAliasesBytes);
+  aliases('aliases.txt', maxAliasesBytes),
+
+  /// The offsets of the VODs (`OffsetFile`): where a play is in a recording that does not start with its stream.
+  offsets('offsets.tsv', maxOffsetsBytes);
 
   const DataFile(this.fileName, this.maxBytes);
 
   /// Its name in the branch, and in the cache.
   final String fileName;
 
-  /// The largest download of it taken ([maxVodsBytes], [maxAliasesBytes]).
+  /// The largest download of it taken ([maxVodsBytes], [maxAliasesBytes], [maxOffsetsBytes]).
   final int maxBytes;
 }
 
@@ -156,7 +163,8 @@ abstract interface class DataFileCache {
   Future<void> clear();
 }
 
-/// The name of the time of [file] in a cache: `vods_fetched_at.txt`, `aliases_fetched_at.txt`.
+/// The name of the time of [file] in a cache: `vods_fetched_at.txt`, `aliases_fetched_at.txt`,
+/// `offsets_fetched_at.txt`.
 String dataFileTimeName(DataFile file) => '${file.name}_fetched_at.txt';
 
 /// The cache of this platform (see [DataFileCache]).

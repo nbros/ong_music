@@ -303,13 +303,15 @@ bool vodButtonsFit(BuildContext context, double titleColumn) {
 }
 
 /// The link of [play] in the VOD of its stream for the button of its row ([showVodButtons]): null when it has a video
-/// (its own button stays), when the button is off, or when no VOD reaches it. Watches the VODs: a row gets its button
-/// when their file comes, in the column of the video button, where nothing else is.
+/// (its own button stays), when the button is off, or when no VOD reaches it. Watches the VODs and their offsets: a
+/// row gets its button when their file comes, in the column of the video button, where nothing else is, and the link
+/// of the file of offsets when it comes (a play the offset puts before the start of the recording has none).
 Uri? _rowVodLink(WidgetRef ref, Catalogue catalogue, Play play, Highlight? video) {
   if (!showVodButtons) return null;
   final file = ref.watch(vodFileProvider);
+  final offsets = ref.watch(vodOffsetsProvider);
   if (video != null && video.youtubeId != null) return null;
-  return vodLinksFor(catalogue, file)?.linkOf(play);
+  return vodLinksFor(catalogue, file, offsets)?.linkOf(play);
 }
 
 /// A play of the Ong Log or of a stream setlist: time (in the zone of the

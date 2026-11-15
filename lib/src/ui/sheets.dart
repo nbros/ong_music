@@ -1041,7 +1041,9 @@ class _StreamSheetState extends ConsumerState<StreamSheet> {
     final metrics = ListMetrics.of(context);
     final videos = s.highlightIds.length;
     final shape = _paneRowShape(context);
-    final vod = _vodButtons(vodLinksFor(catalogue, ref.watch(vodFileProvider))?.streamLinks(s) ?? const []);
+    // the links of the parts start at 0 whatever the offsets: read, not watched
+    final links = vodLinksFor(catalogue, ref.watch(vodFileProvider), ref.read(vodOffsetsProvider));
+    final vod = _vodButtons(links?.streamLinks(s) ?? const []);
     return _SheetBody(
       controller: _controller,
       slivers: [
