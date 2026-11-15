@@ -192,9 +192,10 @@ class _StatsPageState extends ConsumerState<StatsPage> with _RankingListModel<St
                 slivers: [
                   _RankingList(
                     shown: shown,
-                    // the column of the ranks as wide in every ranking: the titles do not move from one to the next
-                    // (the songs have the largest ranks, of every play)
-                    widestRank: math.max(all.songs.lastRank, shown.ranking.lastRank),
+                    // the column of the ranks as wide in every ranking, with "You" or without: the titles do not
+                    // move from one to the next (the largest rank is the number of songs or that of requesters:
+                    // the artists and the genres are never more than the songs)
+                    widestRank: math.max(all.songs.lastRank, all.requesterCount),
                   ),
                 ],
               ),
@@ -718,18 +719,14 @@ class _RankingList extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final shown = this.shown;
     final ranking = shown.ranking;
-    // the widths of the rank and count columns, from their largest numbers in tabular figures and the units under
-    // the counts (the plural over a count above 1, the singular under one of 1, both in a ranking of both): once per
-    // list built, never per row
+    // the widths of the rank and count columns, from their largest numbers in tabular figures and the unit under
+    // the largest count (the first: the plural when any row has it, never narrower than the singular): once per list
+    // built, never per row
     final rankWidth = _textWidth(context, formatCount(widestRank), _RankRow.rankStyle);
     final first = ranking.isEmpty ? 1 : ranking.counts.first;
-    final last = ranking.isEmpty ? 1 : ranking.counts.last;
     final countWidth = math.max(
       _textWidth(context, formatCount(first), _RankRow.countStyle),
-      math.max(
-        _textWidth(context, pluralWord(first, shown.unit), _RankRow.unitStyle),
-        last == first ? 0.0 : _textWidth(context, pluralWord(last, shown.unit), _RankRow.unitStyle),
-      ),
+      _textWidth(context, pluralWord(first, shown.unit), _RankRow.unitStyle),
     );
     return SliverFixedExtentList(
       itemExtent: shown.extent,

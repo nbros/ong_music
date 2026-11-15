@@ -355,6 +355,29 @@ void main() {
       }
     });
 
+    testWidgets('nor when the requesters are more than the songs, with "You" or without', (tester) async {
+      final catalogue = testCatalogue(
+        moreSongs: [
+          // 150 requesters of one song: ranks up to 150 among the requesters, far fewer among the songs
+          for (var n = 1; n <= 150; n++) sRow(date: '2024-03-02 23:00:00', title: 'One song', requester: 'asker$n'),
+        ],
+      );
+      await pumpApp(tester, prefs: {'twitchName': 'asker7'}, state: loadedState(catalogue, testNow));
+      await openStats(tester);
+      final all = CatalogueRankings(catalogue);
+      expect(all.requesterCount, greaterThanOrEqualTo(150));
+      expect(all.songs.length, lessThan(100), reason: 'fewer digits in the last rank of the songs');
+      double titleLeft() => tester.getRect(find.byWidget(rowTexts(tester, 15).first)).left;
+      final left = titleLeft();
+      await showRanking(tester, 'Requesters');
+      expect(titleLeft(), left, reason: 'Requesters');
+      await tester.tap(chip('You'));
+      await tester.pumpAndSettle();
+      expect(titleLeft(), left, reason: 'Requesters, You');
+      await showRanking(tester, 'Songs');
+      expect(titleLeft(), left, reason: 'Songs, You');
+    });
+
     testWidgets('the user\'s own name in orange among the requesters; "You" keeps their requests alone', (
       tester,
     ) async {

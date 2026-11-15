@@ -378,7 +378,7 @@ final class CatalogueRankings {
   /// Every genre played, by its number of plays; `Ranking.total` is the number of plays counted.
   late final Ranking<Genre> genres = Ranking._sorted(Genre.values, _counted.genres, _counted.genreOrder);
 
-  /// Every requester of a play, by their number of requests (`Requester.requestCount`, the plays they requested).
+  /// Every requester of a play, by their number of requests (the plays they requested, as `Requester.requestCount`).
   /// With [requesterId], that requester alone, at their rank among all of them, the bars against the first one.
   late final Ranking<Requester> requesters = () {
     final all = _tables.requesters;
