@@ -1,18 +1,21 @@
 // Checks a vods.tsv (the file of the branch data) against the two sheets, with the app's own code: what the app
 // will link, and what a human should look at.
 //
-//   dart run tool/vods_check.dart <highlights.csv> <songs.csv> <vods.tsv>
+//   dart run tool/vods_check.dart <highlights.csv> <songs.csv> <vods.tsv> [<offsets.tsv>]
 //
 // The sheets as Google exports them (gviz CSV, see tool/sheets_snapshot.sh), or the copies of the branch
-// sheets-snapshot. Prints:
+// sheets-snapshot; offsets.tsv, the offsets of the VODs, when given (none otherwise). Prints:
 // - the streams with a VOD and without, per year;
-// - the plays that get a link, and why the others of the streams with a VOD get none;
+// - the plays that get a link, and why the others of the streams with a VOD get none (with the offsets);
 // - the VOD lines that match no stream, with the streams of the days around;
 // - the dates of several streams, with their VODs;
 // - the lines left out and why, those replaced by a later one, the parts after a hole;
 // - the parts whose missing duration blocks links;
 // - the streams longer than their VOD (the largest uptime of their rows, markers included, past the end of the last
-//   part).
+//   part: their lengths, whatever the offsets);
+// - with offsets.tsv: its lines left out and why, those replaced by a later one, those naming a stream that has no
+//   VOD (or no stream) or an exact uptime that no play of the stream has, and the plays that get no link because
+//   their offset puts them before the start of the recording.
 //
 // ignore_for_file: avoid_print
 
@@ -21,16 +24,23 @@ import 'dart:io';
 import 'package:ong_music/src/data/model.dart';
 import 'package:ong_music/src/data/parser.dart';
 import 'package:ong_music/src/data/sheet_zone.dart';
+import 'package:ong_music/src/data/vod_offsets.dart';
 import 'package:ong_music/src/data/vods.dart';
 
 void main(List<String> args) {
-  if (args.length != 3) {
-    stderr.writeln('usage: dart run tool/vods_check.dart <highlights.csv> <songs.csv> <vods.tsv>');
+  if (args.length != 3 && args.length != 4) {
+    stderr.writeln('usage: dart run tool/vods_check.dart <highlights.csv> <songs.csv> <vods.tsv> [<offsets.tsv>]');
     exit(64);
   }
   final catalogue = parseCatalogue(File(args[0]).readAsStringSync(), File(args[1]).readAsStringSync());
   final file = VodFile.parse(File(args[2]).readAsStringSync());
-  final links = VodLinks(catalogue, file);
+  final offsetsText = args.length > 3 ? File(args[3]).readAsStringSync() : null;
+  if (offsetsText != null && offsetsText.trim().isNotEmpty && !OffsetFile.isFile(offsetsText)) {
+    stderr.writeln('${args[3]} is no offsets.tsv: its first line is not its header (${OffsetFile.header})');
+    exit(65);
+  }
+  final offsets = offsetsText == null ? null : OffsetFile.parse(offsetsText);
+  final links = VodLinks(catalogue, file, offsets);
   final keys = links.keys;
   final streamsByKey = {for (final s in catalogue.streams) keys[s.id]: s};
 
@@ -72,12 +82,15 @@ void main(List<String> args) {
   );
 
   // ---------------------------------------------------------------- plays
-  var linked = 0, noUptime = 0, zero = 0, blocked = 0, past = 0, inVodStreams = 0;
+  var linked = 0, noUptime = 0, zero = 0, blocked = 0, past = 0, inVodStreams = 0, moved = 0;
+  final beforeStart = <(LiveStream, Play, int, VodOffset)>[];
   for (final s in withVod) {
     for (final p in catalogue.playsOf(s)) {
       inVodStreams++;
+      final offset = links.offsetOf(p);
       if (links.linkOf(p) != null) {
         linked++;
+        if (offset != null && offset.seconds != 0) moved++;
         continue;
       }
       final u = catalogue.uptimeOf(p);
@@ -85,7 +98,9 @@ void main(List<String> args) {
         noUptime++;
       } else if (u == 0) {
         zero++;
-      } else if (_lengthNeeded(links.vodOf(s)!, u)) {
+      } else if (u + (offset?.seconds ?? 0) < 0) {
+        beforeStart.add((s, p, u, offset!));
+      } else if (_lengthNeeded(links.vodOf(s)!, u + (offset?.seconds ?? 0))) {
         blocked++;
       } else {
         past++;
@@ -95,8 +110,10 @@ void main(List<String> args) {
   print('');
   print('Plays: ${catalogue.playCount}, of which in a stream with a VOD: $inVodStreams');
   print('  with a link                        $linked');
+  if (offsets != null) print('    of which moved by an offset      $moved');
   print('  without: no uptime                 $noUptime');
   print('           uptime 0:00:00            $zero');
+  if (offsets != null) print('           before the start (offset) ${beforeStart.length}');
   print('           a length needed unknown   $blocked');
   print('           past the end of the VOD   $past');
 
@@ -213,6 +230,62 @@ void main(List<String> args) {
     for (final l in links.vodOf(s)!) {
       print(line(l));
     }
+  }
+
+  // ---------------------------------------------------------------- offsets.tsv
+  if (offsets == null) return;
+  String offsetLine(VodOffsetLine l) {
+    final o = l.offset;
+    final at = o.kind == VodOffsetKind.stream ? 'whole stream' : '${o.kind.name} ${o.uptimeCell}';
+    return 'line ${l.lineNumber}: ${l.key} $at ${o.seconds >= 0 ? '+' : ''}${o.seconds} s${o.note.isEmpty ? '' : '  ${o.note}'}';
+  }
+
+  print('');
+  final counting = [for (final key in offsets.keys) ...offsets.of(key)!.lines];
+  print(
+    'offsets.tsv: ${offsets.lines.length} lines read, ${counting.length} that count, for ${offsets.keys.length} streams',
+  );
+  print('Lines of offsets.tsv left out: ${offsets.ignored.length}');
+  for (final n in offsets.ignored) {
+    print('    line ${n.lineNumber}: ${n.reason}  ${n.text.replaceAll('\t', ' | ')}');
+  }
+  print('Lines of offsets.tsv replaced by a later one of the same stream and uptime cell: ${offsets.replaced.length}');
+  for (final (earlier, later) in offsets.replaced) {
+    print('    ${offsetLine(earlier)}, by line ${later.lineNumber}');
+  }
+  final replacedLines = {for (final (earlier, _) in offsets.replaced) earlier.lineNumber};
+  final noVod = <(VodOffsetLine, String)>[];
+  final noPlay = <VodOffsetLine>[];
+  for (final l in offsets.lines) {
+    if (replacedLines.contains(l.lineNumber)) continue;
+    final s = streamsByKey[l.key];
+    if (s == null) {
+      noVod.add((l, 'no stream of the sheet'));
+      continue;
+    }
+    if (links.vodOf(s) == null) {
+      noVod.add((l, 'a stream without VOD: ${describe(s)}'));
+      continue;
+    }
+    if (l.offset.kind == VodOffsetKind.play &&
+        !catalogue.playsOf(s).any((p) => catalogue.uptimeOf(p) == l.offset.uptime)) {
+      noPlay.add(l);
+    }
+  }
+  print('Lines of offsets.tsv naming a stream that has no VOD: ${noVod.length}');
+  for (final (l, why) in noVod) {
+    print('    ${offsetLine(l)}  ($why)');
+  }
+  print('Lines of offsets.tsv of an exact uptime that no play of the stream has: ${noPlay.length}');
+  for (final l in noPlay) {
+    print('    ${offsetLine(l)}');
+  }
+  print('Plays without a link: their offset puts them before the start of the recording: ${beforeStart.length}');
+  for (final (s, p, u, o) in beforeStart) {
+    final at = o.kind == VodOffsetKind.stream ? 'whole stream' : '${o.kind.name} ${o.uptimeCell}';
+    print(
+      '    ${keys[s.id]} ${formatVodUptime(u)} ${p.title}: offset ${o.seconds} s ($at), position ${u + o.seconds} s',
+    );
   }
 }
 
