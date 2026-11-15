@@ -10,6 +10,7 @@ import 'dart:typed_data';
 import 'catalogue.dart';
 import 'csv.dart';
 import 'model.dart';
+import 'requester_aliases.dart';
 import 'sheet_zone.dart';
 import 'slices.dart';
 import 'text.dart';
@@ -109,6 +110,10 @@ String? _requesterCell(String cell) {
 }
 
 final _uptime = RegExp(r'^(\d+):(\d\d):(\d\d)$');
+
+/// A running time (`0:02:13`, `1:28:35`): what some rows of the Songs sheet carry in their Requester cell since
+/// September 2025, the time of the "Concert Grand" part. It names no requester.
+final _duration = RegExp(r'^\d+(?::\d+)+$');
 final _youtube = RegExp(r'(?:youtu\.be/|v=)([\w-]{11})');
 
 /// The ids of the YouTube videos linked in [text], in their order: the forms of
@@ -139,8 +144,10 @@ int? _instant(({CalendarDate date, int? minute})? cell) {
 ///
 /// Throws [CatalogueFormatException] when a payload does not look like its
 /// sheet: no title column header, HTML, or no highlight / no play at all.
-Catalogue parseCatalogue(String highlightsCsv, String songsCsv) {
-  final load = CatalogueLoad(highlightsCsv, songsCsv);
+///
+/// The names of one group of [aliases] are one requester (see [RequesterAliases]); the app's by default.
+Catalogue parseCatalogue(String highlightsCsv, String songsCsv, {RequesterAliases? aliases}) {
+  final load = CatalogueLoad(highlightsCsv, songsCsv, aliases: aliases);
   while (load.step()) {}
   return load.catalogue;
 }
@@ -148,9 +155,10 @@ Catalogue parseCatalogue(String highlightsCsv, String songsCsv) {
 /// Parses the "Youtube Catalogue" sheet alone: a catalogue without the Songs sheet (`Catalogue.hasSongs` false),
 /// which the Highlights list needs no more than.
 ///
-/// Throws [CatalogueFormatException] when the payload does not look like the sheet.
-Catalogue parseHighlights(String highlightsCsv) {
-  final load = HighlightsLoad(highlightsCsv);
+/// Throws [CatalogueFormatException] when the payload does not look like the sheet. [aliases] as for
+/// [parseCatalogue]: the catalogue keeps them, and [parseSongs] uses them too.
+Catalogue parseHighlights(String highlightsCsv, {RequesterAliases? aliases}) {
+  final load = HighlightsLoad(highlightsCsv, aliases: aliases);
   while (load.step()) {}
   return load.catalogue;
 }
@@ -190,10 +198,15 @@ void _checkSteps(int rowsPerStep, int unitsPerStep) {
 /// the catalogue) and every [unitsPerStep] code units in those over the text; the defaults, [rowsPerPause] and
 /// [unitsPerPause], keep a step around a millisecond or less on a fast laptop.
 final class HighlightsLoad {
-  /// A load of the "Youtube Catalogue" sheet, nothing done yet.
-  HighlightsLoad(String highlightsCsv, {int rowsPerStep = rowsPerPause, int unitsPerStep = unitsPerPause}) {
+  /// A load of the "Youtube Catalogue" sheet, nothing done yet. [aliases] as for [parseHighlights].
+  HighlightsLoad(
+    String highlightsCsv, {
+    int rowsPerStep = rowsPerPause,
+    int unitsPerStep = unitsPerPause,
+    RequesterAliases? aliases,
+  }) {
     _checkSteps(rowsPerStep, unitsPerStep);
-    _steps = _load(highlightsCsv, rowsPerStep, unitsPerStep).iterator;
+    _steps = _load(highlightsCsv, rowsPerStep, unitsPerStep, aliases ?? RequesterAliases.bundled).iterator;
   }
 
   late final Iterator<void> _steps;
@@ -206,27 +219,28 @@ final class HighlightsLoad {
   /// there. Throws what [parseHighlights] throws, and the load is over then.
   bool step() => _steps.moveNext();
 
-  Iterable<void> _load(String highlightsCsv, int rowsPerStep, int unitsPerStep) sync* {
+  Iterable<void> _load(String highlightsCsv, int rowsPerStep, int unitsPerStep, RequesterAliases aliases) sync* {
     final rows = <List<String>>[];
     yield* _decode(highlightsCsv, 'Highlights', rows, unitsPerStep: unitsPerStep, rowsPerStep: rowsPerStep);
     final cols = ColumnResolver(rows.first);
     if (cols.find(HighlightColumns.title) == null || cols.find(HighlightColumns.uploadDate) == null) {
       throw const CatalogueFormatException('Highlights: "Video Title" / "Upload Date" header not found');
     }
-    final b = _HighlightsBuilder(rows, cols, rowsPerStep);
+    final b = _HighlightsBuilder(rows, cols, rowsPerStep, aliases);
     yield* b.build();
     if (b.highlights.isEmpty) throw const CatalogueFormatException('Highlights: no row');
     yield* Catalogue.assembleHighlights(
       highlights: b.highlights,
       requesters: b.requesters,
       spellings: b.spellings,
+      aliases: aliases,
       done: (catalogue) => _catalogue = catalogue,
       pauseEvery: rowsPerStep,
     );
   }
 }
 
-/// [parseSongs] in steps, as [HighlightsLoad] does for its sheet.
+/// [parseSongs] in steps, as [HighlightsLoad] does for its sheet, with the aliases of the highlights' catalogue.
 final class SongsLoad {
   /// A load of the "Songs" sheet against the highlights of [highlights], nothing done yet.
   SongsLoad(Catalogue highlights, String songsCsv, {int rowsPerStep = rowsPerPause, int unitsPerStep = unitsPerPause}) {
@@ -261,6 +275,7 @@ final class SongsLoad {
       titles: b.titles,
       songs: b.songs,
       highlightPlays: b.highlightPlays,
+      aliases: highlights.aliases,
       done: (songs) => _songs = songs,
       pauseEvery: rowsPerStep,
     );
@@ -275,9 +290,10 @@ final class CatalogueLoad {
     String songsCsv, {
     int rowsPerStep = rowsPerPause,
     int unitsPerStep = unitsPerPause,
+    RequesterAliases? aliases,
   }) {
     _checkSteps(rowsPerStep, unitsPerStep);
-    _steps = _load(highlightsCsv, songsCsv, rowsPerStep, unitsPerStep).iterator;
+    _steps = _load(highlightsCsv, songsCsv, rowsPerStep, unitsPerStep, aliases).iterator;
   }
 
   late final Iterator<void> _steps;
@@ -290,8 +306,19 @@ final class CatalogueLoad {
   /// there. Throws what [parseCatalogue] throws, and the load is over then.
   bool step() => _steps.moveNext();
 
-  Iterable<void> _load(String highlightsCsv, String songsCsv, int rowsPerStep, int unitsPerStep) sync* {
-    final highlights = HighlightsLoad(highlightsCsv, rowsPerStep: rowsPerStep, unitsPerStep: unitsPerStep);
+  Iterable<void> _load(
+    String highlightsCsv,
+    String songsCsv,
+    int rowsPerStep,
+    int unitsPerStep,
+    RequesterAliases? aliases,
+  ) sync* {
+    final highlights = HighlightsLoad(
+      highlightsCsv,
+      rowsPerStep: rowsPerStep,
+      unitsPerStep: unitsPerStep,
+      aliases: aliases,
+    );
     while (highlights.step()) {
       yield null;
     }
@@ -331,30 +358,60 @@ class _PlayDraft {
 }
 
 /// The requesters met in a sheet: their ids in order of first use, and the spellings of their names.
+///
+/// A requester is a folded name, or a group of [aliases] (its key, `RequesterAliases.keyOf`). The work on a cell is
+/// done once per distinct cell, where it is first met: the rows only look the cell up in a map.
 class _Requesters {
-  _Requesters(this.spellings, [List<String> folds = const []])
+  _Requesters(this.spellings, this.aliases, [List<String> folds = const []])
     : _folds = [...folds],
       _ids = {for (var i = 0; i < folds.length; i++) folds[i]: i};
 
-  /// Folded name, then the count of each spelling, in order of first appearance.
+  /// Key, then the count of each spelling, in order of first appearance.
   final Map<String, Map<String, int>> spellings;
+  final RequesterAliases aliases;
   final List<String> _folds;
   final Map<String, int> _ids;
 
-  /// The folded names, by id.
+  /// The id of each cell met by [id] (trimmed), -1 for one that names no requester.
+  final Map<String, int> _idOfCell = {};
+
+  /// The count of each spelling met by [countSpelling], in order of first appearance, until [addCountedSpellings].
+  final Map<String, int> _counted = {};
+
+  /// The keys, by id.
   List<String> get folds => _folds;
+
+  /// The key of the requester [name] (a trimmed cell) names, or null: a running time names none.
+  String? _keyOf(String name) => _duration.hasMatch(name) ? null : aliases.keyOf(fold(name));
 
   void countSpelling(String cell) {
     final name = _requesterCell(cell);
     if (name == null) return;
-    final counts = spellings.putIfAbsent(fold(name), () => {});
-    counts[name] = (counts[name] ?? 0) + 1;
+    _counted[name] = (_counted[name] ?? 0) + 1;
+  }
+
+  /// Adds the spellings [countSpelling] counted to [spellings], under the keys of their requesters: those of one key
+  /// in the order the rows first gave them.
+  void addCountedSpellings() {
+    _counted.forEach((name, count) {
+      final key = _keyOf(name);
+      if (key == null) return;
+      final counts = spellings.putIfAbsent(key, () => {});
+      counts[name] = (counts[name] ?? 0) + count;
+    });
+    _counted.clear();
   }
 
   int? id(String cell) {
     final name = _requesterCell(cell);
     if (name == null) return null;
-    final key = fold(name);
+    final id = _idOfCell[name] ??= _newCell(name);
+    return id < 0 ? null : id;
+  }
+
+  int _newCell(String name) {
+    final key = _keyOf(name);
+    if (key == null) return -1;
     return _ids.putIfAbsent(key, () {
       _folds.add(key);
       spellings.putIfAbsent(key, () => {name: 0});
@@ -393,8 +450,9 @@ Iterable<void> _inSteps(int pauseEvery, int from, int to, void Function(int from
 /// [pauseEvery] rows at a time ([_inSteps]). Written as a generator, a loop is a state machine on the web, its locals
 /// are kept off the registers, and a large one is not optimised: the whole build took half as long again.
 class _HighlightsBuilder {
-  _HighlightsBuilder(this.rows, ColumnResolver cols, this.pauseEvery)
-    : _upload = cols.resolve(HighlightColumns.uploadDate),
+  _HighlightsBuilder(this.rows, ColumnResolver cols, this.pauseEvery, RequesterAliases aliases)
+    : _requesters = _Requesters({}, aliases),
+      _upload = cols.resolve(HighlightColumns.uploadDate),
       _order = cols.resolve(HighlightColumns.order),
       _title = cols.resolve(HighlightColumns.title),
       _genre = cols.resolve(HighlightColumns.genre),
@@ -408,7 +466,7 @@ class _HighlightsBuilder {
   final int pauseEvery;
   final int _upload, _order, _title, _genre, _link, _requester, _stream, _vocals, _notes;
 
-  final _requesters = _Requesters({});
+  final _Requesters _requesters;
   final List<Highlight> _highlights = [];
   int _seq = 1;
 
@@ -418,6 +476,7 @@ class _HighlightsBuilder {
 
   Iterable<void> build() sync* {
     yield* _inSteps(pauseEvery, 1, rows.length, _countSpellings);
+    _requesters.addCountedSpellings();
     yield* _inSteps(pauseEvery, 1, rows.length, _addHighlights);
     highlights = List.unmodifiable(_highlights);
     requesters = List.unmodifiable([for (var i = 0; i < _requesters.folds.length; i++) _requesters.requester(i, 0)]);
@@ -535,8 +594,9 @@ class _SongsBuilder {
   /// Builds the lists, in steps: a pause point every [pauseEvery] rows of each loop.
   Iterable<void> build() sync* {
     final spellings = <String, Map<String, int>>{};
-    _requesters = _Requesters(spellings, _base.requesterFolds);
+    _requesters = _Requesters(spellings, _base.aliases, _base.requesterFolds);
     yield* _inSteps(pauseEvery, 1, sRows.length, _countSpellings);
+    _requesters.addCountedSpellings();
     _addHighlightSpellings();
     yield null;
 

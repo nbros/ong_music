@@ -254,7 +254,8 @@ final class GenreEntry extends RankedEntry {
   int get hashCode => Object.hash(GenreEntry, genre);
 }
 
-/// A requester, by their folded name ([Requester.folded]).
+/// A requester, by their key ([Requester.folded]): that of their group of names when they have several, which stays
+/// when a refresh shows them under another name.
 final class RequesterEntry extends RankedEntry {
   const RequesterEntry(this.folded);
 

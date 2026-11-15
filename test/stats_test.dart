@@ -4,7 +4,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:ong_music/src/data/catalogue.dart';
 import 'package:ong_music/src/data/rankings.dart';
+import 'package:ong_music/src/data/requester_aliases.dart';
 import 'package:ong_music/src/state/catalogue_state.dart';
 import 'package:ong_music/src/state/settings_state.dart';
 import 'package:ong_music/src/ui/about_page.dart';
@@ -943,6 +945,59 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(SongSheet), findsNothing);
       expect(find.byType(StatsPage), findsOneWidget);
+    });
+  });
+
+  group('a requester under several names', () {
+    final aliases = RequesterAliases([
+      ['amy_alt', 'Amy'],
+    ]);
+
+    /// Amy asked for three songs, twice as Amy and [altCount] times as amy_alt; Carol for one.
+    Catalogue catalogue({int altCount = 1}) => catalogueOf(
+      songs: [
+        start('2024-03-01'),
+        sRow(date: '2024-03-01 20:00:00', title: 'Zelda - Lost Woods', requester: 'Amy'),
+        sRow(date: '2024-03-01 20:10:00', title: 'Moana - Shiny', requester: 'Carol'),
+        for (var i = 0; i < altCount; i++)
+          sRow(date: '2024-03-01 20:20:00', title: 'Zelda - Song of Storms', requester: 'amy_alt'),
+        sRow(date: '2024-03-01 20:30:00', title: 'Zelda - Lost Woods', requester: 'Amy'),
+      ],
+      aliases: aliases,
+    );
+
+    testWidgets('one row of every request of theirs; the Twitch name amy_alt is theirs', (tester) async {
+      final handle = tester.ensureSemantics();
+      await pumpApp(tester, prefs: {'twitchName': 'amy_alt'}, state: loadedState(catalogue(), testNow));
+      await openStats(tester);
+      await showRanking(tester, 'Requesters');
+      expect(rowSentences(tester), ['Rank 1, Amy, you, 3 requests, 2 songs', 'Rank 2, Carol, 1 request, 1 song']);
+      expect(find.text('2 requesters'), findsOneWidget);
+      await tester.tap(chip('You'));
+      await tester.pumpAndSettle();
+      expect(rowSentences(tester), ['Rank 1, Amy, you, 3 requests, 2 songs']);
+      handle.dispose();
+    });
+
+    testWidgets('their page of songs stays when a refresh shows them under another name', (tester) async {
+      final app = await pumpApp(tester, state: loadedState(catalogue(), testNow));
+      await openStats(tester);
+      await showRanking(tester, 'Requesters');
+      await tester.tap(find.text('Amy'));
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(AppBar, 'Amy'), findsOneWidget);
+      expect(find.text('2 songs · 3 requests'), findsOneWidget);
+      // amy_alt three times now: the name shown
+      app.notifier.emit(loadedState(catalogue(altCount: 3), testNow));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.byType(EntrySongsPage), findsOneWidget);
+      expect(find.widgetWithText(AppBar, 'amy_alt'), findsOneWidget);
+      expect(find.text('2 songs · 5 requests'), findsOneWidget);
+      expect(rowSentences(tester), [
+        'Rank 1, Song of Storms, Zelda, 3 requests',
+        'Rank 2, Lost Woods, Zelda, 2 requests',
+      ]);
     });
   });
 }

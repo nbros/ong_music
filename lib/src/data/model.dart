@@ -524,10 +524,12 @@ final class Requester {
   /// Index in `Catalogue.requesters`.
   final int id;
 
-  /// The most frequent spelling in the sheets.
+  /// The most frequent spelling in the sheets (of all the names of their group, when they have several: see
+  /// `RequesterAliases`).
   final String name;
 
-  /// [fold] of [name]: the merge and lookup key.
+  /// The merge and lookup key: [fold] of [name], or for a group of names the key of the group
+  /// (`RequesterAliases.keyOf`), which does not change with the name shown.
   final String folded;
 
   /// Number of plays they requested (highlights not counted).

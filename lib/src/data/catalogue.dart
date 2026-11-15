@@ -6,6 +6,7 @@ library;
 import 'dart:typed_data';
 
 import 'model.dart';
+import 'requester_aliases.dart';
 import 'slices.dart';
 import 'text.dart';
 
@@ -156,6 +157,7 @@ final class Catalogue {
     required List<String> titleFolds,
     required List<String> requesterFolds,
     required Map<String, int> requesterByFold,
+    required List<String> requesterSearch,
     required List<String> highlightFields,
     required List<String> highlightKeys,
     required List<GenreCount> highlightGenreCounts,
@@ -164,10 +166,12 @@ final class Catalogue {
     required Map<String, Map<String, int>> spellings,
     required Int32List? highlightPlays,
     required Catalogue? highlightsOnly,
+    required this.aliases,
   }) : _songs = songs,
        _titleFolds = titleFolds,
        _requesterFolds = requesterFolds,
        _requesterByFold = requesterByFold,
+       _requesterSearch = requesterSearch,
        _highlightFields = highlightFields,
        _highlightKeys = highlightKeys,
        _highlightGenreCounts = highlightGenreCounts,
@@ -181,26 +185,29 @@ final class Catalogue {
   /// then [done] receives it. Only the parser does this (`parseHighlights`).
   ///
   /// [requesters] are those of the highlights, [spellings] their names as written in the sheet (folded name, then
-  /// count of each spelling), which [withSongs] adds to those of the Songs sheet. The loop over the highlights
+  /// count of each spelling), which [withSongs] adds to those of the Songs sheet, [aliases] the groups of names their
+  /// keys come from (`Requester.folded`). The loop over the highlights
   /// (2,000 in the real sheets, whose titles are folded) has a pause point every [pauseEvery] of them (at least 1);
   /// the others cost a fraction of a millisecond together and run in one step.
   static Iterable<void> assembleHighlights({
     required List<Highlight> highlights,
     required List<Requester> requesters,
     required Map<String, Map<String, int>> spellings,
+    required RequesterAliases aliases,
     required void Function(Catalogue catalogue) done,
     int pauseEvery = rowsPerPause,
   }) sync* {
     if (pauseEvery < 1) throw ArgumentError.value(pauseEvery, 'pauseEvery', 'must be at least 1');
     final requesterFolds = List<String>.unmodifiable([for (final r in requesters) r.folded]);
     final requesterByFold = {for (final r in requesters) r.folded: r.id};
+    final requesterSearch = [for (final r in requesters) aliases.searchTextOf(r.folded)];
     yield null;
     // fields joined by a newline: a query token never contains whitespace, so never spans two fields
     final highlightFields = <String>[];
     for (var i = 0; i < highlights.length; i++) {
       final h = highlights[i];
       highlightFields.add(
-        '${fold(h.title)}\n${h.requesterId == null ? '' : requesterFolds[h.requesterId!]}\n${_genreFolds[h.genre.index]}',
+        '${fold(h.title)}\n${h.requesterId == null ? '' : requesterSearch[h.requesterId!]}\n${_genreFolds[h.genre.index]}',
       );
       if (i % pauseEvery == 0) yield null;
     }
@@ -221,6 +228,7 @@ final class Catalogue {
         titleFolds: const [],
         requesterFolds: requesterFolds,
         requesterByFold: requesterByFold,
+        requesterSearch: requesterSearch,
         highlightFields: highlightFields,
         highlightKeys: highlightKeys,
         highlightGenreCounts: highlightGenreCounts,
@@ -229,6 +237,7 @@ final class Catalogue {
         spellings: spellings,
         highlightPlays: null,
         highlightsOnly: null,
+        aliases: aliases,
       ),
     );
   }
@@ -251,6 +260,7 @@ final class Catalogue {
       titleFolds: songs.titleFolds,
       requesterFolds: songs.requesterFolds,
       requesterByFold: songs.requesterByFold,
+      requesterSearch: songs.requesterSearch,
       highlightFields: base._highlightFields,
       highlightKeys: base._highlightKeys,
       highlightGenreCounts: base._highlightGenreCounts,
@@ -259,6 +269,7 @@ final class Catalogue {
       spellings: base._spellings,
       highlightPlays: songs.highlightPlays,
       highlightsOnly: base,
+      aliases: base.aliases,
     );
   }
 
@@ -285,6 +296,9 @@ final class Catalogue {
   final List<String> _titleFolds;
   final List<String> _requesterFolds;
   final Map<String, int> _requesterByFold;
+
+  /// What a search looks for in the name of each requester, by id (`RequesterAliases.searchTextOf`).
+  final List<String> _requesterSearch;
   final List<String> _highlightFields;
   final List<String> _highlightKeys;
   final List<GenreCount> _highlightGenreCounts;
@@ -303,10 +317,13 @@ final class Catalogue {
   /// Two catalogues with the same one show the same highlights, with the same ids.
   Catalogue get highlightsOnly => _highlightsOnly ?? this;
 
-  /// The folded names of [requesters], by id (for `parseSongs`).
+  /// The groups of names that are one requester each (see [RequesterAliases]): those of the parse that made it.
+  final RequesterAliases aliases;
+
+  /// The keys of [requesters] (`Requester.folded`), by id (for `parseSongs`).
   List<String> get requesterFolds => _requesterFolds;
 
-  /// The names of the requesters of the highlights as written in their sheet: folded name, then the count of each
+  /// The names of the requesters of the highlights as written in their sheet: key, then the count of each
   /// spelling, in order of first appearance (for `parseSongs`, which adds those of the Songs sheet).
   Map<String, Map<String, int>> get requesterSpellings => _spellings;
 
@@ -365,16 +382,16 @@ final class Catalogue {
   /// The requester of a play or highlight id, or null.
   Requester? requester(int? id) => id == null ? null : requesters[id];
 
-  /// Looks a requester up by name, case- and accent-insensitively.
+  /// Looks a requester up by name, case- and accent-insensitively: any name of a group of [aliases] gives the group.
   Requester? requesterNamed(String name) {
-    final id = _requesterByFold[fold(name.trim())];
+    final id = _requesterByFold[aliases.keyOf(fold(name.trim()))];
     return id == null ? null : requesters[id];
   }
 
   /// Whether requester [id] is the user whose folded name is [foldedName]
-  /// (see `myRequesterKeyProvider`). False when either is null or empty.
+  /// (see `myRequesterKeyProvider`), any name of their group of [aliases]. False when either is null or empty.
   bool isRequester(int? id, String? foldedName) =>
-      id != null && foldedName != null && foldedName.isNotEmpty && _requesterFolds[id] == foldedName;
+      id != null && foldedName != null && foldedName.isNotEmpty && _requesterFolds[id] == aliases.keyOf(foldedName);
 
   /// The highlight linked to a play, or null.
   Highlight? highlightOf(Play play) => play.highlightId == null ? null : highlights[play.highlightId!];
@@ -514,6 +531,7 @@ final class SongsPart {
     required this.titleFolds,
     required this.requesterFolds,
     required this.requesterByFold,
+    required this.requesterSearch,
     required this.playGenreCounts,
     required this.highlightPlays,
   });
@@ -530,6 +548,7 @@ final class SongsPart {
     required List<String> titles,
     required Map<String, Song> songs,
     required Int32List highlightPlays,
+    required RequesterAliases aliases,
     required void Function(SongsPart songs) done,
     int pauseEvery = rowsPerPause,
   }) sync* {
@@ -541,6 +560,7 @@ final class SongsPart {
     }
     final requesterFolds = List<String>.unmodifiable([for (final r in requesters) r.folded]);
     final requesterByFold = {for (final r in requesters) r.folded: r.id};
+    final requesterSearch = [for (final r in requesters) aliases.searchTextOf(r.folded)];
     yield null;
     final playGenres = List.filled(Genre.values.length, 0);
     for (var i = 0; i < plays.length; i++) {
@@ -557,6 +577,7 @@ final class SongsPart {
         titleFolds: titleFolds,
         requesterFolds: requesterFolds,
         requesterByFold: requesterByFold,
+        requesterSearch: requesterSearch,
         playGenreCounts: Catalogue._genreCounts(playGenres),
         highlightPlays: highlightPlays,
       ),
@@ -573,6 +594,7 @@ final class SongsPart {
   final List<String> titleFolds;
   final List<String> requesterFolds;
   final Map<String, int> requesterByFold;
+  final List<String> requesterSearch;
   final List<GenreCount> playGenreCounts;
   final Int32List highlightPlays;
 
@@ -588,7 +610,7 @@ final class SongsPart {
 final class _PlayMatcher {
   _PlayMatcher(Catalogue c, this.tokens)
     : _title = [for (final t in tokens) _hits(c._titleFolds, t)],
-      _requester = [for (final t in tokens) _hits(c._requesterFolds, t)],
+      _requester = [for (final t in tokens) _hits(c._requesterSearch, t)],
       _genre = [for (final t in tokens) _hits(Catalogue._genreFolds, t)],
       _type = [for (final t in tokens) _hits(Catalogue._typeFolds, t, skipFirst: true)];
 

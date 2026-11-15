@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:ong_music/src/data/catalogue.dart';
 import 'package:ong_music/src/data/parser.dart';
+import 'package:ong_music/src/data/requester_aliases.dart';
 import 'package:ong_music/src/data/sheets.dart';
 
 /// CSV text, every field quoted like the gviz export.
@@ -59,10 +60,13 @@ List<String> start(String date) =>
 String highlightsCsv(List<List<String>> rows) => csvOf([highlightHeader, ...rows]);
 String songsCsv(List<List<String>> rows) => csvOf([songHeader, ...rows]);
 
-Catalogue catalogueOf({List<List<String>>? highlights, List<List<String>>? songs}) => parseCatalogue(
-  highlightsCsv(highlights ?? [hRow(title: 'Some video')]),
-  songsCsv(songs ?? [start('2024-01-01'), sRow(date: '2024-01-01 20:00:00', title: 'Some song')]),
-);
+/// The catalogue of these rows, the names of a group of [aliases] one requester (the app's groups by default).
+Catalogue catalogueOf({List<List<String>>? highlights, List<List<String>>? songs, RequesterAliases? aliases}) =>
+    parseCatalogue(
+      highlightsCsv(highlights ?? [hRow(title: 'Some video')]),
+      songsCsv(songs ?? [start('2024-01-01'), sRow(date: '2024-01-01 20:00:00', title: 'Some song')]),
+      aliases: aliases,
+    );
 
 /// A small valid pair of sheets; [tag] goes into a title to tell versions apart.
 RawSheets sampleSheets({String tag = 'v1', int extraPlays = 0}) => RawSheets(
