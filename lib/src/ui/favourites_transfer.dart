@@ -7,6 +7,11 @@ library;
 
 import 'dart:math' as math;
 
+import 'package:cupertino_ui/cupertino_ui.dart'
+    show CupertinoColors, cupertinoDesktopTextSelectionHandleControls, cupertinoTextSelectionHandleControls;
+import 'package:flutter/gestures.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -222,24 +227,16 @@ class _ImportDialogState extends ConsumerState<_ImportDialog> {
     contentPadding: const EdgeInsets.fromLTRB(24, 16, 24, 4),
     content: SizedBox(
       width: 400,
-      child: TextField(
+      child: UnwrappedTextField(
         controller: _text,
         autofocus: true,
-        minLines: 4,
-        maxLines: 6,
-        keyboardType: TextInputType.multiline,
-        autocorrect: false,
-        enableSuggestions: false,
+        lines: 5,
+        hintText: 'Paste the exported text',
+        errorText: _nothing ? 'That text holds no favourites.' : null,
         // the error goes when the text changes
         onChanged: (_) {
           if (_nothing) setState(() => _nothing = false);
         },
-        decoration: InputDecoration(
-          hintText: 'Paste the exported text',
-          // the line of the error is there before it: the buttons do not move when it comes
-          helperText: ' ',
-          errorText: _nothing ? 'That text holds no favourites.' : null,
-        ),
       ),
     ),
     actions: [
@@ -247,4 +244,340 @@ class _ImportDialogState extends ConsumerState<_ImportDialog> {
       TextButton(onPressed: _import, child: const Text(_importLabel)),
     ],
   );
+}
+
+/// A text field of several lines that never wraps them: one title per line however long, the text scrolling both
+/// ways, by a finger, the mouse wheel (with Shift, or a trackpad, sideways), and following the caret as it moves.
+///
+/// The box keeps its size, [lines] high and as wide as it is given, whatever the text: the outline, the hint, the
+/// focus and the error ([errorText], under the box, in a line kept for it) are those of a [TextField], drawn
+/// around the scrolling text, which stays inside them.
+///
+/// Built as a [TextField] builds itself, but for the order: the gestures of the text, then the outline, then the
+/// sideways scroll, then the text with its own upright scroll. A [TextField] in a sideways scroll would take every
+/// sideways drag of a finger for itself (on Android, to move the caret), the scroll none.
+///
+/// A paste of several lines shows the start of the text: the caret goes there, the view with it.
+class UnwrappedTextField extends StatefulWidget {
+  const UnwrappedTextField({
+    super.key,
+    required this.controller,
+    required this.lines,
+    required this.hintText,
+    this.errorText,
+    this.onChanged,
+    this.autofocus = false,
+  });
+
+  final TextEditingController controller;
+
+  /// The height of the box, in lines of text.
+  final int lines;
+  final String hintText;
+  final String? errorText;
+  final ValueChanged<String>? onChanged;
+  final bool autofocus;
+
+  @override
+  State<UnwrappedTextField> createState() => _UnwrappedTextFieldState();
+}
+
+class _UnwrappedTextFieldState extends State<UnwrappedTextField>
+    implements TextSelectionGestureDetectorBuilderDelegate {
+  final _focus = FocusNode(debugLabel: 'unwrapped field');
+  final _horizontal = ScrollController();
+  final _vertical = ScrollController();
+  late final _gestures = TextSelectionGestureDetectorBuilder(delegate: this);
+  bool _hovered = false;
+  bool _showHandles = false;
+  late String _text = widget.controller.text;
+
+  @override
+  final GlobalKey<EditableTextState> editableTextKey = GlobalKey<EditableTextState>();
+
+  @override
+  bool get forcePressEnabled => Theme.of(context).platform == TargetPlatform.iOS;
+
+  @override
+  bool get selectionEnabled => true;
+
+  EditableTextState? get _editable => editableTextKey.currentState;
+
+  @override
+  void initState() {
+    super.initState();
+    _focus.addListener(_refresh);
+    widget.controller.addListener(_changed);
+    PaintingBinding.instance.systemFonts.addListener(_fontsChanged);
+  }
+
+  @override
+  void dispose() {
+    PaintingBinding.instance.systemFonts.removeListener(_fontsChanged);
+    widget.controller.removeListener(_changed);
+    _focus.dispose();
+    _horizontal.dispose();
+    _vertical.dispose();
+    super.dispose();
+  }
+
+  void _refresh() => setState(() {});
+
+  /// A font came (the web app fetches those of rare characters, a Hebrew title among them, once they show): the
+  /// lines are measured again, as the text lays them out again.
+  void _fontsChanged() => setState(() => _measured = null);
+
+  void _changed() {
+    final previous = _text;
+    final text = widget.controller.text;
+    if (text == previous) return;
+    _text = text;
+    // A paste of several lines (not a key, nor a word of the keyboard): the caret goes to the start of the text,
+    // and the view with it. The text brings the caret at the end of the paste into view after this frame, from
+    // the place of the caret it last painted (the end): the view goes to the start the frame after, which stops it.
+    if (text.length > previous.length + 1 && '\n'.allMatches(text).length > '\n'.allMatches(previous).length) {
+      final binding = WidgetsBinding.instance;
+      binding.addPostFrameCallback((_) {
+        if (!mounted || widget.controller.text != text) return;
+        widget.controller.selection = const TextSelection.collapsed(offset: 0);
+        binding.addPostFrameCallback((_) {
+          if (!mounted) return;
+          for (final scroll in [_vertical, _horizontal]) {
+            if (scroll.hasClients) scroll.jumpTo(scroll.position.minScrollExtent);
+          }
+        });
+        binding.scheduleFrame();
+      });
+    }
+    // the width of the lines, and the hint, which shows on an empty field only
+    _refresh();
+  }
+
+  /// When the handles of the selection show: as in a [TextField].
+  void _selectionChanged(TextSelection selection, SelectionChangedCause? cause) {
+    final show =
+        _gestures.shouldShowSelectionToolbar &&
+        cause != SelectionChangedCause.keyboard &&
+        (cause == SelectionChangedCause.longPress || widget.controller.text.isNotEmpty);
+    if (show != _showHandles) setState(() => _showHandles = show);
+    if (cause == SelectionChangedCause.longPress) _editable?.bringIntoView(selection.extent);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final style = theme.textTheme.bodyLarge;
+    final selectionTheme = DefaultSelectionStyle.of(context);
+    final error = widget.errorText != null;
+    final cursorColor = error ? theme.colorScheme.error : selectionTheme.cursorColor ?? theme.colorScheme.primary;
+    final selectionColor = selectionTheme.selectionColor ?? theme.colorScheme.primary.withValues(alpha: 0.40);
+    final apple = theme.platform == TargetPlatform.iOS || theme.platform == TargetPlatform.macOS;
+    final controls = switch (theme.platform) {
+      TargetPlatform.iOS => cupertinoTextSelectionHandleControls,
+      TargetPlatform.macOS => cupertinoDesktopTextSelectionHandleControls,
+      TargetPlatform.android || TargetPlatform.fuchsia => materialTextSelectionHandleControls,
+      TargetPlatform.linux || TargetPlatform.windows => desktopTextSelectionHandleControls,
+    };
+    final editable = RepaintBoundary(
+      child: EditableText(
+        key: editableTextKey,
+        controller: widget.controller,
+        focusNode: _focus,
+        autofocus: widget.autofocus,
+        style: style!,
+        minLines: widget.lines,
+        maxLines: widget.lines,
+        keyboardType: TextInputType.multiline,
+        autocorrect: false,
+        enableSuggestions: false,
+        showSelectionHandles: _showHandles,
+        selectionColor: _focus.hasFocus ? selectionColor : null,
+        selectionControls: controls,
+        contextMenuBuilder: (context, state) => AdaptiveTextSelectionToolbar.editableText(editableTextState: state),
+        magnifierConfiguration: TextMagnifier.adaptiveMagnifierConfiguration,
+        onChanged: widget.onChanged,
+        onSelectionChanged: _selectionChanged,
+        // the gestures are those of the field around
+        rendererIgnoresPointer: true,
+        mouseCursor: MouseCursor.defer,
+        cursorColor: cursorColor,
+        backgroundCursorColor: CupertinoColors.inactiveGray,
+        cursorWidth: 2,
+        cursorRadius: apple ? const Radius.circular(2) : null,
+        cursorOpacityAnimates: theme.platform == TargetPlatform.iOS,
+        paintCursorAboveText: apple,
+        cursorOffset: apple ? Offset(iOSHorizontalOffset / MediaQuery.devicePixelRatioOf(context), 0) : null,
+        scrollController: _vertical,
+        // Shift held: the wheel is for the sideways scroll
+        scrollPhysics: const _NotWithShift(),
+      ),
+    );
+    return MouseRegion(
+      cursor: SystemMouseCursors.text,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: TextFieldTapRegion(
+        child: Semantics(
+          onTap: () {
+            if (!widget.controller.selection.isValid) {
+              widget.controller.selection = TextSelection.collapsed(offset: widget.controller.text.length);
+            }
+            _editable?.requestKeyboard();
+          },
+          child: _gestures.buildGestureDetector(
+            behavior: HitTestBehavior.translucent,
+            child: InputDecorator(
+              baseStyle: style,
+              isFocused: _focus.hasFocus,
+              isHovering: _hovered,
+              isEmpty: widget.controller.text.isEmpty,
+              decoration: InputDecoration(
+                hintText: widget.hintText,
+                // the line of the error is there before it: nothing moves when it comes
+                helperText: ' ',
+                errorText: widget.errorText,
+              ),
+              // the text scrolls inside the outline; at least as wide as the box, and as its longest line
+              child: _FixedIntrinsics(
+                height: _height(context, style),
+                child: LayoutBuilder(
+                  builder: (context, constraints) => Listener(
+                    onPointerSignal: _shiftWheel,
+                    // The mouse wheel goes to the text's own (upright) scroll; sideways (a trackpad, or Shift with
+                    // the wheel where the system makes it sideways itself, as macOS does) to this one; Shift with an
+                    // upright wheel (Windows, Linux) to this one by [_shiftWheel]. No axis is flipped by the
+                    // framework: with two scrolls one in the other, the inner one would take the flipped wheel.
+                    child: ScrollConfiguration(
+                      behavior: ScrollConfiguration.of(context).copyWith(pointerAxisModifiers: const {}),
+                      child: SingleChildScrollView(
+                        controller: _horizontal,
+                        scrollDirection: Axis.horizontal,
+                        child: SizedBox(width: math.max(constraints.maxWidth, _width(context, style)), child: editable),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Shift with an upright mouse wheel scrolls the lines sideways, as in other apps.
+  void _shiftWheel(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent || event.kind != PointerDeviceKind.mouse) return;
+    final delta = event.scrollDelta;
+    if (!HardwareKeyboard.instance.isShiftPressed || delta.dx != 0 || delta.dy == 0 || !_horizontal.hasClients) {
+      return;
+    }
+    final position = _horizontal.position;
+    // as the framework does it: a scroll laid out from the right (right-to-left) goes the other way
+    final step = Directionality.of(context) == TextDirection.rtl ? -delta.dy : delta.dy;
+    final target = (position.pixels + step).clamp(position.minScrollExtent, position.maxScrollExtent);
+    if (target == position.pixels) return;
+    GestureBinding.instance.pointerSignalResolver.register(event, (_) => position.jumpTo(target));
+  }
+
+  /// The width the text needs for each of its lines to stay one line, the room of the caret at their end
+  /// included: its widest line. Remembered for the text, style and text size it was measured for, until a font
+  /// comes.
+  double _width(BuildContext context, TextStyle? style) {
+    final text = widget.controller.text;
+    final scaler = MediaQuery.textScalerOf(context);
+    final direction = Directionality.of(context);
+    final measured = _measured;
+    if (measured != null &&
+        measured.text == text &&
+        measured.style == style &&
+        measured.scaler == scaler &&
+        measured.direction == direction) {
+      return measured.width;
+    }
+    final painter = TextPainter(
+      text: TextSpan(text: text, style: style),
+      textDirection: direction,
+      textScaler: scaler,
+    )..layout();
+    // rounded up, and the caret after the last character with the gap before it
+    final width = painter.maxIntrinsicWidth.ceilToDouble() + _caretRoom;
+    painter.dispose();
+    _measured = (text: text, style: style, scaler: scaler, direction: direction, width: width);
+    return width;
+  }
+
+  ({String text, TextStyle? style, TextScaler scaler, TextDirection direction, double width})? _measured;
+
+  /// The room of the caret after the end of a line: its width (2) and the gap before it (1), and a pixel to spare.
+  static const double _caretRoom = 4;
+
+  /// The height of [UnwrappedTextField.lines] lines of [style], as the text lays them out.
+  double _height(BuildContext context, TextStyle? style) {
+    final painter = TextPainter(
+      text: TextSpan(text: ' ', style: style),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+    )..layout();
+    final line = painter.preferredLineHeight;
+    painter.dispose();
+    return line * widget.lines;
+  }
+}
+
+/// [child] for the questions asked of its size before it is laid out: no width of its own (it takes the width it
+/// is given) and [height]. A [LayoutBuilder] cannot answer them, and the outline around the field asks.
+class _FixedIntrinsics extends SingleChildRenderObjectWidget {
+  const _FixedIntrinsics({required this.height, required super.child});
+
+  final double height;
+
+  @override
+  _RenderFixedIntrinsics createRenderObject(BuildContext context) => _RenderFixedIntrinsics(height);
+
+  @override
+  void updateRenderObject(BuildContext context, _RenderFixedIntrinsics renderObject) => renderObject.height = height;
+}
+
+class _RenderFixedIntrinsics extends RenderProxyBox {
+  _RenderFixedIntrinsics(this._height);
+
+  double _height;
+  set height(double value) {
+    if (value == _height) return;
+    _height = value;
+    markNeedsLayout();
+  }
+
+  @override
+  double computeMinIntrinsicWidth(double height) => 0;
+
+  @override
+  double computeMaxIntrinsicWidth(double height) => 0;
+
+  @override
+  double computeMinIntrinsicHeight(double width) => _height;
+
+  @override
+  double computeMaxIntrinsicHeight(double width) => _height;
+
+  @override
+  Size computeDryLayout(BoxConstraints constraints) =>
+      constraints.constrain(Size(constraints.hasBoundedWidth ? constraints.maxWidth : 0, _height));
+
+  @override
+  double? computeDryBaseline(BoxConstraints constraints, TextBaseline baseline) => null;
+}
+
+/// The physics of the text's own (vertical) scroll, which leaves the mouse wheel alone while Shift is held: it is
+/// then for the sideways scroll around it.
+class _NotWithShift extends ScrollPhysics {
+  const _NotWithShift({super.parent});
+
+  @override
+  _NotWithShift applyTo(ScrollPhysics? ancestor) => _NotWithShift(parent: buildParent(ancestor));
+
+  @override
+  bool shouldAcceptUserOffset(ScrollMetrics position) =>
+      !HardwareKeyboard.instance.isShiftPressed && super.shouldAcceptUserOffset(position);
 }

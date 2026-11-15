@@ -1,4 +1,6 @@
 // Moving the favourites: the Favourites section of the About tab, the exported text, and its import.
+import 'package:flutter/gestures.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -8,6 +10,7 @@ import 'package:ong_music/src/state/settings_state.dart';
 import 'package:ong_music/src/ui/app.dart';
 import 'package:ong_music/src/ui/favourites_transfer.dart';
 import 'package:ong_music/src/ui/format.dart';
+import 'package:ong_music/src/ui/theme.dart';
 
 import 'fixtures.dart';
 import 'ui_harness.dart';
@@ -39,6 +42,9 @@ Future<void> _toSection(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+/// The text of the import dialog.
+Finder _field() => find.descendant(of: find.byType(UnwrappedTextField), matching: find.byType(EditableText));
+
 Finder _button(String label) => find.widgetWithText(TextButton, label);
 
 bool _enabled(WidgetTester tester, String label) => tester.widget<TextButton>(_button(label).first).onPressed != null;
@@ -51,7 +57,7 @@ Set<String> _favourites(WidgetTester tester) =>
 Future<void> _importText(WidgetTester tester, String text) async {
   await tapVisible(tester, _button('Import').first);
   expect(find.text('Import favourites'), findsOneWidget);
-  await tester.enterText(find.byType(TextField).last, text);
+  await tester.enterText(_field(), text);
   await tester.pump();
   await tester.tap(find.descendant(of: find.byType(AlertDialog), matching: _button('Import')));
   await tester.pumpAndSettle();
@@ -197,14 +203,14 @@ Sent from my phone''';
     await tapVisible(tester, _button('Import').first);
     expect(find.text('Paste the exported text'), findsOneWidget);
     final actions = tester.getRect(find.text('Cancel'));
-    await tester.enterText(find.byType(TextField).last, 'https://youtu.be/notInTheApp\nNo such song');
+    await tester.enterText(_field(), 'https://youtu.be/notInTheApp\nNo such song');
     await tester.tap(find.descendant(of: find.byType(AlertDialog), matching: _button('Import')));
     await tester.pumpAndSettle();
     expect(find.byType(AlertDialog), findsOneWidget);
     expect(find.text('That text holds no favourites.'), findsOneWidget);
     // the error took a line kept for it
     expect(tester.getRect(find.text('Cancel')), actions);
-    await tester.enterText(find.byType(TextField).last, 'https://youtu.be/notInTheApp\nNo such song!');
+    await tester.enterText(_field(), 'https://youtu.be/notInTheApp\nNo such song!');
     await tester.pumpAndSettle();
     expect(find.text('That text holds no favourites.'), findsNothing);
     expect(_favourites(tester), isEmpty);
@@ -219,7 +225,7 @@ Sent from my phone''';
       () => tester.tap(find.text('Cancel')),
     ]) {
       await tapVisible(tester, _button('Import').first);
-      await tester.enterText(find.byType(TextField).last, 'https://youtu.be/aaaaaaaaaaa');
+      await tester.enterText(_field(), 'https://youtu.be/aaaaaaaaaaa');
       await close();
       await tester.pumpAndSettle();
       expect(find.byType(AlertDialog), findsNothing);
@@ -234,7 +240,7 @@ Sent from my phone''';
     await tapVisible(tester, _button('Import').first);
     tester.view.viewInsets = const FakeViewPadding(bottom: 260);
     addTearDown(tester.view.resetViewInsets);
-    await tester.enterText(find.byType(TextField).last, List.filled(12, 'https://youtu.be/aaaaaaaaaaa').join('\n'));
+    await tester.enterText(_field(), List.filled(12, 'https://youtu.be/aaaaaaaaaaa').join('\n'));
     await tester.pumpAndSettle();
     for (final label in ['Cancel', 'Import']) {
       final button = find.descendant(of: find.byType(AlertDialog), matching: _button(label));
@@ -242,7 +248,7 @@ Sent from my phone''';
       expect(tester.getRect(button).bottom, lessThanOrEqualTo(568 - 260), reason: label);
     }
     // and the field keeps the room of a few lines, its text scrolling in it
-    expect(tester.getRect(find.byType(TextField).last).height, greaterThan(100));
+    expect(tester.getRect(_field()).height, greaterThan(100));
     expect(tester.takeException(), isNull);
   });
 
@@ -272,7 +278,7 @@ Sent from my phone''';
       keyboard(height);
       await tester.pump(const Duration(milliseconds: 16));
     }
-    await tester.enterText(find.byType(TextField).last, 'nothing');
+    await tester.enterText(_field(), 'nothing');
     await tester.pumpAndSettle();
     for (final height in <double>[120, 40, 10, 0]) {
       keyboard(height);
@@ -363,5 +369,248 @@ Sent from my phone''';
     expect(find.text('Couldn’t copy'), findsOneWidget);
     expect(find.text('Copied'), findsNothing);
     await waitForMessage(tester);
+  });
+
+  group('the field of the import dialog', () {
+    /// An export of [count] lines, each one far wider than a phone.
+    String longExport(int count) => [
+      'My Ong Music favourites ($count)',
+      for (var i = 0; i < count; i++)
+        'Artist number $i - A title much too long for one line of a phone $i — https://youtu.be/aaaaaaaaaaa',
+    ].join('\n');
+
+    RenderEditable editable(WidgetTester tester) => tester.state<EditableTextState>(_field()).renderEditable;
+
+    /// The scroll of the field along [axis]: sideways around the text, upright in it.
+    ScrollPosition scroll(WidgetTester tester, Axis axis) => tester
+        .stateList<ScrollableState>(
+          find.descendant(of: find.byType(UnwrappedTextField), matching: find.byType(Scrollable)),
+        )
+        .firstWhere((s) => axisDirectionToAxis(s.axisDirection) == axis)
+        .position;
+
+    /// The part of the text the box shows.
+    Rect view(WidgetTester tester) =>
+        tester.getRect(find.descendant(of: find.byType(UnwrappedTextField), matching: find.byType(Scrollable)).first);
+
+    /// Whether the caret is in the part of the text the box shows.
+    bool caretInView(WidgetTester tester) {
+      final text = editable(tester);
+      final caret = text.getLocalRectForCaret(text.selection!.extent);
+      return view(tester).inflate(1).contains(text.localToGlobal(caret.center));
+    }
+
+    /// How many rows the line [index] of the text takes.
+    int rowsOfLine(WidgetTester tester, int index) {
+      final text = editable(tester);
+      final value = text.text!.toPlainText();
+      final lines = value.split('\n');
+      final start = [for (var i = 0; i < index; i++) lines[i].length + 1].fold(0, (a, b) => a + b);
+      final boxes = text.getBoxesForSelection(
+        TextSelection(baseOffset: start, extentOffset: start + lines[index].length),
+      );
+      return {for (final b in boxes) b.top.round()}.length;
+    }
+
+    Future<void> open(WidgetTester tester) async {
+      await goToTab(tester, 'About');
+      await tester.scrollUntilVisible(_button('Import'), 100, scrollable: aboutScrollable());
+      await tapVisible(tester, _button('Import'));
+    }
+
+    testWidgets('each line stays one line, however long, and nothing moves: a paste, a long line, the error', (
+      tester,
+    ) async {
+      await pumpApp(tester, state: _state());
+      await open(tester);
+      Rect dialog() => tester.getRect(find.byType(Dialog));
+      Rect field() => tester.getRect(find.byType(UnwrappedTextField));
+      final (box, around) = (field(), dialog());
+      await tester.enterText(_field(), longExport(12));
+      await tester.pumpAndSettle();
+      for (var i = 0; i < 13; i++) {
+        expect(rowsOfLine(tester, i), 1, reason: 'line $i');
+      }
+      expect((field(), dialog()), (box, around));
+      // one line, longer still, typed at the end of the first one
+      await tester.enterText(_field(), longExport(12).replaceFirst('\n', '${'x' * 200}\n'));
+      await tester.pumpAndSettle();
+      expect(rowsOfLine(tester, 0), 1);
+      expect((field(), dialog()), (box, around));
+      await tester.enterText(_field(), 'no favourites here\nnor here');
+      await tester.tap(find.descendant(of: find.byType(AlertDialog), matching: _button('Import')));
+      await tester.pumpAndSettle();
+      expect(find.text('That text holds no favourites.'), findsOneWidget);
+      expect((field(), dialog()), (box, around));
+      // the outline does not scroll with the text
+      final outline = find.descendant(of: find.byType(UnwrappedTextField), matching: find.byType(InputDecorator));
+      expect(tester.getRect(outline), tester.getRect(outline));
+      expect(view(tester).width, lessThan(tester.getRect(outline).width));
+    });
+
+    testWidgets('a paste shows the start of the text; the caret is followed as it moves', (tester) async {
+      await pumpApp(tester, state: _state());
+      await open(tester);
+      await tester.enterText(_field(), longExport(12));
+      await tester.pumpAndSettle();
+      expect(editable(tester).selection, const TextSelection.collapsed(offset: 0));
+      expect((scroll(tester, Axis.horizontal).pixels, scroll(tester, Axis.vertical).pixels), (0, 0));
+
+      // to the end of the first line: the view follows sideways
+      await tester.sendKeyEvent(LogicalKeyboardKey.end);
+      await tester.pumpAndSettle();
+      expect(scroll(tester, Axis.horizontal).pixels, greaterThan(0));
+      expect(caretInView(tester), isTrue);
+      // down the lines: upright too
+      for (var i = 0; i < 8; i++) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      }
+      await tester.pumpAndSettle();
+      expect(scroll(tester, Axis.vertical).pixels, greaterThan(0));
+      expect(caretInView(tester), isTrue);
+      // back to the start of the line
+      await tester.sendKeyEvent(LogicalKeyboardKey.home);
+      await tester.pumpAndSettle();
+      expect(scroll(tester, Axis.horizontal).pixels, 0);
+      expect(caretInView(tester), isTrue);
+      // typing at the end of a long line
+      await tester.sendKeyEvent(LogicalKeyboardKey.end);
+      tester.testTextInput.enterText('${editable(tester).text!.toPlainText()}!');
+      await tester.pumpAndSettle();
+      expect(caretInView(tester), isTrue);
+    });
+
+    testWidgets('a finger drags the text sideways and upright', (tester) async {
+      await pumpApp(tester, state: _state());
+      await open(tester);
+      await tester.enterText(_field(), longExport(12));
+      await tester.pumpAndSettle();
+      final selection = editable(tester).selection;
+      await tester.dragFrom(view(tester).center, const Offset(-200, 0));
+      await tester.pumpAndSettle();
+      expect(scroll(tester, Axis.horizontal).pixels, greaterThan(100));
+      expect(scroll(tester, Axis.vertical).pixels, 0);
+      await tester.dragFrom(view(tester).center, const Offset(0, -60));
+      await tester.pumpAndSettle();
+      expect(scroll(tester, Axis.vertical).pixels, greaterThan(30));
+      // a drag is no tap: the caret stays
+      expect(editable(tester).selection, selection);
+    });
+
+    testWidgets('the mouse wheel goes upright; sideways with Shift, or a sideways wheel', (tester) async {
+      await pumpApp(tester, state: _state(), size: const Size(1280, 800), desktop: true);
+      await tester.tap(find.descendant(of: navigation(), matching: find.text('About')));
+      await tester.pumpAndSettle();
+      await tapVisible(tester, _button('Import').first);
+      await tester.enterText(_field(), longExport(12));
+      await tester.pumpAndSettle();
+      final mouse = TestPointer(1, PointerDeviceKind.mouse)..hover(view(tester).center);
+      Future<(double, double)> wheel(Offset delta, {bool shift = false}) async {
+        final h = scroll(tester, Axis.horizontal).pixels, v = scroll(tester, Axis.vertical).pixels;
+        if (shift) await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+        await tester.sendEventToBinding(mouse.scroll(delta));
+        if (shift) await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+        await tester.pumpAndSettle();
+        return (scroll(tester, Axis.horizontal).pixels - h, scroll(tester, Axis.vertical).pixels - v);
+      }
+
+      expect(await wheel(const Offset(0, 40)), (0, 40));
+      // Shift and an upright wheel (Windows, Linux)
+      expect(await wheel(const Offset(0, 50), shift: true), (50, 0));
+      // Shift and a wheel the system made sideways (macOS)
+      expect(await wheel(const Offset(30, 0), shift: true), (30, 0));
+      // a trackpad, sideways
+      expect(await wheel(const Offset(-80, 0)), (-80, 0));
+    });
+
+    testWidgets('select all, and the long press that pastes, as in any field', (tester) async {
+      await pumpApp(tester, state: _state());
+      const clip = 'My Ong Music favourites (1)\nZelda - Song of Storms — https://youtu.be/aaaaaaaaaaa';
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+        return switch (call.method) {
+          'Clipboard.getData' => {'text': clip},
+          'Clipboard.hasStrings' => {'value': true},
+          _ => null,
+        };
+      });
+      await open(tester);
+      await tester.longPress(_field());
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Paste'));
+      await tester.pumpAndSettle();
+      expect(editable(tester).text!.toPlainText(), clip);
+      // the start of the text, the caret there
+      expect(editable(tester).selection, const TextSelection.collapsed(offset: 0));
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pumpAndSettle();
+      expect(editable(tester).selection, const TextSelection(baseOffset: 0, extentOffset: clip.length));
+    });
+
+    testWidgets('right to left: one line each, the caret followed, Shift and the wheel', (tester) async {
+      final controller = TextEditingController();
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildTheme(Brightness.light, desktop: false),
+          home: Directionality(
+            textDirection: TextDirection.rtl,
+            child: Scaffold(
+              body: Center(
+                child: SizedBox(
+                  width: 300,
+                  child: UnwrappedTextField(controller: controller, lines: 5, hintText: 'hint'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tapAt(view(tester).center);
+      await tester.pump();
+      tester.testTextInput.enterText(
+        [for (var i = 0; i < 8; i++) 'שיר ארוך מאוד עם כותרת ארוכה $i — https://youtu.be/aaaaaaaaaaa'].join('\n'),
+      );
+      await tester.pumpAndSettle();
+      for (var i = 0; i < 8; i++) {
+        expect(rowsOfLine(tester, i), 1, reason: 'line $i');
+      }
+      expect(caretInView(tester), isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.end);
+      await tester.pumpAndSettle();
+      expect(scroll(tester, Axis.horizontal).pixels, greaterThan(0));
+      expect(caretInView(tester), isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.home);
+      await tester.pumpAndSettle();
+      expect(caretInView(tester), isTrue);
+      // laid out from the right: the wheel goes the way the framework's own sideways scrolls go
+      final mouse = TestPointer(1, PointerDeviceKind.mouse)..hover(view(tester).center);
+      final before = scroll(tester, Axis.horizontal).pixels;
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendEventToBinding(mouse.scroll(const Offset(0, -50)));
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.pumpAndSettle();
+      expect(scroll(tester, Axis.horizontal).pixels, before + 50);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('large text on a small phone, the keyboard up: the field and the buttons in reach', (tester) async {
+      await pumpApp(tester, state: _state(), size: const Size(320, 568), textScale: 2);
+      await open(tester);
+      tester.view.viewInsets = const FakeViewPadding(bottom: 260);
+      addTearDown(tester.view.resetViewInsets);
+      await tester.enterText(_field(), longExport(12));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      for (final label in ['Cancel', 'Import']) {
+        final button = find.descendant(of: find.byType(AlertDialog), matching: _button(label));
+        await tester.ensureVisible(button);
+        await tester.pumpAndSettle();
+        expect(button.hitTestable(), findsOneWidget, reason: label);
+        expect(tester.getRect(button).bottom, lessThanOrEqualTo(568 - 260), reason: label);
+      }
+      expect(rowsOfLine(tester, 1), 1);
+    });
   });
 }
