@@ -14,6 +14,7 @@ import 'package:material_ui/material_ui.dart';
 import '../data/model.dart';
 import '../data/text.dart';
 import '../data/thumbnail_cache.dart';
+import 'actions.dart' show watchInTheVodText;
 import 'format.dart';
 import 'fullscreen_button.dart';
 import 'instant_feedback.dart';
@@ -496,6 +497,56 @@ class VideoPill extends StatelessWidget {
               height: 28,
               decoration: BoxDecoration(color: scheme.primaryContainer, borderRadius: BorderRadius.circular(14)),
               child: Icon(Icons.play_arrow, size: 18, color: scheme.onPrimaryContainer),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The icon of the full recording of a stream (a VOD): the button of a row ([VodButton]), the item of the menu of a
+/// play, the buttons of the fiche of a stream. Distinct from the play arrow of a highlight's video.
+const IconData vodIcon = Icons.ondemand_video;
+
+/// The button of a play whose stream has a VOD reaching it, in the place of the [VideoPill] of the plays with a
+/// video (which keep theirs): the same box of 48 px, an outlined pill instead of a filled one, the [vodIcon], the
+/// tooltip [label]. Nothing else of the row moves for it.
+class VodButton extends StatelessWidget {
+  const VodButton({super.key, required this.onPressed});
+
+  /// Its tooltip, and what screen readers call it.
+  static const label = watchInTheVodText;
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Semantics(
+      container: true,
+      button: true,
+      label: label,
+      onTap: onPressed,
+      excludeSemantics: true,
+      child: Tooltip(
+        message: label,
+        excludeFromSemantics: true,
+        child: _PillInk(
+          onTap: onPressed,
+          child: SizedBox(
+            width: 48,
+            height: 48,
+            child: Center(
+              child: Container(
+                width: 36,
+                height: 28,
+                decoration: BoxDecoration(
+                  border: Border.all(color: scheme.outlineVariant),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(vodIcon, size: 16, color: scheme.onSurfaceVariant),
+              ),
             ),
           ),
         ),

@@ -5,6 +5,7 @@ import '../logger.dart';
 import 'catalogue.dart';
 import 'page_thread.dart';
 import 'parser.dart';
+import 'requester_aliases.dart';
 import 'sheet_cache.dart';
 import 'sheet_snapshot.dart';
 import 'sheets.dart';
@@ -12,7 +13,8 @@ import 'slices.dart';
 
 /// Parses the sheets, possibly on another isolate, or in slices: the Highlights sheet alone ([highlights]), then the
 /// Songs sheet against the highlights of a catalogue ([songs]). Both throw [CatalogueFormatException] for an invalid
-/// payload.
+/// payload. The groups of names of one requester are given to [highlights] (`aliases`, the app's table when null):
+/// the catalogue keeps them, and [songs] takes them from it.
 ///
 /// `isAbandoned`, when given, tells that the result is no longer wanted (the state that asked for it is gone, or
 /// another download replaced the text): a parser that can stop halfway then throws [LoadAbandoned] instead of going
@@ -20,7 +22,12 @@ import 'slices.dart';
 /// the page then lets its frames come first (a list being scrolled); otherwise the user waits for it.
 abstract interface class SheetParser {
   /// The catalogue of the highlights alone (`parseHighlights`).
-  Future<Catalogue> highlights(String csv, {bool Function()? isAbandoned, bool background = false});
+  Future<Catalogue> highlights(
+    String csv, {
+    bool Function()? isAbandoned,
+    bool background = false,
+    RequesterAliases? aliases,
+  });
 
   /// What the Songs sheet adds to [highlights] (`parseSongs`). [hurry] tells, while it runs in the background, that
   /// something now waits for it (the Ong Log): a parser that shares the thread of the page then goes on as for work
@@ -40,8 +47,12 @@ final class ParseOnCurrentIsolate implements SheetParser {
   const ParseOnCurrentIsolate();
 
   @override
-  Future<Catalogue> highlights(String csv, {bool Function()? isAbandoned, bool background = false}) async =>
-      parseHighlights(csv);
+  Future<Catalogue> highlights(
+    String csv, {
+    bool Function()? isAbandoned,
+    bool background = false,
+    RequesterAliases? aliases,
+  }) async => parseHighlights(csv, aliases: aliases);
 
   @override
   Future<SongsPart> songs(
@@ -73,8 +84,13 @@ final class ParseInSlices implements SheetParser {
   final Duration patience;
 
   @override
-  Future<Catalogue> highlights(String csv, {bool Function()? isAbandoned, bool background = false}) async {
-    final load = HighlightsLoad(csv);
+  Future<Catalogue> highlights(
+    String csv, {
+    bool Function()? isAbandoned,
+    bool background = false,
+    RequesterAliases? aliases,
+  }) async {
+    final load = HighlightsLoad(csv, aliases: aliases);
     await _run(load.step, isAbandoned, background);
     return load.catalogue;
   }
@@ -196,9 +212,14 @@ final class CatalogueRepository {
     return SheetText(copy.text, copy.fetchedAt, print, isSnapshot: true);
   }
 
-  /// The catalogue of the highlights of [csv]. See [_parse] for its failures.
-  Future<Catalogue> parseHighlights(String csv, {bool Function()? isAbandoned, bool background = false}) =>
-      _parse(() => parser.highlights(csv, isAbandoned: isAbandoned, background: background));
+  /// The catalogue of the highlights of [csv], the names of one group of [aliases] one requester (the app's table
+  /// when null). See [_parse] for its failures.
+  Future<Catalogue> parseHighlights(
+    String csv, {
+    bool Function()? isAbandoned,
+    bool background = false,
+    RequesterAliases? aliases,
+  }) => _parse(() => parser.highlights(csv, isAbandoned: isAbandoned, background: background, aliases: aliases));
 
   /// [highlights] completed with the Songs sheet [csv] (`Catalogue.withSongs`). See [_parse] for its failures,
   /// [SheetParser.songs] for [hurry].

@@ -3,10 +3,12 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:ong_music/src/data/data_files.dart';
 import 'package:ong_music/src/data/sheet_cache.dart';
 import 'package:ong_music/src/data/sheet_snapshot.dart';
 import 'package:ong_music/src/data/sheets.dart';
 import 'package:ong_music/src/state/catalogue_state.dart';
+import 'package:ong_music/src/state/vods_state.dart';
 
 import 'fixtures.dart';
 import 'sheet_fakes.dart';
@@ -31,6 +33,8 @@ void main() {
         sheetFetcherProvider.overrideWithValue(google),
         snapshotFetcherProvider.overrideWithValue(snapshot),
         sheetCacheProvider.overrideWithValue(cached ?? MemorySheetCache()),
+        dataFileFetcherProvider.overrideWithValue(const NoDataFiles()),
+        dataFileCacheProvider.overrideWithValue(const NoDataFileCache()),
         sheetParserProvider.overrideWithValue(parser),
         songsDeferralProvider.overrideWithValue(() async {}),
         clockProvider.overrideWithValue(() => clock),

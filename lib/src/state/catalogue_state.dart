@@ -12,18 +12,22 @@ import 'package:flutter/painting.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/catalogue.dart';
+import '../data/data_files.dart';
 import '../data/model.dart';
 import '../data/parser.dart';
 import '../data/rankings.dart';
 import '../data/repository.dart';
+import '../data/requester_aliases.dart';
 import '../data/sheet_cache.dart';
 import '../data/sheet_prefetch.dart';
 import '../data/sheet_snapshot.dart';
 import '../data/sheets.dart';
 import '../data/slices.dart';
+import '../data/vods.dart';
 import '../logger.dart';
 import 'new_highlights_state.dart';
 import 'settings_state.dart';
+import 'vods_state.dart';
 
 /// A kept sheet older than this is refreshed in the background.
 const Duration catalogueMaxAge = Duration(hours: 6);
@@ -122,8 +126,12 @@ final class ParseInBackground implements SheetParser {
   const ParseInBackground();
 
   @override
-  Future<Catalogue> highlights(String csv, {bool Function()? isAbandoned, bool background = false}) =>
-      compute(parseHighlightsRecord, csv, debugLabel: 'parse highlights');
+  Future<Catalogue> highlights(
+    String csv, {
+    bool Function()? isAbandoned,
+    bool background = false,
+    RequesterAliases? aliases,
+  }) => compute(parseHighlightsRecord, (highlightsCsv: csv, aliases: aliases), debugLabel: 'parse highlights');
 
   @override
   Future<SongsPart> songs(
@@ -346,7 +354,13 @@ final class _SongsInput {
 /// - a refresh never blanks the UI: the current catalogue stays until a new one downloaded and parsed successfully
 ///   replaces it at once; on failure it stays and the error of the sheet is set. Once the Songs sheet is on the
 ///   screen it stays: new highlights show with it, parsed again against them;
-/// - a refresh that finds a sheet unchanged keeps the same [Catalogue] instance and only moves its time.
+/// - a refresh that finds a sheet unchanged keeps the same [Catalogue] instance and only moves its time;
+/// - the files of the branch `data` ([DataFile]) are downloaded with each download of the Highlights sheet, and at
+///   the start when their kept copies are missing or older than [catalogueMaxAge]: never waited for, never retried
+///   but with the sheets, their failures (a 404 while the branch does not exist) logged only. Their kept copies are
+///   read at the start, the table of names (`aliases.txt`) before the first parse of the highlights. A file that
+///   reads is kept and taken: the VODs at once ([vodFileProvider]: the actions of the VODs appear), the table of names
+///   by the next parse of the highlights ([_aliases]), without a parse of its own.
 ///
 /// To retry or reload, call [refresh]; `ref.invalidate(catalogueProvider)` also
 /// works but drops the catalogue in memory, so the UI goes back to loading.
@@ -378,6 +392,17 @@ class CatalogueNotifier extends Notifier<CatalogueState> {
   bool _songsWanted = false;
   bool _songsUrgent = false;
   bool _songsDeferred = false;
+
+  /// The groups of names of one requester the parses of the highlights are given: those of the kept `aliases.txt`,
+  /// read at the start before the first parse, then of each download of it that reads ([_takeData]); the table of
+  /// the app until then, or when none reads. A catalogue keeps those of its parse (`Catalogue.aliases`).
+  RequesterAliases _aliases = RequesterAliases.bundled;
+
+  /// The copy of each data file taken (kept or downloaded): what the next download is compared with.
+  final Map<DataFile, CachedSheet> _data = {};
+
+  /// The download of the data files running, if any ([_downloadData]).
+  Future<void>? _dataDownload;
 
   /// The next automatic check ([_refreshIfDue]).
   Timer? _timer;
@@ -411,6 +436,9 @@ class CatalogueNotifier extends Notifier<CatalogueState> {
     _songsWanted = false;
     _songsUrgent = false;
     _songsDeferred = false;
+    _aliases = RequesterAliases.bundled;
+    _data.clear();
+    _dataDownload = null;
     _timer?.cancel();
     _timer = null;
     ref.onDispose(() {
@@ -448,11 +476,27 @@ class CatalogueNotifier extends Notifier<CatalogueState> {
     Catalogue? catalogue;
     // false once the cache was read and holds nothing usable; not when it could not be read
     var kept = true;
+    // the kept data files, read with the highlights: the table of names before their first parse, the VODs whenever
+    // they come (unless a download came first)
+    final dataCache = ref.read(dataFileCacheProvider);
+    final keptAliases = _readKeptData(dataCache, DataFile.aliases);
+    final keptVods = _readKeptData(dataCache, DataFile.vods).then((copy) {
+      if (copy != null && generation == _generation && !_data.containsKey(DataFile.vods)) {
+        _takeData(DataFile.vods, copy);
+      }
+    });
     try {
       cached = await _repo.readCache(Sheet.highlights, isAbandoned: () => generation != _generation);
+      final aliases = await keptAliases;
+      if (generation != _generation) return;
+      if (aliases != null && !_data.containsKey(DataFile.aliases)) _takeData(DataFile.aliases, aliases);
       if (cached != null) {
         try {
-          catalogue = await _repo.parseHighlights(cached.text, isAbandoned: () => generation != _generation);
+          catalogue = await _repo.parseHighlights(
+            cached.text,
+            isAbandoned: () => generation != _generation,
+            aliases: _aliases,
+          );
         } on FormatException catch (e) {
           logger.w('The kept highlights no longer parse: $e');
           await _repo.forget(Sheet.highlights);
@@ -486,6 +530,11 @@ class CatalogueNotifier extends Notifier<CatalogueState> {
     } else {
       // no download now: the one the page started, if any, must not wait for the next refresh
       ref.read(prefetchDiscarderProvider)();
+      // the data files, when missing or stale, do not wait for the sheets to be (their kept copies were read with
+      // those of the sheets: done by now)
+      await keptVods;
+      if (generation != _generation) return;
+      if (DataFile.values.any((file) => _isStale(_data[file]?.fetchedAt))) unawaited(_downloadData());
     }
     try {
       if (_songsWanted) await _startSongs(generation);
@@ -779,9 +828,11 @@ class CatalogueNotifier extends Notifier<CatalogueState> {
     return _downloadOnce(Sheet.songs);
   }
 
-  /// Runs the download of [sheet], or joins the one already running.
+  /// Runs the download of [sheet], or joins the one already running. With the Highlights sheet, the data files are
+  /// downloaded too ([_downloadData]), not waited for.
   Future<void> _downloadOnce(Sheet sheet) {
     if (_disposed) return Future<void>.value();
+    if (sheet == Sheet.highlights) unawaited(_downloadData());
     final s = _of(sheet);
     final running = s.download;
     if (running != null) return running;
@@ -790,6 +841,85 @@ class CatalogueNotifier extends Notifier<CatalogueState> {
       if (identical(s.download, tracked)) s.download = null;
     });
     return s.download = tracked;
+  }
+
+  // ---------------------------------------------------------------- the data files
+
+  /// The kept copy of [file], or null (a failure to read it is one).
+  static Future<CachedSheet?> _readKeptData(DataFileCache cache, DataFile file) async {
+    try {
+      return await cache.read(file);
+    } catch (e, st) {
+      // DataFileCache implementations should not throw
+      logger.w('Cannot read the kept ${file.fileName}', error: e, stackTrace: st);
+      return null;
+    }
+  }
+
+  /// Downloads the data files, or joins the download running: each one that reads is taken ([_takeData]) and kept.
+  /// Never throws: a file that cannot be had (no network, the branch missing) leaves what was taken before, and is
+  /// asked for again with the next download of the Highlights sheet.
+  Future<void> _downloadData() {
+    if (_disposed) return Future<void>.value();
+    final running = _dataDownload;
+    if (running != null) return running;
+    final generation = _generation;
+    late final Future<void> tracked;
+    tracked = _track(Future.wait([for (final file in DataFile.values) _downloadDataFile(file, generation)]))
+        .whenComplete(() {
+          if (identical(_dataDownload, tracked)) _dataDownload = null;
+        });
+    return _dataDownload = tracked;
+  }
+
+  Future<void> _downloadDataFile(DataFile file, int generation) async {
+    final String text;
+    try {
+      text = await ref.read(dataFileFetcherProvider).fetch(file);
+    } catch (e) {
+      logger.i('${file.fileName} not downloaded: $e');
+      return;
+    }
+    if (generation != _generation) return;
+    final copy = CachedSheet(text: text, fetchedAt: ref.read(clockProvider)());
+    if (!_takeData(file, copy)) return;
+    try {
+      await ref.read(dataFileCacheProvider).write(file, copy);
+    } catch (e, st) {
+      logger.w('Cannot keep ${file.fileName}', error: e, stackTrace: st);
+    }
+  }
+
+  /// Takes [copy] as the content of [file] if it reads: the VODs at once ([vodFileProvider]), the table of names for
+  /// the next parse of the highlights. Returns whether it was taken: a text that is no `vods.tsv` (without its header,
+  /// `VodFile.isFile`: an error answered with status 200) or a table that does not read (`RequesterAliases.tryParse`)
+  /// is not, and what was taken before stays, kept.
+  bool _takeData(DataFile file, CachedSheet copy) {
+    final previous = _data[file];
+    // whatever gave it, the fetcher (the one over HTTP stops reading beyond the bound) or the copy kept by an
+    // earlier version: a larger text is not parsed
+    if (previous?.text != copy.text && dataFileTooLarge(file, copy.text)) {
+      logger.w('${file.fileName} not taken: larger than ${file.maxBytes} bytes');
+      return false;
+    }
+    switch (file) {
+      case DataFile.vods:
+        if (previous?.text == copy.text) break;
+        if (!VodFile.isFile(copy.text)) {
+          logger.w('${file.fileName} is no file of VODs (no header): not taken');
+          return false;
+        }
+        ref.read(vodFileProvider.notifier).take(VodFile.parse(copy.text));
+      case DataFile.aliases:
+        final aliases = previous?.text == copy.text ? _aliases : RequesterAliases.tryParse(copy.text);
+        if (aliases == null) {
+          logger.w('${file.fileName} does not read as a table of names: not taken');
+          return false;
+        }
+        _aliases = aliases;
+    }
+    _data[file] = copy;
+    return true;
   }
 
   /// Work that [idle] waits for.
@@ -859,6 +989,7 @@ class CatalogueNotifier extends Notifier<CatalogueState> {
       text.text,
       isAbandoned: () => generation != _generation,
       background: state.catalogue != null,
+      aliases: _aliases,
     );
     // abs: a download time in the future (clock changed) must not keep the guard on for ever; never against a
     // snapshot: Google's answer always replaces it, as it would have been taken without it; nor after a clear
@@ -943,7 +1074,7 @@ class CatalogueNotifier extends Notifier<CatalogueState> {
     }
     final Catalogue catalogue;
     try {
-      catalogue = await _repo.parseHighlights(copy.text, isAbandoned: unwanted);
+      catalogue = await _repo.parseHighlights(copy.text, isAbandoned: unwanted, aliases: _aliases);
     } on LoadAbandoned {
       return;
     } catch (e) {
@@ -1049,6 +1180,8 @@ class CatalogueNotifier extends Notifier<CatalogueState> {
           _publish();
           try {
             await _repo.clearCache();
+            // the data files too: taken again from their download
+            await ref.read(dataFileCacheProvider).clear();
           } catch (e, st) {
             logger.w('Cannot clear the cache', error: e, stackTrace: st);
           } finally {
@@ -1063,6 +1196,7 @@ class CatalogueNotifier extends Notifier<CatalogueState> {
             ..fingerprint = null
             ..fromScratch = true;
           _shownSongsSnapshot = null;
+          _data.clear();
           if (identical(h.download, tracked)) h.download = null;
           await Future.wait([_downloadOnce(Sheet.highlights), if (_songsWanted) _downloadOnce(Sheet.songs)]);
         }()).whenComplete(() {

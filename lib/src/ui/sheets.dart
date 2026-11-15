@@ -18,6 +18,7 @@ import '../data/catalogue.dart';
 import '../data/model.dart';
 import '../state/catalogue_state.dart';
 import '../state/settings_state.dart';
+import '../state/vods_state.dart';
 import 'actions.dart';
 import 'format.dart';
 import 'instant_feedback.dart';
@@ -992,6 +993,20 @@ class _StreamSheetState extends ConsumerState<StreamSheet> {
   final _controller = ScrollController();
   final _headerKey = GlobalKey();
 
+  /// How many buttons of the stream's VOD the head shows: the number of its parts when the fiche first showed it,
+  /// for as long as the fiche is open (this state is that of one fiche: its host is keyed by `Fiche.identity`). A
+  /// file of the VODs coming while it is open adds or removes no button, which would move the setlist (they show
+  /// the next time), and neither does a refresh of the sheets, which gives the fiche another object for the same
+  /// stream; the buttons shown open the links of the file taken last ([_vodButtons]).
+  int? _vodButtonCount;
+
+  /// The buttons of the head: as many as [_vodButtonCount], each with the current link of its part (null when the
+  /// current file no longer has that part: the button stays, disabled).
+  List<Uri?> _vodButtons(List<Uri> current) {
+    final count = _vodButtonCount ??= current.length;
+    return [for (var i = 0; i < count; i++) i < current.length ? current[i] : null];
+  }
+
   @override
   void initState() {
     super.initState();
@@ -1026,6 +1041,7 @@ class _StreamSheetState extends ConsumerState<StreamSheet> {
     final metrics = ListMetrics.of(context);
     final videos = s.highlightIds.length;
     final shape = _paneRowShape(context);
+    final vod = _vodButtons(vodLinksFor(catalogue, ref.watch(vodFileProvider))?.streamLinks(s) ?? const []);
     return _SheetBody(
       controller: _controller,
       slivers: [
@@ -1047,6 +1063,18 @@ class _StreamSheetState extends ConsumerState<StreamSheet> {
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                 ),
+                if (vod.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: Wrap(
+                      spacing: _actionSpacing,
+                      runSpacing: _actionSpacing,
+                      children: [
+                        for (final (i, link) in vod.indexed)
+                          _VodButton(link: link, part: vod.length == 1 ? null : i + 1),
+                      ],
+                    ),
+                  ),
               ],
             ),
           ),
@@ -1075,4 +1103,56 @@ class _StreamSheetState extends ConsumerState<StreamSheet> {
       ],
     );
   }
+}
+
+/// A button of the head of the fiche of a stream: its VOD from the start ([watchTheVodText]), or part [part] of it
+/// when it has several videos, short ([vodPartText]: the buttons of the parts stand on one line, a second one only
+/// when they do not fit), its full name ([watchTheVodPartText]) for screen readers and as its tooltip; opened on
+/// YouTube. Disabled, in its place, without [link].
+class _VodButton extends StatelessWidget {
+  const _VodButton({required this.link, this.part});
+
+  final Uri? link;
+  final int? part;
+
+  @override
+  Widget build(BuildContext context) {
+    final part = this.part;
+    final name = part == null ? watchTheVodText : watchTheVodPartText(part);
+    final shown = part == null ? watchTheVodText : vodPartText(part);
+    final link = this.link;
+    if (link == null) return _named(name, shown, _button(context, shown, null), null);
+    return VodLink(
+      link: link,
+      label: name,
+      builder: (context, open) => _named(name, shown, _button(context, shown, open), open),
+    );
+  }
+
+  /// [button] under its full [name] when it shows another text ([shown]): one node for screen readers, and the
+  /// tooltip.
+  static Widget _named(String name, String shown, Widget button, VoidCallback? open) => name == shown
+      ? button
+      : Semantics(
+          container: true,
+          button: true,
+          enabled: open != null,
+          label: name,
+          onTap: open,
+          excludeSemantics: true,
+          child: Tooltip(message: name, excludeFromSemantics: true, child: button),
+        );
+
+  static Widget _button(BuildContext context, String label, VoidCallback? open) => FilledButton.tonalIcon(
+    onPressed: open,
+    style: platformButtonStyle(
+      context,
+      FilledButton.styleFrom(
+        minimumSize: const Size(0, 40),
+        textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+      ),
+    ),
+    icon: const Icon(vodIcon, size: 20),
+    label: Text(label),
+  );
 }

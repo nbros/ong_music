@@ -441,8 +441,9 @@ final class LiveStream {
     required this.date,
     required this.firstPlayId,
     required this.playCount,
-    required this.durationMinutes,
+    required this.durationSeconds,
     required this.highlightIds,
+    this.startMinute,
   });
 
   /// Index in `Catalogue.streams` (oldest first).
@@ -459,11 +460,20 @@ final class LiveStream {
   /// Number of plays, at least 1.
   final int playCount;
 
-  /// Length in minutes: the largest "Uptime" (`h:mm:ss`) of its rows, 0 if none.
-  final int durationMinutes;
+  /// Length in seconds: the largest "Uptime" (`h:mm:ss`) of its rows, the markers among them (`Concert Grand End`, a
+  /// running time...), 0 if none. What a VOD of it must hold (`tool/vods_check.dart`).
+  final int durationSeconds;
+
+  /// Length in whole minutes ([durationSeconds]).
+  int get durationMinutes => durationSeconds ~/ 60;
 
   /// Ids of the highlights linked to one of its plays, ascending.
   final List<int> highlightIds;
+
+  /// The instant of its "Stream Start" row, in minutes since 1970-01-01 00:00 UTC (as `Play.loggedMinute`): what
+  /// tells its date in Sydney, that of the title of its VOD (`streamKeys`). Null when the row has no time, when its
+  /// date was mistyped (replaced by that of its first play, see [date]), or when the stream has no such row.
+  final int? startMinute;
 
   /// Id of its last play.
   int get lastPlayId => firstPlayId + playCount - 1;

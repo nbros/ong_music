@@ -12,9 +12,9 @@ List<String> dumpCatalogue(Catalogue c) {
           '${h.streamDate}|${h.uploadDate}|${h.vocals}|${h.notes}|${c.playOf(h)?.id}|${h.key}',
     for (final p in c.plays)
       'P ${p.id}|${p.loggedMinute}|${p.rowDate}|${p.titleId}|${p.title}|${p.songKey}|${p.genre}|${p.type}|'
-          '${p.requesterId}|${p.flag}|${p.streamId}|${p.highlightId}',
+          '${p.requesterId}|${p.flag}|${p.streamId}|${p.highlightId}|${c.uptimeOf(p)}',
     for (final s in c.streams)
-      'S ${s.id}|${s.date}|${s.firstPlayId}|${s.playCount}|${s.durationMinutes}|${ids(s.highlightIds)}',
+      'S ${s.id}|${s.date}|${s.firstPlayId}|${s.playCount}|${s.durationMinutes}|${ids(s.highlightIds)}|${s.startMinute}',
     for (final r in c.requesters)
       'R ${r.id}|${r.name}|${r.folded}|${r.requestCount}|${c.highlightRequestCount(r)}|'
           '${c.requesterNamed(r.name)?.id}|${c.isRequester(r.id, r.folded)}',

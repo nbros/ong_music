@@ -93,10 +93,16 @@ Jazsta22, Jazsta
 Horsekel06, Horsekel
 ''';
 
-/// The groups of names of [table] (see [requesterAliasTable]), as written: one list per line that is not blank.
+/// The groups of names of [table] (see [requesterAliasTable]), as written: one list per line that is neither blank
+/// nor a comment (beginning with `#`), the empty names of a line left out. The format of `aliases.txt` too, the table
+/// of the branch `data` ([RequesterAliases.tryParse]).
 List<List<String>> requesterAliasGroups(String table) => [
   for (final line in table.split('\n'))
-    if (line.trim().isNotEmpty) [for (final name in line.split(',')) name.trim()],
+    if (line.trim().isNotEmpty && !line.trimLeft().startsWith('#'))
+      [
+        for (final name in line.split(','))
+          if (name.trim().isNotEmpty) name.trim(),
+      ],
 ];
 
 /// The groups of names of one person, by folded name: [keyOf] gives the key of a requester (`Requester.folded`),
@@ -122,6 +128,25 @@ final class RequesterAliases {
 
   /// The groups of [requesterAliasTable], those of the app.
   static final bundled = RequesterAliases(requesterAliasGroups(requesterAliasTable));
+
+  /// The groups of [text], a table in the format of [requesterAliasTable] (`aliases.txt`, downloaded): null when it
+  /// does not read as one, and the app keeps the table it has. It does not when it holds no group of two names, when
+  /// it is a web page, or when a name is in two groups (which would join them).
+  static RequesterAliases? tryParse(String text) {
+    if (text.trimLeft().startsWith('<')) return null;
+    final groups = requesterAliasGroups(text.startsWith('\uFEFF') ? text.substring(1) : text);
+    final seen = <String>{};
+    var any = false;
+    for (final group in groups) {
+      final folds = {for (final name in group) fold(name)};
+      if (folds.length < 2) continue;
+      any = true;
+      for (final f in folds) {
+        if (!seen.add(f)) return null;
+      }
+    }
+    return any ? RequesterAliases(groups) : null;
+  }
 
   /// No group: every name is a requester of its own.
   static final none = RequesterAliases(const []);

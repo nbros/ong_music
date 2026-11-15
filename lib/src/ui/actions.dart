@@ -74,6 +74,13 @@ Future<void> openVideo(BuildContext context, WidgetRef ref, Highlight highlight)
   return openLink(context, ref, highlight.url);
 }
 
+/// Opens [link], a moment of the full recording of a stream (a VOD), on YouTube as [openVideo] does: the video
+/// playing inside the app stops first. Never in the in-place player.
+Future<void> openVod(BuildContext context, WidgetRef ref, Uri link) {
+  ref.read(inPlaceVideosProvider).stop();
+  return openLink(context, ref, link.toString());
+}
+
 /// What "Share" and "Copy" give for [highlight]: `"<title> — https://youtu.be/<id>"`,
 /// or the title alone without video.
 String highlightShareText(Highlight highlight) {
@@ -121,6 +128,21 @@ const shareText = 'Share';
 
 /// Opening a video on YouTube: the button of the fiche of a highlight, an item of the menu of a play.
 const watchOnYouTubeText = 'Watch on YouTube';
+
+/// Opening a play at its moment in the full recording of its stream (`VodLinks.linkOf`): an item of the menu of a
+/// play, the tooltip of the button of its row (approved by the user).
+const watchInTheVodText = 'Watch in the VOD';
+
+/// Opening the full recording of a stream from its start: the button of its fiche (approved by the user).
+const watchTheVodText = 'Watch the VOD';
+
+/// The full name of the button of part [part] of the recording of a stream in several videos: what screen readers
+/// say and its tooltip shows ([vodPartText] is written on it).
+String watchTheVodPartText(int part) => 'Watch the VOD, part $part';
+
+/// What the button of part [part] of the recording of a stream in several videos shows: short, so that its buttons
+/// stand side by side on one line; the icon says a player opens (approved by the user).
+String vodPartText(int part) => 'VOD $part';
 
 /// The star of a highlight, as a button of its fiche and as an item of the menu of its row.
 const addToFavouritesText = 'Add to favourites';
