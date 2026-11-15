@@ -5,8 +5,8 @@
 #
 # make: against a local server answering each case (a good export, an error page with status 200, an export cut
 # short, a sheet that shrank, a 500...): only the good ones write a snapshot. publish: into a bare repository made
-# here: one orphan commit, nothing pushed when nothing changed, pushed again when a sheet changed or when the
-# snapshot is a month old.
+# here: a first commit without parent, nothing pushed when nothing changed, a commit over the published one when a
+# sheet changed or when the snapshot is a month old (the branch keeps its history, never forced).
 #
 # The server listens on 127.0.0.1:${SNAPSHOT_TEST_PORT:-8807}. Needs bash, curl, python3, git.
 set -euo pipefail
@@ -187,24 +187,51 @@ expect_output '  unchanged' 'unchanged'
 check '  the branch is where it was' 0 test "$(remote_branch)" = "$first"
 check 'a sheet changed: published' 0 make_case good-changed "$tmp/changed" "$tmp/good"
 check '  pushed' 0 publish "$tmp/changed"
-expect_output '  because a sheet changed' 'published (highlights.csv changed)'
+expect_output '  because both sheets changed' 'published (highlights.csv, songs.csv changed)'
 second=$(remote_branch)
-check '  still one commit: no history grows' 0 test "$(git -C "$tmp/remote.git" rev-list --count sheets-snapshot)" = 1
-check '  a new one' 0 test "$second" != "$first"
+check '  a second commit: the branch keeps its history' 0 test "$(git -C "$tmp/remote.git" rev-list --count sheets-snapshot)" = 2
+check '  over the first one' 0 test "$(git -C "$tmp/remote.git" rev-parse 'sheets-snapshot^')" = "$first"
+check '  whose sheets are still readable' 0 git -C "$tmp/remote.git" cat-file -e "$first:songs.csv"
+check '  the difference of the sheet that changed, not the whole sheet' 0 bash -c '
+  read -r added removed _ < <(git -C "$1/remote.git" diff --numstat "$2" "$3" -- highlights.csv)
+  (( added + removed > 0 && added + removed < 20 ))' _ "$tmp" "$first" "$second"
+check 'one sheet changed: published' 0 bash -c '
+  cp -R "$1/changed" "$1/latest" && echo "a,row,more" >> "$1/latest/songs.csv"' _ "$tmp"
+check '  pushed' 0 publish "$tmp/latest"
+expect_output '  naming it alone' 'published (songs.csv changed)'
+check '  a third commit' 0 test "$(git -C "$tmp/remote.git" rev-list --count sheets-snapshot)" = 3
+# another run publishes between the reading of the branch and the push (a `git` that pushes its commit first)
+mkdir "$tmp/bin"
+real_git=$(command -v git)
+cat > "$tmp/bin/git" <<WRAPPER
+#!/usr/bin/env bash
+if [[ "\${1:-}" == push && -n "\${RACE_COMMIT:-}" ]]; then
+  "$real_git" push --quiet origin "\$RACE_COMMIT:refs/heads/sheets-snapshot"
+fi
+exec "$real_git" "\$@"
+WRAPPER
+chmod +x "$tmp/bin/git"
+other_run=$(cd "$tmp/checkout" && git fetch --quiet origin sheets-snapshot && git -c user.name=t -c user.email=t@t \
+  commit-tree "$(git rev-parse 'FETCH_HEAD^{tree}')" -p FETCH_HEAD -m 'the snapshot of another run')
+check 'a snapshot pushed meanwhile by another run: this one fails' 1 bash -c '
+  cp -R "$1/latest" "$1/raced" && echo "a,row,again" >> "$1/raced/songs.csv"
+  cd "$1/checkout" && PATH="$1/bin:$PATH" RACE_COMMIT="$3" bash "$2" publish "$1/raced" 2>/dev/null' _ "$tmp" "$script" "$other_run"
+check '  and the other snapshot stays: nothing published is replaced' 0 test "$(remote_branch)" = "$other_run"
 # the published snapshot, 31 days old: the same sheets are pushed again (a push at least monthly)
 old_commit=$(cd "$tmp/checkout" && GIT_COMMITTER_DATE="$(($(date +%s) - 31 * 86400)) +0000" \
   GIT_AUTHOR_DATE="$(($(date +%s) - 31 * 86400)) +0000" git -c user.name=t -c user.email=t@t \
   commit-tree "$(git -C "$tmp/remote.git" rev-parse 'sheets-snapshot^{tree}')" -m old)
 (cd "$tmp/checkout" && git push --quiet --force origin "$old_commit:refs/heads/sheets-snapshot")
-check 'unchanged but 31 days old: published again' 0 publish "$tmp/changed"
+check 'unchanged but 31 days old: published again' 0 publish "$tmp/latest"
 expect_output '  saying why' 'published (unchanged, but the snapshot is 31 days old)'
 check '  a new commit' 0 test "$(remote_branch)" != "$old_commit"
+check '  over the old one' 0 test "$(git -C "$tmp/remote.git" rev-parse 'sheets-snapshot^')" = "$old_commit"
 check '  dated now' 0 test $(($(date +%s) - $(git -C "$tmp/remote.git" log -1 --format=%ct sheets-snapshot))) -lt 600
 check 'unchanged and 29 days old: nothing pushed' 0 bash -c '
   cd "$1/checkout"
   c=$(GIT_COMMITTER_DATE="$(($(date +%s) - 29 * 86400)) +0000" git -c user.name=t -c user.email=t@t commit-tree "$(git -C "$1/remote.git" rev-parse "sheets-snapshot^{tree}")" -m old)
   git push --quiet --force origin "$c:refs/heads/sheets-snapshot"
-  [[ "$(bash "$2" publish "$1/changed")" == unchanged ]] && [[ "$(git -C "$1/remote.git" rev-parse sheets-snapshot)" == "$c" ]]' _ "$tmp" "$script"
+  [[ "$(bash "$2" publish "$1/latest")" == unchanged ]] && [[ "$(git -C "$1/remote.git" rev-parse sheets-snapshot)" == "$c" ]]' _ "$tmp" "$script"
 check 'a missing file: refused' 1 publish "$tmp/does-not-exist"
 
 echo "$passed passed, $failed failed"

@@ -2,7 +2,8 @@
 # repository, read by the app from raw.githubusercontent.com on a first load, until Google's own answer replaces it
 # a second or so later (lib/src/data/sheet_snapshot.dart). The work is in tool/sheets_snapshot.sh.
 #
-# The branch holds ONE orphan commit, replaced (force-pushed) when a sheet changed: no history grows. A bad day
+# The branch keeps every snapshot, one commit over the other, pushed when a sheet changed and never forced: its
+# history is the journal of the sheets (what the moderators added, corrected or removed, day by day). A bad day
 # (Google answering an error page, an export cut short, a sheet that lost rows) fails this run, visibly, and the
 # snapshot published before stays. A stale snapshot is harmless: the app asks Google at the same time anyway, and only
 # its first paint of a first visit uses the copy.

@@ -13,10 +13,13 @@
 #       requires (lib/src/data/parser.dart), too few rows.
 #
 #   tool/sheets_snapshot.sh publish <out-dir> [<remote> [<branch>]]
-#       From the git repository of the current directory: makes ONE orphan commit of the three files and force-pushes
-#       it to <branch> (default sheets-snapshot) of <remote> (default origin), replacing the previous one (no history
-#       grows) — when the branch does not exist, when a sheet changed, or when its commit is older than
-#       SNAPSHOT_MAX_AGE_DAYS (default 30). Otherwise pushes nothing. Prints "published" or "unchanged".
+#       From the git repository of the current directory: makes a commit of the three files over the one published
+#       on <branch> (default sheets-snapshot) of <remote> (default origin) and pushes it, not forced — when the
+#       branch does not exist (a first commit, without parent), when a sheet changed, or when its commit is older
+#       than SNAPSHOT_MAX_AGE_DAYS (default 30). Otherwise pushes nothing. Prints "published" or "unchanged".
+#       The branch keeps every snapshot: its history is the journal of the sheets, one commit per day they changed
+#       (text that git stores as differences: some kilobytes a day once packed), and what was removed from a sheet
+#       stays readable in it.
 #
 # Environment (defaults in brackets; the tests of tool/sheets_snapshot_test.sh change them):
 #   SNAPSHOT_EXPORT_BASE   the export address, the sheet name appended [the spreadsheet of lib/src/data/sheets.dart]
@@ -149,13 +152,15 @@ publish() {
   if [[ -z "$previous" ]]; then
     reason='first snapshot'
   else
-    local f
+    local f changed=''
     for f in highlights.csv songs.csv; do
       if [[ "$(git rev-parse "${previous}:${f}" 2>/dev/null || true)" != "$(git hash-object "$out/$f")" ]]; then
-        reason="$f changed"
-        break
+        changed="${changed:+$changed, }$f"
       fi
     done
+    if [[ -n "$changed" ]]; then
+      reason="$changed changed"
+    fi
     if [[ -z "$reason" ]]; then
       local age_days=$(( ($(date +%s) - $(git log -1 --format=%ct "$previous")) / 86400 ))
       if (( age_days >= max_age_days )); then
@@ -167,7 +172,7 @@ publish() {
     echo "unchanged"
     return
   fi
-  # one commit without parent, made without touching the working tree
+  # one commit over the published one (the first has no parent), made without touching the working tree
   local tree commit
   tree=$(
     for f in "${files[@]}"; do
@@ -177,10 +182,11 @@ publish() {
   commit=$(
     GIT_AUTHOR_NAME='github-actions[bot]' GIT_AUTHOR_EMAIL='41898282+github-actions[bot]@users.noreply.github.com' \
       GIT_COMMITTER_NAME='github-actions[bot]' GIT_COMMITTER_EMAIL='41898282+github-actions[bot]@users.noreply.github.com' \
-      git commit-tree "$tree" -m "Snapshot of the sheets: $reason"
+      git commit-tree "$tree" ${previous:+-p "$previous"} -m "Snapshot of the sheets: $reason"
   )
-  # replaces exactly the commit read above: a snapshot pushed meanwhile by another run is not lost silently
-  git push --quiet --force-with-lease="refs/heads/${branch}:${previous}" "$remote" "${commit}:refs/heads/${branch}"
+  # not forced: over a snapshot pushed meanwhile by another run, which is not the parent of this commit, the push
+  # is refused and this run fails; nothing published is ever replaced
+  git push --quiet "$remote" "${commit}:refs/heads/${branch}"
   echo "published ($reason)"
 }
 
