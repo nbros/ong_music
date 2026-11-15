@@ -62,6 +62,11 @@ List<Text> rowTexts(WidgetTester tester, double fontSize) => tester
     )
     .toList();
 
+/// The units under the counts of the rows, from the first row to the last (13 px, at the end, of normal weight; the
+/// ranks are of the same size, heavier).
+List<Text> unitTexts(WidgetTester tester) =>
+    rowTexts(tester, 13).where((t) => t.textAlign == TextAlign.end && t.style?.fontWeight == null).toList();
+
 /// The provider container of the app.
 ProviderContainer container(WidgetTester tester) => ProviderScope.containerOf(tester.element(find.byType(OngMusicApp)));
 
@@ -266,14 +271,14 @@ void main() {
   });
 
   group('the rankings', () {
-    testWidgets('songs: by plays, equal counts sharing a rank, in the order of their tracks', (tester) async {
+    testWidgets('songs: by plays, each its own rank, equal counts the first played first', (tester) async {
       final handle = tester.ensureSemantics();
       await pumpApp(tester);
       await openStats(tester);
       expect(rowSentences(tester), [
         'Rank 1, I Will Survive, Gloria Gaynor, 2 plays',
         'Rank 2, Lost Woods, Zelda, 1 play',
-        'Rank 2, Song of Storms, Zelda, 1 play',
+        'Rank 3, Song of Storms, Zelda, 1 play',
       ]);
       handle.dispose();
     });
@@ -283,14 +288,16 @@ void main() {
       await pumpApp(tester);
       await openStats(tester);
       await showRanking(tester, 'Artists');
-      expect(rowSentences(tester), ['Rank 1, Gloria Gaynor, 2 plays, 1 song', 'Rank 1, Zelda, 2 plays, 2 songs']);
+      expect(rowSentences(tester), ['Rank 1, Gloria Gaynor, 2 plays, 1 song', 'Rank 2, Zelda, 2 plays, 2 songs']);
       await showRanking(tester, 'Genres');
-      expect(rowSentences(tester), ['Rank 1, Game OST, 2 plays, 50.0%', 'Rank 1, Popular, 2 plays, 50.0%']);
+      // Popular was played first (the first row of the sheet), Game OST after it
+      expect(rowSentences(tester), ['Rank 1, Popular, 2 plays, 50.0%', 'Rank 2, Game OST, 2 plays, 50.0%']);
       await showRanking(tester, 'Requesters');
+      // MannyHub asked first
       expect(rowSentences(tester), [
         'Rank 1, jsbach64, 2 requests, 2 songs',
         'Rank 2, MannyHub, 1 request, 1 song',
-        'Rank 2, shadowvanta, 1 request, 1 song',
+        'Rank 3, shadowvanta, 1 request, 1 song',
       ]);
       handle.dispose();
     });
@@ -306,11 +313,15 @@ void main() {
         ),
       );
       await openStats(tester);
-      // the counts (15 px) end at one place, in tabular figures; so do the ranks (13 px)
+      // the counts (15 px) end at one place, in tabular figures, their units (13 px) under them; the ranks (13 px,
+      // as heavy as the counts) end at one place too
       final counts = rowTexts(tester, 15).where((t) => t.textAlign == TextAlign.end).toList();
       expect([for (final t in counts) t.data], ['13', '2', '1']);
       expect({for (final t in counts) tester.getRect(find.byWidget(t)).right}, hasLength(1));
-      final ranks = rowTexts(tester, 13).where((t) => t.textAlign == TextAlign.end).toList();
+      final ranks = rowTexts(
+        tester,
+        13,
+      ).where((t) => t.textAlign == TextAlign.end && t.style?.fontWeight == FontWeight.w500).toList();
       expect([for (final t in ranks) t.data], ['1', '2', '3']);
       expect({for (final t in ranks) tester.getRect(find.byWidget(t)).right}, hasLength(1));
       expect(tester.getRect(find.text('Lost Woods')).left, tester.getRect(find.text('Song of Storms')).left);
@@ -351,11 +362,12 @@ void main() {
       await pumpApp(tester, prefs: {'twitchName': 'shadowvanta'});
       await openStats(tester);
       await showRanking(tester, 'Requesters');
-      expect(rowSentences(tester)[2], 'Rank 2, shadowvanta, you, 1 request, 1 song');
+      expect(rowSentences(tester)[2], 'Rank 3, shadowvanta, you, 1 request, 1 song');
       await tester.tap(chip('You'));
       await tester.pumpAndSettle();
       // their own row alone, at its rank among all; the count line still says how many there are
-      expect(rowSentences(tester), ['Rank 2, shadowvanta, you, 1 request, 1 song']);
+      expect(rowSentences(tester), ['Rank 3, shadowvanta, you, 1 request, 1 song']);
+      expect(find.text('3'), findsOneWidget);
       expect(find.text('3 requesters'), findsOneWidget);
       final bar = tester.widget<FractionallySizedBox>(find.byType(FractionallySizedBox));
       expect(bar.widthFactor, 0.5);
@@ -366,6 +378,138 @@ void main() {
       // the totals stay those of the catalogue
       expect(find.text('2 streams · 4 plays · 3 songs · 3 highlights'), findsOneWidget);
       handle.dispose();
+    });
+
+    testWidgets('every count over its unit, in the singular for 1: plays, and requests for the requesters', (
+      tester,
+    ) async {
+      await pumpApp(tester);
+      await openStats(tester);
+
+      /// The units of the rows, and checks that each one stands right under its count, ending where it ends.
+      List<String?> units() {
+        final counts = rowTexts(tester, 15).where((t) => t.textAlign == TextAlign.end).toList();
+        final units = unitTexts(tester);
+        expect(units, hasLength(counts.length));
+        for (var i = 0; i < units.length; i++) {
+          final count = tester.getRect(find.byWidget(counts[i]));
+          final unit = tester.getRect(find.byWidget(units[i]));
+          expect(unit.right, count.right);
+          expect(unit.top, count.bottom);
+        }
+        return [for (final t in units) t.data];
+      }
+
+      expect(units(), ['plays', 'play', 'play']);
+      await showRanking(tester, 'Artists');
+      expect(units(), ['plays', 'plays']);
+      await showRanking(tester, 'Genres');
+      expect(units(), ['plays', 'plays']);
+      await showRanking(tester, 'Requesters');
+      expect(units(), ['requests', 'request', 'request']);
+      // the second line on the left stays what it was
+      expect(find.text('2 songs'), findsOneWidget);
+      await tester.tap(find.text('jsbach64'));
+      await tester.pumpAndSettle();
+      expect(units(), ['request', 'request']);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      await showRanking(tester, 'Artists');
+      await tester.tap(find.text('Zelda'));
+      await tester.pumpAndSettle();
+      expect(units(), ['play', 'play']);
+    });
+
+    testWidgets(
+      'the column of the counts as wide as its widest number or unit, in every row: nothing moves from row to '
+      'row',
+      (tester) async {
+        await pumpApp(
+          tester,
+          prefs: {'twitchName': 'shadowvanta'},
+          state: loadedState(
+            testCatalogue(
+              moreSongs: [for (var i = 0; i < 12; i++) sRow(date: '2024-03-02 23:00:00', title: 'Zelda - Lost Woods')],
+            ),
+            testNow,
+          ),
+        );
+        await openStats(tester);
+
+        /// The width of the column of the counts, the same for the count and the unit of every row; and the titles and
+        /// the bars, which end and begin at one place.
+        double column() {
+          final texts = [...rowTexts(tester, 15).where((t) => t.textAlign == TextAlign.end), ...unitTexts(tester)];
+          final widths = {for (final t in texts) tester.getSize(find.byWidget(t)).width};
+          expect(widths, hasLength(1));
+          final titles = rowTexts(tester, 15).where((t) => t.textAlign != TextAlign.end);
+          expect({for (final t in titles) tester.getRect(find.byWidget(t)).right}, hasLength(1));
+          final bars = find.byType(FractionallySizedBox);
+          expect({for (final e in bars.evaluate()) tester.getRect(find.byWidget(e.widget)).left}, hasLength(1));
+          expect({for (final e in bars.evaluate()) tester.getRect(find.byWidget(e.widget)).right}, hasLength(1));
+          return widths.single;
+        }
+
+        // the letters of the font of the tests are squares, as wide as the size of the font: "plays" (5 × 13) is wider
+        // than "13" (2 × 15)
+        expect(column(), 5 * 13);
+        await showRanking(tester, 'Requesters');
+        expect(column(), 8 * 13, reason: 'requests');
+        // the user's own row alone, of 1 request: "request"
+        await tester.tap(chip('You'));
+        await tester.pumpAndSettle();
+        expect(column(), 7 * 13);
+        // the songs of an artist
+        await tester.tap(chip('You'));
+        await tester.pumpAndSettle();
+        await showRanking(tester, 'Artists');
+        await tester.tap(find.text('Zelda'));
+        await tester.pumpAndSettle();
+        expect(column(), 5 * 13);
+      },
+    );
+
+    testWidgets('a 360 px wide phone with large text: counts in thousands and their units fit in every ranking', (
+      tester,
+    ) async {
+      await pumpApp(
+        tester,
+        size: const Size(360, 740),
+        textScale: 2,
+        prefs: {'twitchName': 'jsbach64'},
+        state: loadedState(
+          testCatalogue(
+            moreSongs: [
+              for (var i = 0; i < 1200; i++)
+                sRow(date: '2024-03-02 23:00:00', title: 'Zelda - Lost Woods', requester: 'jsbach64'),
+            ],
+          ),
+          testNow,
+        ),
+      );
+      await openStats(tester);
+      expect(tester.takeException(), isNull);
+      expect(find.text('1,201'), findsOneWidget);
+      for (final label in ['Artists', 'Genres', 'Requesters']) {
+        await showRanking(tester, label);
+        expect(tester.takeException(), isNull, reason: label);
+      }
+      expect(find.text('1,202'), findsOneWidget);
+      expect(find.text('requests'), findsOneWidget);
+      // the unit inside the screen, whole
+      final unit = tester.getRect(find.text('requests'));
+      expect(unit.right, lessThanOrEqualTo(360 - 16));
+      // their own row, the first
+      await tester.tap(rows().first);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.text('requests'), findsOneWidget);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      await tester.tap(chip('You'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(rowSentences(tester), ['Rank 1, jsbach64, you, 1,202 requests, 2 songs']);
     });
 
     testWidgets('a long ranking is built lazily, in rows of one extent', (tester) async {
@@ -385,8 +529,8 @@ void main() {
       expect(position.maxScrollExtent, greaterThan(500 * 64 - 892));
       position.jumpTo(position.maxScrollExtent);
       await tester.pumpAndSettle();
-      expect(find.text('Track 99'), findsOneWidget, reason: 'the last of the tracks, by name');
-      expect(rowSentences(tester).last, 'Rank 2, Track 99, Artist 99, 1 play');
+      expect(find.text('Track 499'), findsOneWidget, reason: 'the last played of the tracks');
+      expect(rowSentences(tester).last, 'Rank 503, Track 499, Artist 499, 1 play');
     });
   });
 
@@ -421,7 +565,7 @@ void main() {
       expect(find.widgetWithText(AppBar, 'Zelda'), findsOneWidget);
       expect(find.byType(BackButton), findsOneWidget);
       expect(find.text('2 songs · 2 plays'), findsOneWidget);
-      expect(rowSentences(tester), ['Rank 1, Lost Woods, Zelda, 1 play', 'Rank 1, Song of Storms, Zelda, 1 play']);
+      expect(rowSentences(tester), ['Rank 1, Lost Woods, Zelda, 1 play', 'Rank 2, Song of Storms, Zelda, 1 play']);
       expect(tester.widget<Semantics>(rows().first).properties.hint, 'Shows the details');
       // nothing left the statistics
       expect(container(tester).read(selectedTabProvider), AppTab.about);
@@ -463,7 +607,7 @@ void main() {
       expect(find.text('2 songs · 2 requests'), findsOneWidget);
       expect(rowSentences(tester), [
         'Rank 1, Lost Woods, Zelda, 1 request',
-        'Rank 1, Song of Storms, Zelda, 1 request',
+        'Rank 2, Song of Storms, Zelda, 1 request',
       ]);
       expect(container(tester).read(selectedTabProvider), AppTab.about);
       expect(container(tester).read(playFilterProvider).query, isEmpty);
@@ -693,7 +837,7 @@ void main() {
       expect(tester.takeException(), isNull);
       expect(chip('You'), findsNothing);
       expect(container(tester).read(statsViewProvider).mine, isFalse);
-      expect(rowSentences(tester), ['Rank 1, MannyHub, 1 request, 1 song', 'Rank 1, shadowvanta, 1 request, 1 song']);
+      expect(rowSentences(tester), ['Rank 1, MannyHub, 1 request, 1 song', 'Rank 2, shadowvanta, 1 request, 1 song']);
     });
 
     testWidgets('a change of ranking is said: the line of what it holds is a live region', (tester) async {

@@ -106,6 +106,7 @@ void main(List<String> args) {
   for (final (label, int Function(CatalogueRankings r) first) in [
     ('songs', (CatalogueRankings r) => r.songs.length),
     ('artists', (CatalogueRankings r) => r.artists.length),
+    ('requesters', (CatalogueRankings r) => r.requesters.length),
   ]) {
     final sw = Stopwatch()..start();
     for (final other in catalogues) {

@@ -194,7 +194,7 @@ class _StatsPageState extends ConsumerState<StatsPage> with _RankingListModel<St
                     shown: shown,
                     // the column of the ranks as wide in every ranking: the titles do not move from one to the next
                     // (the songs have the largest ranks, of every play)
-                    widestRank: math.max(_lastRank(all.songs), _lastRank(shown.ranking)),
+                    widestRank: math.max(all.songs.lastRank, shown.ranking.lastRank),
                   ),
                 ],
               ),
@@ -393,16 +393,13 @@ class _EntrySongsPageState extends ConsumerState<EntrySongsPage> with _RankingLi
             controller: _scroll,
             keyboard: _keyboard,
             songs: true,
-            slivers: [_RankingList(shown: shown, widestRank: _lastRank(songs))],
+            slivers: [_RankingList(shown: shown, widestRank: songs.lastRank)],
           ),
         ),
       ],
     );
   }
 }
-
-/// The rank of the last entry of [ranking], 1 when it has none.
-int _lastRank(Ranking<Object> ranking) => ranking.isEmpty ? 1 : ranking.ranks.last;
 
 /// The choice of the ranking: four segments across the column, which scroll sideways when their labels need more
 /// room than it has (a narrow phone with large text).
@@ -535,8 +532,14 @@ sealed class _Shown {
   /// The line under the title, or null.
   String? subtitle(int item);
 
-  /// The unit of the count, said to screen readers: `12 plays`.
-  String spokenCount(int item) => plural(ranking.counts[item], 'play');
+  /// The unit of the counts, in the singular: `play`, `request`.
+  String get unit => 'play';
+
+  /// The unit of the count of [item], shown under it: `plays`, `play` for 1.
+  String unitOf(int item) => pluralWord(ranking.counts[item], unit);
+
+  /// The count with its unit, said to screen readers: `12 plays`.
+  String spokenCount(int item) => plural(ranking.counts[item], unit);
 
   /// The colour of the bar of [item].
   Color barColor(BuildContext context, int item) => Theme.of(context).colorScheme.primary;
@@ -562,7 +565,7 @@ sealed class _Shown {
   String sentence(int item) {
     final subtitle = this.subtitle(item);
     return [
-      'Rank ${formatCount(ranking.ranks[item])}',
+      'Rank ${formatCount(ranking.rankOf(item))}',
       title(item),
       if (subtitleNames) ?subtitle,
       spokenCount(item),
@@ -576,6 +579,8 @@ final class _Songs extends _Shown {
   _Songs(super.rankings, super.extent, super.me, {Ranking<Song>? songs, this.unit = 'play'}) : _songs = songs;
 
   final Ranking<Song>? _songs;
+
+  @override
   final String unit;
 
   @override
@@ -583,9 +588,6 @@ final class _Songs extends _Shown {
 
   @override
   late final Ranking<Song> ranking = _songs ?? rankings.songs;
-
-  @override
-  String spokenCount(int item) => plural(ranking.counts[item], unit);
 
   @override
   Object _keyOf(int item) => ranking.entries[item].key;
@@ -681,14 +683,14 @@ final class _Requesters extends _Shown {
 
   @override
   String sentence(int item) => [
-    'Rank ${formatCount(ranking.ranks[item])}',
+    'Rank ${formatCount(ranking.rankOf(item))}',
     if (_own(item)) '${title(item)}, you' else title(item),
     spokenCount(item),
     subtitle(item),
   ].join(', ');
 
   @override
-  String spokenCount(int item) => plural(ranking.counts[item], 'request');
+  String get unit => 'request';
 
   @override
   Color barColor(BuildContext context, int item) =>
@@ -716,13 +718,18 @@ class _RankingList extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final shown = this.shown;
     final ranking = shown.ranking;
-    // the widths of the rank and count columns, from their largest numbers in tabular figures: once per list built,
-    // never per row
+    // the widths of the rank and count columns, from their largest numbers in tabular figures and the units under
+    // the counts (the plural over a count above 1, the singular under one of 1, both in a ranking of both): once per
+    // list built, never per row
     final rankWidth = _textWidth(context, formatCount(widestRank), _RankRow.rankStyle);
-    final countWidth = _textWidth(
-      context,
-      formatCount(ranking.isEmpty ? 1 : ranking.counts.first),
-      _RankRow.countStyle,
+    final first = ranking.isEmpty ? 1 : ranking.counts.first;
+    final last = ranking.isEmpty ? 1 : ranking.counts.last;
+    final countWidth = math.max(
+      _textWidth(context, formatCount(first), _RankRow.countStyle),
+      math.max(
+        _textWidth(context, pluralWord(first, shown.unit), _RankRow.unitStyle),
+        last == first ? 0.0 : _textWidth(context, pluralWord(last, shown.unit), _RankRow.unitStyle),
+      ),
     );
     return SliverFixedExtentList(
       itemExtent: shown.extent,
@@ -736,11 +743,12 @@ class _RankingList extends ConsumerWidget {
         },
         (context, item) => _RankRow(
           key: ValueKey<Object>(shown.keyOf(item)),
-          rank: formatCount(ranking.ranks[item]),
+          rank: formatCount(ranking.rankOf(item)),
           title: shown.title(item),
           titleSpan: shown.titleSpan(context, item),
           subtitle: shown.subtitle(item),
           count: formatCount(ranking.counts[item]),
+          unit: shown.unitOf(item),
           // never less than a sliver: a row with a count of 1 far down a long ranking still has a bar
           share: ranking.top == 0 ? 0 : math.max(0.01, ranking.counts[item] / ranking.top),
           barColor: shown.barColor(context, item),
@@ -768,8 +776,8 @@ class _RankingList extends ConsumerWidget {
   }
 }
 
-/// A row of a ranking: its rank, its title over a subtitle, its count on the right, and under them a bar as long,
-/// against the first row's, as its count. Read by screen readers as one sentence ([label]).
+/// A row of a ranking: its rank, its title over a subtitle, its count over its unit on the right, and under them a bar
+/// as long, against the first row's, as its count. Read by screen readers as one sentence ([label]).
 class _RankRow extends StatelessWidget {
   const _RankRow({
     super.key,
@@ -778,6 +786,7 @@ class _RankRow extends StatelessWidget {
     required this.titleSpan,
     required this.subtitle,
     required this.count,
+    required this.unit,
     required this.share,
     required this.barColor,
     required this.rankWidth,
@@ -795,11 +804,14 @@ class _RankRow extends StatelessWidget {
   final String? subtitle;
   final String count;
 
+  /// The unit of [count], under it: `plays`, `request`.
+  final String unit;
+
   /// The length of the bar, from 0 to 1.
   final double share;
   final Color barColor;
 
-  /// The widths of the columns of the ranks and of the counts, the same in every row of the list.
+  /// The widths of the columns of the ranks and of the counts (with their units), the same in every row of the list.
   final double rankWidth;
   final double countWidth;
 
@@ -823,11 +835,15 @@ class _RankRow extends StatelessWidget {
     fontFeatures: [FontFeature.tabularFigures()],
   );
 
+  /// The style of the subtitle and of the unit under the count (in the colour of the subtitle).
+  static const unitStyle = TextStyle(fontSize: 13, height: 18 / 13);
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final ong = OngColors.of(context);
     final titleStyle = TextStyle(fontSize: 15, height: 20 / 15, fontWeight: FontWeight.w500, color: scheme.onSurface);
+    final secondary = unitStyle.copyWith(color: scheme.onSurfaceVariant);
     final subtitle = this.subtitle;
     final titleSpan = this.titleSpan;
     final indent = rankWidth + 12;
@@ -868,16 +884,24 @@ class _RankRow extends StatelessWidget {
               ),
             ],
           ),
-          if (subtitle != null)
-            Padding(
-              padding: EdgeInsets.only(left: indent),
-              child: Text(
-                subtitle,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 13, height: 18 / 13, color: scheme.onSurfaceVariant),
-              ),
+          // the subtitle, and the unit under the count: one line in every row, with a subtitle or not
+          Padding(
+            padding: EdgeInsets.only(left: indent),
+            child: Row(
+              children: [
+                Expanded(
+                  child: subtitle == null
+                      ? const SizedBox.shrink()
+                      : Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: secondary),
+                ),
+                const SizedBox(width: 12),
+                SizedBox(
+                  width: countWidth,
+                  child: Text(unit, textAlign: TextAlign.end, maxLines: 1, style: secondary),
+                ),
+              ],
             ),
+          ),
           Padding(
             padding: EdgeInsets.only(left: indent, top: 6),
             child: _Bar(share: share, color: barColor, track: scheme.onSurface.withValues(alpha: 0.06)),

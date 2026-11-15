@@ -28,8 +28,10 @@ String formatShare(int count, int total) {
 
 /// `1 song`, `12 songs`: [n] formatted, then [singular] or [plural]
 /// (default: [singular] + `s`).
-String plural(int n, String singular, [String? plural]) =>
-    '${formatCount(n)} ${n == 1 ? singular : plural ?? '${singular}s'}';
+String plural(int n, String singular, [String? plural]) => '${formatCount(n)} ${pluralWord(n, singular, plural)}';
+
+/// The word [plural] would put after [n]: `song` for 1, `songs` otherwise.
+String pluralWord(int n, String singular, [String? plural]) => n == 1 ? singular : plural ?? '${singular}s';
 
 /// `17 Oct` in [currentYear], `26 Mar 2025` otherwise; empty for null.
 String formatShortDate(CalendarDate? date, {required int currentYear}) {

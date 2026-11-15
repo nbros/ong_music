@@ -32,17 +32,22 @@ final class Artist {
   String toString() => 'Artist($name, $songCount songs)';
 }
 
-/// The entries of one ranking, the most represented first; equal counts in the alphabetical order of their folded
-/// names. Entries with nothing to count are left out.
+/// The entries of one ranking, the most represented first; of equal counts, the senior first: the one whose first
+/// play counted is the oldest. Entries with nothing to count are left out. Every entry has a rank of its own.
+///
+/// The plays are in the order of the sheet (`Catalogue.plays`), which is the order they were played in: the date and
+/// time written on the rows are not: some carry a wrong day or year (some dozens in the real sheet). No two entries
+/// share their first play (a play is of one song, of one artist at most, of one genre and of one requester at most),
+/// so the order needs nothing else.
 final class Ranking<T> {
-  Ranking._(this.entries, this.counts, this.ranks, {required this.top, required this.total});
+  Ranking._(this.entries, this.counts, {required this.firstRank, required this.top, required this.total});
 
-  /// [entries] ranked by [counts] (one per entry, those of 0 left out), equal counts in the order of [alphabetical]
-  /// (the indices of the entries in the alphabetical order of their names, see [alphabeticalOrder]).
+  /// [entries] ranked by [counts] (one per entry, those of 0 left out), equal counts in the order of [bySeniority]:
+  /// the indices of the entries counted, each once, in the order of their first play counted.
   ///
-  /// A counting sort, O(entries + largest count): the entries go into one bucket per count in alphabetical order,
-  /// no comparison of names (a sort of the 10,000 songs by name takes milliseconds, made once per catalogue).
-  factory Ranking._sorted(List<T> entries, List<int> counts, Int32List alphabetical, {int? total}) {
+  /// A counting sort, O(entries + largest count): the entries go into one bucket per count in the order of
+  /// [bySeniority], no comparison.
+  factory Ranking._sorted(List<T> entries, List<int> counts, Int32List bySeniority, {int? total}) {
     var largest = 0, kept = 0, sum = 0;
     for (final count in counts) {
       if (count <= 0) continue;
@@ -50,6 +55,7 @@ final class Ranking<T> {
       sum += count;
       if (count > largest) largest = count;
     }
+    assert(bySeniority.length == kept, 'every entry counted once in the order of seniority');
     // where each count begins, the largest first
     final starts = Int32List(largest + 2);
     for (final count in counts) {
@@ -62,21 +68,17 @@ final class Ranking<T> {
       at += n;
     }
     final order = Int32List(kept);
-    for (final i in alphabetical) {
-      final count = counts[i];
-      if (count > 0) order[starts[count]++] = i;
+    for (final i in bySeniority) {
+      order[starts[counts[i]]++] = i;
     }
     final sortedCounts = Int32List(kept);
-    final ranks = Int32List(kept);
     for (var i = 0; i < kept; i++) {
-      final count = counts[order[i]];
-      sortedCounts[i] = count;
-      ranks[i] = i > 0 && count == sortedCounts[i - 1] ? ranks[i - 1] : i + 1;
+      sortedCounts[i] = counts[order[i]];
     }
     return Ranking._(
       List.unmodifiable([for (final i in order) entries[i]]),
       sortedCounts,
-      ranks,
+      firstRank: 1,
       top: largest,
       total: total ?? sum,
     );
@@ -88,8 +90,14 @@ final class Ranking<T> {
   /// The count of each entry: plays, or requests for the requesters.
   final Int32List counts;
 
-  /// The rank of each entry, from 1: equal counts share one (1, 2, 2, 4).
-  final Int32List ranks;
+  /// The rank of the first entry: 1, or that of the user's own entry among all when the ranking keeps it alone.
+  final int firstRank;
+
+  /// The rank of the entry at [index], from 1: one per entry, none shared (1, 2, 3, 4 whatever the counts).
+  int rankOf(int index) => firstRank + index;
+
+  /// The rank of the last entry, [firstRank] when there is none.
+  int get lastRank => isEmpty ? firstRank : firstRank + length - 1;
 
   /// The count the bars are drawn against: that of the first entry, or of the first one of the whole ranking when
   /// this one keeps only the user's own entry.
@@ -102,31 +110,21 @@ final class Ranking<T> {
   bool get isEmpty => entries.isEmpty;
 }
 
-/// The indices of [names] in their alphabetical order (of code units: they are folded); equal names in the order of
-/// [then] when given (one per name), then in their order in [names].
-///
-/// Made once per catalogue, for the 10,000 songs among them: most comparisons are decided by the first three code
-/// units of the names, packed in one integer (51 bits: exact in JavaScript too), without comparing the strings (under
-/// WebAssembly, the order of the songs takes 11 ms instead of 17).
-Int32List alphabeticalOrder(List<String> names, {List<String>? then}) {
-  final prefixes = List<int>.generate(names.length, (i) {
-    final name = names[i];
-    var prefix = 0;
-    for (var j = 0; j < 3; j++) {
-      // 0 past the end: a name comes before the longer ones it begins
-      prefix = prefix * 65537 + (j < name.length ? name.codeUnitAt(j) + 1 : 0);
+/// The entries that the indices of [order] are of ([entryOf], -1 for none), each once, in the order of the first of
+/// their indices in [order]: the songs (or the artists) of the titles in the order of their first play, in the order
+/// of their own first play.
+Int32List _entriesInOrder(Int32List order, Int32List entryOf, int entries) {
+  final seen = Uint8List(entries);
+  final out = Int32List(entries);
+  var n = 0;
+  for (final t in order) {
+    final e = entryOf[t];
+    if (e >= 0 && seen[e] == 0) {
+      seen[e] = 1;
+      out[n++] = e;
     }
-    return prefix;
-  }, growable: false);
-  final order = List.generate(names.length, (i) => i)
-    ..sort((a, b) {
-      final pa = prefixes[a], pb = prefixes[b];
-      if (pa != pb) return pa < pb ? -1 : 1;
-      var byName = names[a].compareTo(names[b]);
-      if (byName == 0 && then != null) byName = then[a].compareTo(then[b]);
-      return byName != 0 ? byName : a - b;
-    });
-  return Int32List.fromList(order);
+  }
+  return Int32List.sublistView(out, 0, n);
 }
 
 /// What the rankings of a catalogue share, whatever the "You" state: made once per catalogue, each part when first
@@ -144,13 +142,6 @@ final class _Tables {
   /// The songs of the catalogue.
   late final List<Song> songs = List.unmodifiable(catalogue.songs);
 
-  /// The indices of [songs] in alphabetical order: by the track shown, then by the key, which tells apart two songs
-  /// whose tracks fold the same.
-  late final Int32List songOrder = alphabeticalOrder(
-    [for (final s in songs) fold(s.track)],
-    then: [for (final s in songs) s.key],
-  );
-
   /// The index in [songs] of the song of each title (by `Play.titleId`), -1 for a title without letter or digit.
   late final Int32List titleSong = () {
     final index = {for (var i = 0; i < songs.length; i++) songs[i].key: i};
@@ -163,8 +154,8 @@ final class _Tables {
   }();
 
   /// The artists: the index of the artist of each title (-1 for a title without one), the merge key of each
-  /// artist (see [Artist.folded]), its most played spelling, and their alphabetical order.
-  late final ({Int32List ofTitle, List<String> folds, List<String> names, Int32List order}) artists = () {
+  /// artist (see [Artist.folded]) and its most played spelling.
+  late final ({Int32List ofTitle, List<String> folds, List<String> names}) artists = () {
     final titles = catalogue.titles;
     final playsOfTitle = Int32List(titles.length);
     for (final p in catalogue.plays) {
@@ -199,7 +190,6 @@ final class _Tables {
           // the most played spelling; of equal ones, the first seen
           counts.entries.reduce((best, e) => e.value > best.value ? e : best).key,
       ],
-      order: alphabeticalOrder(folds),
     );
   }();
 
@@ -218,7 +208,18 @@ final class _Tables {
     return counts;
   }();
 
-  static final Int32List genreOrder = alphabeticalOrder([for (final g in Genre.values) fold(g.label)]);
+  /// The requesters of the plays, by their requests (made once per catalogue: the "You" state does not change it).
+  late final Ranking<Requester> requesters = () {
+    final requesters = catalogue.requesters;
+    final counts = Int32List(requesters.length);
+    final bySeniority = Int32List(requesters.length);
+    var seen = 0;
+    for (final p in catalogue.plays) {
+      final r = p.requesterId;
+      if (r != null && counts[r]++ == 0) bySeniority[seen++] = r;
+    }
+    return Ranking._sorted(requesters, counts, Int32List.sublistView(bySeniority, 0, seen));
+  }();
 }
 
 /// An entry of the Artists, Genres or Requesters ranking, by what stays of it from one catalogue to the next (a
@@ -266,14 +267,15 @@ final class RequesterEntry extends RankedEntry {
   int get hashCode => Object.hash(RequesterEntry, folded);
 }
 
-/// Makes ahead what the rankings of [catalogue] share (the tables, with the alphabetical orders of its songs and of
-/// its artists: most of the cost of the first ranking shown, some tens of milliseconds), so that the statistics page
-/// opens without it. Nothing without the Songs sheet, nor a second time for one catalogue.
+/// Makes ahead what the rankings of [catalogue] share (the tables of its songs, of its artists and the ranking of its
+/// requesters: most of the cost of the first ranking shown, some milliseconds), so that the statistics page opens
+/// without it. Nothing without the Songs sheet, nor a second time for one catalogue.
 void makeRankingTables(Catalogue catalogue) {
   if (!catalogue.hasSongs || hasRankingTables(catalogue)) return;
   CatalogueRankings(catalogue)
     ..songs
-    ..artists;
+    ..artists
+    ..requesters;
 }
 
 /// Whether the tables of the rankings of [catalogue] are made (see [makeRankingTables]).
@@ -293,30 +295,40 @@ final class CatalogueRankings {
 
   late final _Tables _tables = _Tables.of(catalogue);
 
-  /// The plays counted, per title (`Play.titleId`), and per genre (`Genre.index`).
-  late final (Int32List, Int32List) _counted = () {
+  /// The plays counted, per title (`Play.titleId`) and per genre (`Genre.index`); and the titles and the genres
+  /// counted, in the order of their first play counted.
+  late final ({Int32List titles, Int32List genres, Int32List titleOrder, Int32List genreOrder}) _counted = () {
     final titles = Int32List(catalogue.titles.length);
     final genres = Int32List(Genre.values.length);
+    final titleOrder = Int32List(titles.length);
+    final genreOrder = Int32List(genres.length);
+    var titlesSeen = 0, genresSeen = 0;
     final only = requesterId;
     for (final p in catalogue.plays) {
       if (only != null && p.requesterId != only) continue;
-      titles[p.titleId]++;
-      genres[p.genre.index]++;
+      if (titles[p.titleId]++ == 0) titleOrder[titlesSeen++] = p.titleId;
+      final g = p.genre.index;
+      if (genres[g]++ == 0) genreOrder[genresSeen++] = g;
     }
-    return (titles, genres);
+    return (
+      titles: titles,
+      genres: genres,
+      titleOrder: Int32List.sublistView(titleOrder, 0, titlesSeen),
+      genreOrder: Int32List.sublistView(genreOrder, 0, genresSeen),
+    );
   }();
 
   /// Every song played (or requested), by its number of plays.
   late final Ranking<Song> songs = () {
     final t = _tables;
     final counts = Int32List(t.songs.length);
-    final titles = _counted.$1;
+    final titles = _counted.titles;
     final titleSong = t.titleSong;
     for (var i = 0; i < titles.length; i++) {
       final s = titleSong[i];
       if (s >= 0) counts[s] += titles[i];
     }
-    return Ranking._sorted(t.songs, counts, t.songOrder);
+    return Ranking._sorted(t.songs, counts, _entriesInOrder(_counted.titleOrder, titleSong, counts.length));
   }();
 
   /// Every artist of the titles played, by the number of plays of their titles; [Artist.songCount] counts their
@@ -328,7 +340,7 @@ final class CatalogueRankings {
     final songs = t.songs.length;
     final counts = Int32List(artists.names.length);
     final songCounts = Int32List(artists.names.length);
-    final titles = _counted.$1;
+    final titles = _counted.titles;
     // (artist, song) pairs seen: two titles of one song by one artist (spelt otherwise) count it once
     final pairs = <int>{};
     var without = 0;
@@ -351,7 +363,7 @@ final class CatalogueRankings {
           Artist(name: artists.names[a], folded: artists.folds[a], songCount: songCounts[a]),
       ],
       counts,
-      artists.order,
+      _entriesInOrder(_counted.titleOrder, artists.ofTitle, counts.length),
     );
   }();
 
@@ -364,20 +376,20 @@ final class CatalogueRankings {
   int _playsWithoutArtist = 0;
 
   /// Every genre played, by its number of plays; `Ranking.total` is the number of plays counted.
-  late final Ranking<Genre> genres = Ranking._sorted(Genre.values, _counted.$2, _Tables.genreOrder);
+  late final Ranking<Genre> genres = Ranking._sorted(Genre.values, _counted.genres, _counted.genreOrder);
 
   /// Every requester of a play, by their number of requests (`Requester.requestCount`, the plays they requested).
   /// With [requesterId], that requester alone, at their rank among all of them, the bars against the first one.
   late final Ranking<Requester> requesters = () {
-    final all = _allRequesters(catalogue);
+    final all = _tables.requesters;
     final only = requesterId;
     if (only == null) return all;
     final at = all.entries.indexWhere((r) => r.id == only);
-    if (at < 0) return Ranking<Requester>._(const [], Int32List(0), Int32List(0), top: all.top, total: 0);
+    if (at < 0) return Ranking<Requester>._(const [], Int32List(0), firstRank: 1, top: all.top, total: 0);
     return Ranking._(
       [all.entries[at]],
       Int32List.fromList([all.counts[at]]),
-      Int32List.fromList([all.ranks[at]]),
+      firstRank: all.rankOf(at),
       top: all.top,
       total: all.counts[at],
     );
@@ -387,16 +399,7 @@ final class CatalogueRankings {
   int songsRequestedBy(Requester requester) => _tables.requesterSongs[requester.id];
 
   /// The number of requesters of a play, whatever [requesterId].
-  int get requesterCount => _allRequesters(catalogue).length;
-
-  /// The ranking of every requester of [catalogue], made once (the "You" state does not change it).
-  static Ranking<Requester> _allRequesters(Catalogue catalogue) => _requesters[catalogue] ??= Ranking._sorted(
-    catalogue.requesters,
-    [for (final r in catalogue.requesters) r.requestCount],
-    alphabeticalOrder(catalogue.requesterFolds),
-  );
-
-  static final _requesters = Expando<Ranking<Requester>>('requester ranking');
+  int get requesterCount => _tables.requesters.length;
 
   /// The songs of [entry], by the plays counted that are of it: of the titles of the artist (as [artists] counts
   /// them), logged under the genre, or requested by the requester; with [requesterId], of their requests alone. One
@@ -408,16 +411,17 @@ final class CatalogueRankings {
   Ranking<Song> songsOf(RankedEntry entry) {
     final t = _tables;
     final counts = Int32List(t.songs.length);
+    final bySeniority = Int32List(t.songs.length);
     final titleSong = t.titleSong;
     final only = requesterId;
-    var total = 0;
+    var total = 0, seen = 0;
     void count(bool Function(Play p) of) {
       for (final p in catalogue.plays) {
         if (only != null && p.requesterId != only) continue;
         if (!of(p)) continue;
         total++;
         final s = titleSong[p.titleId];
-        if (s >= 0) counts[s]++;
+        if (s >= 0 && counts[s]++ == 0) bySeniority[seen++] = s;
       }
     }
 
@@ -434,7 +438,7 @@ final class CatalogueRankings {
         final r = catalogue.requesterNamed(folded)?.id;
         if (r != null) count((p) => p.requesterId == r);
     }
-    return Ranking._sorted(t.songs, counts, t.songOrder, total: total);
+    return Ranking._sorted(t.songs, counts, Int32List.sublistView(bySeniority, 0, seen), total: total);
   }
 
   /// The name of [entry] in this catalogue (the artist's most played spelling, the genre's label, the requester's
