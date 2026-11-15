@@ -75,8 +75,9 @@ void addRareCharacters(String text, Set<int> into, [Set<int>? emojiBases]) {
 
 /// Adds to [into] the rare characters of every text of [catalogue] the app can show: the titles of the plays (a song
 /// shows the title of one of its plays or highlights), the titles and notes of the highlights, the names of the
-/// requesters; and to [emojiBases] the characters asked to be drawn as emoji (see [addRareCharacters]). In steps (see
-/// `runInSlices`): a pause point every [pauseEvery] titles, highlights or requesters.
+/// requesters with the other names of their groups; and to [emojiBases] the characters asked to be drawn as emoji
+/// (see [addRareCharacters]). In steps (see `runInSlices`): a pause point every [pauseEvery] titles, highlights or
+/// requesters.
 Iterable<void> addCatalogueCharacters(
   Catalogue catalogue,
   Set<int> into, {
@@ -98,6 +99,10 @@ Iterable<void> addCatalogueCharacters(
   final requesters = catalogue.requesters;
   for (var i = 0; i < requesters.length; i++) {
     addRareCharacters(requesters[i].name, into, emojiBases);
+    // the other names of a group, on the page of its songs
+    for (final name in requesters[i].otherNames) {
+      addRareCharacters(name, into, emojiBases);
+    }
     if (i % pauseEvery == pauseEvery - 1) yield null;
   }
 }

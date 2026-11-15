@@ -246,14 +246,17 @@ mixin _RankingListModel<W extends ConsumerStatefulWidget> on ConsumerState<W> im
   @override
   int get itemCount => _shown?.ranking.length ?? 0;
 
+  /// The height of what the list shows above its first row (0: nothing).
+  double get _leading => 0;
+
   @override
-  double offsetOf(int item) => item * _shown!.extent;
+  double offsetOf(int item) => _leading + item * _shown!.extent;
 
   @override
   double extentOf(int item) => _shown!.extent;
 
   @override
-  int itemAt(double offset) => (offset / _shown!.extent).floor().clamp(0, math.max(0, itemCount - 1));
+  int itemAt(double offset) => ((offset - _leading) / _shown!.extent).floor().clamp(0, math.max(0, itemCount - 1));
 
   @override
   bool stopsAt(int item) => _shown!.opens(item);
@@ -299,12 +302,17 @@ Future<void> showEntrySongs(BuildContext context, RankedEntry entry, {required b
       ),
     );
 
+/// The start of the line of the page of a requester's songs that names the other names of their group counted with
+/// the one shown (`Requester.otherNames`). A proposal, still to be approved: it changes here alone.
+const otherNamesLabel = 'Also counted:';
+
 /// The line of the page of an entry's songs: `25 songs · 717 plays`, `64 songs · 76 requests` for a requester.
 String entrySongsLine(RankedEntry entry, Ranking<Song> songs) =>
     '${plural(songs.length, 'song')} · ${plural(songs.total, entry is RequesterEntry ? 'request' : 'play')}';
 
 /// The songs of an artist, a genre or a requester, ranked as the Songs ranking: under the name of the entry, pinned,
-/// what the ranking holds, then every song, the most played first. A song opens its fiche.
+/// what the ranking holds, then every song, the most played first. A song opens its fiche. The page of a requester
+/// known under several names lists the others first ([otherNamesLabel]), in the scrolling content.
 ///
 /// Its songs are counted once per catalogue, when it opens (one pass over the plays). A refresh brings the songs of
 /// the same entry in the new catalogue (found by its key), or closes the page when the entry is gone; without the
@@ -326,6 +334,15 @@ class _EntrySongsPageState extends ConsumerState<EntrySongsPage> with _RankingLi
   String _title = '';
 
   bool _closing = false;
+
+  /// The line of the other names of the requester, when there is one.
+  final _otherNames = GlobalKey();
+
+  @override
+  double get _leading {
+    final box = _otherNames.currentContext?.findRenderObject();
+    return box is RenderBox && box.hasSize ? box.size.height : 0;
+  }
 
   /// Back to the ranking: the entry is gone from the catalogue (a refresh). What is over the page goes with it.
   void _close() {
@@ -385,6 +402,10 @@ class _EntrySongsPageState extends ConsumerState<EntrySongsPage> with _RankingLi
         ? old
         : _Songs(rankings, extent, me, songs: songs, unit: entry is RequesterEntry ? 'request' : 'play');
     final owner = rankings.catalogue.requester(rankings.requesterId)?.name;
+    final otherNames = switch (entry) {
+      RequesterEntry(:final folded) => rankings.catalogue.requesterNamed(folded)?.otherNames ?? const <String>[],
+      _ => const <String>[],
+    };
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -394,12 +415,36 @@ class _EntrySongsPageState extends ConsumerState<EntrySongsPage> with _RankingLi
             controller: _scroll,
             keyboard: _keyboard,
             songs: true,
-            slivers: [_RankingList(shown: shown, widestRank: songs.lastRank)],
+            slivers: [
+              // a sliver of its own: the rows keep their fixed extent, built as they come into view
+              if (otherNames.isNotEmpty)
+                SliverToBoxAdapter(
+                  child: _OtherNames(key: _otherNames, names: otherNames),
+                ),
+              _RankingList(shown: shown, widestRank: songs.lastRank),
+            ],
           ),
         ),
       ],
     );
   }
+}
+
+/// The other names of a requester counted with the one shown ([otherNamesLabel]): above their songs, on as many
+/// lines as they need, in the style of the count line above it, aligned with it.
+class _OtherNames extends StatelessWidget {
+  const _OtherNames({super.key, required this.names});
+
+  final List<String> names;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+    child: Text(
+      '$otherNamesLabel ${names.join(', ')}',
+      style: TextStyle(fontSize: 12, height: 16 / 12, color: OngColors.of(context).on3),
+    ),
+  );
 }
 
 /// The choice of the ranking: four segments across the column, which scroll sideways when their labels need more

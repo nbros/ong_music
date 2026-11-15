@@ -121,8 +121,8 @@ class TwitchNameNotifier extends Notifier<String> {
   }
 }
 
-/// The folded Twitch name, empty when not set: compare it with
-/// `Requester.folded`, or pass it to `Catalogue.isRequester`.
+/// The folded Twitch name, empty when not set: pass it to `Catalogue.isRequester`, which knows the other names of its
+/// group (`Requester.folded` is the key of the group: see `RequesterAliases`).
 final myRequesterKeyProvider = Provider<String>((ref) => fold(ref.watch(twitchNameProvider)));
 
 /// The keys (`Highlight.key`) of the user's favourite highlights, in the order

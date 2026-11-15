@@ -1,10 +1,15 @@
 // The statistics page: its entry in About, its head, the four rankings, "You", what the rows open, how it closes,
 // its loading, and its keyboard.
+import 'dart:math' as math;
+
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:ong_music/src/data/catalogue.dart';
 import 'package:ong_music/src/data/rankings.dart';
+import 'package:ong_music/src/data/requester_aliases.dart';
 import 'package:ong_music/src/state/catalogue_state.dart';
 import 'package:ong_music/src/state/settings_state.dart';
 import 'package:ong_music/src/ui/about_page.dart';
@@ -943,6 +948,233 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(SongSheet), findsNothing);
       expect(find.byType(StatsPage), findsOneWidget);
+    });
+  });
+
+  group('a requester under several names', () {
+    final aliases = RequesterAliases([
+      ['amy_alt', 'Amy'],
+    ]);
+
+    /// Amy asked for three songs, twice as Amy and [altCount] times as amy_alt; Carol for one.
+    Catalogue catalogue({int altCount = 1}) => catalogueOf(
+      songs: [
+        start('2024-03-01'),
+        sRow(date: '2024-03-01 20:00:00', title: 'Zelda - Lost Woods', requester: 'Amy'),
+        sRow(date: '2024-03-01 20:10:00', title: 'Moana - Shiny', requester: 'Carol'),
+        for (var i = 0; i < altCount; i++)
+          sRow(date: '2024-03-01 20:20:00', title: 'Zelda - Song of Storms', requester: 'amy_alt'),
+        sRow(date: '2024-03-01 20:30:00', title: 'Zelda - Lost Woods', requester: 'Amy'),
+      ],
+      aliases: aliases,
+    );
+
+    testWidgets('one row of every request of theirs; the Twitch name amy_alt is theirs', (tester) async {
+      final handle = tester.ensureSemantics();
+      await pumpApp(tester, prefs: {'twitchName': 'amy_alt'}, state: loadedState(catalogue(), testNow));
+      await openStats(tester);
+      await showRanking(tester, 'Requesters');
+      expect(rowSentences(tester), ['Rank 1, Amy, you, 3 requests, 2 songs', 'Rank 2, Carol, 1 request, 1 song']);
+      expect(find.text('2 requesters'), findsOneWidget);
+      await tester.tap(chip('You'));
+      await tester.pumpAndSettle();
+      expect(rowSentences(tester), ['Rank 1, Amy, you, 3 requests, 2 songs']);
+      handle.dispose();
+    });
+
+    testWidgets('their page of songs stays when a refresh shows them under another name', (tester) async {
+      final app = await pumpApp(tester, state: loadedState(catalogue(), testNow));
+      await openStats(tester);
+      await showRanking(tester, 'Requesters');
+      await tester.tap(find.text('Amy'));
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(AppBar, 'Amy'), findsOneWidget);
+      expect(find.text('2 songs · 3 requests'), findsOneWidget);
+      // amy_alt three times now: the name shown
+      app.notifier.emit(loadedState(catalogue(altCount: 3), testNow));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.byType(EntrySongsPage), findsOneWidget);
+      expect(find.widgetWithText(AppBar, 'amy_alt'), findsOneWidget);
+      expect(find.text('2 songs · 5 requests'), findsOneWidget);
+      expect(rowSentences(tester), [
+        'Rank 1, Song of Storms, Zelda, 3 requests',
+        'Rank 2, Lost Woods, Zelda, 2 requests',
+      ]);
+    });
+  });
+
+  group('the page of a requester under several names', () {
+    /// Corey, under 38 names: Corey 3 times, Coreyy twice, the others once each (one of them, COREY, a spelling of
+    /// the name shown), and never Corey_absent; [songs] titles in all, each of them once.
+    const others = 36;
+    final aliases = RequesterAliases([
+      ['Corey', 'Coreyy', for (var i = 0; i < others; i++) 'CoreyTown$i', 'Corey_absent'],
+      ['Amy', 'amy_alt'],
+    ]);
+    Catalogue catalogue({int songs = 3}) {
+      final names = ['Corey', 'Coreyy', 'COREY', 'Corey', 'Coreyy', for (var i = 0; i < others; i++) 'CoreyTown$i'];
+      return catalogueOf(
+        songs: [
+          start('2024-03-01'),
+          for (var i = 0; i < math.max(songs, names.length); i++)
+            sRow(date: '2024-03-01 20:00:00', title: 'Artist - Track ${i % songs}', requester: names[i % names.length]),
+          sRow(date: '2024-03-01 21:00:00', title: 'Zelda - Lost Woods', requester: 'Carol'),
+          sRow(date: '2024-03-01 21:10:00', title: 'Zelda - Song of Storms', requester: 'amy_alt'),
+          sRow(date: '2024-03-01 21:20:00', title: 'Zelda - Song of Storms', requester: 'Amy'),
+          sRow(date: '2024-03-01 21:30:00', title: 'Zelda - Lost Woods', requester: 'Amy'),
+        ],
+        aliases: aliases,
+      );
+    }
+
+    final line = [
+      otherNamesLabel,
+      ['Coreyy', for (var i = 0; i < others; i++) 'CoreyTown$i'].join(', '),
+    ].join(' ');
+
+    /// The row of the ranking of [name], the user's own or not.
+    Finder rowOf(String name) => find.descendant(
+      of: find.byType(SliverFixedExtentList),
+      matching: find.byWidgetPredicate(
+        (w) => w is Semantics && RegExp('^Rank \\d+, ${RegExp.escape(name)},').hasMatch(w.properties.label ?? ''),
+      ),
+    );
+
+    Future<void> openRequester(WidgetTester tester, String name, {bool mine = false}) async {
+      await openStats(tester);
+      if (mine) {
+        await tester.tap(chip('You'));
+        await tester.pumpAndSettle();
+      }
+      await showRanking(tester, 'Requesters');
+      await tester.tap(rowOf(name));
+      await tester.pumpAndSettle();
+      expect(find.byType(EntrySongsPage), findsOneWidget);
+    }
+
+    testWidgets('names the others, the most written first, above the songs; read once as text', (tester) async {
+      final handle = tester.ensureSemantics();
+      await pumpApp(tester, state: loadedState(catalogue(), testNow));
+      await openRequester(tester, 'Corey');
+      expect(find.text(line), findsOneWidget);
+      expect(find.bySemanticsLabel(line), findsOneWidget);
+      // under the count line, aligned with it, in its style; above the first row
+      final count = find.text('3 songs · 41 requests');
+      expect(tester.getRect(find.text(line)).left, tester.getRect(count).left);
+      expect(tester.getRect(find.text(line)).top, greaterThanOrEqualTo(tester.getRect(count).bottom));
+      expect(tester.widget<Text>(find.text(line)).style!.fontSize, tester.widget<Text>(count).style!.fontSize);
+      expect(tester.getRect(rows().first).top, greaterThan(tester.getRect(find.text(line)).bottom));
+      handle.dispose();
+    });
+
+    testWidgets('one other name: that one', (tester) async {
+      await pumpApp(tester, state: loadedState(catalogue(), testNow));
+      await openRequester(tester, 'Amy');
+      expect(find.text('$otherNamesLabel amy_alt'), findsOneWidget);
+    });
+
+    testWidgets('a requester of one name, an artist, a genre: no such line, the page as before', (tester) async {
+      await pumpApp(tester, state: loadedState(catalogue(), testNow));
+      await openRequester(tester, 'Carol');
+      expect(find.textContaining(otherNamesLabel), findsNothing);
+      final carolTop = tester.getRect(rows().first).top;
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      await showRanking(tester, 'Artists');
+      await tester.tap(find.text('Zelda'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining(otherNamesLabel), findsNothing);
+      expect(tester.getRect(rows().first).top, carolTop);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      await showRanking(tester, 'Genres');
+      await tester.tap(find.text('Game OST'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining(otherNamesLabel), findsNothing);
+      expect(tester.getRect(rows().first).top, carolTop);
+    });
+
+    testWidgets('with "You" as without', (tester) async {
+      await pumpApp(tester, prefs: {'twitchName': 'CoreyTown7'}, state: loadedState(catalogue(), testNow));
+      await openRequester(tester, 'Corey');
+      final without = (tester.getRect(find.text(line)), tester.getRect(rows().first));
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      await openRequester(tester, 'Corey', mine: true);
+      expect((tester.getRect(find.text(line)), tester.getRect(rows().first)), without);
+    });
+
+    for (final (size, scale) in [(const Size(360, 740), 2.0), (const Size(412, 892), 1.0)]) {
+      testWidgets('a long list at ${size.width.toInt()} px, text scale $scale: on as many lines as it needs, the rows '
+          'below it as on any page', (tester) async {
+        await pumpApp(tester, size: size, textScale: scale, state: loadedState(catalogue(songs: 30), testNow));
+        await openRequester(tester, 'Carol');
+        final extent = tester.getSize(rows().first).height;
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+        await tester.tap(rowOf('Corey'));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        // much of it, or all of it, below the bottom of the screen
+        final text = find.text(line, skipOffstage: false);
+        final paragraph = tester.renderObject<RenderParagraph>(
+          find.descendant(of: text, matching: find.byType(RichText)),
+        );
+        expect(paragraph.didExceedMaxLines, isFalse);
+        expect(tester.getSize(text).height, greaterThan(3 * 16 * scale), reason: 'several lines');
+        expect(tester.getSize(text).width, lessThanOrEqualTo(size.width - 32));
+        // it scrolls away with the songs, which follow it, each as high as on the page of Carol
+        final before = tester.getRect(text);
+        final scroll = math.max(100.0, before.height);
+        tester.state<ScrollableState>(rankingScrollable()).position.jumpTo(scroll);
+        await tester.pumpAndSettle();
+        expect(tester.getRect(text).top, before.top - scroll);
+        final tops = [for (final row in rows().evaluate()) tester.getRect(find.byWidget(row.widget)).top];
+        expect(tops, isNotEmpty);
+        expect(tops.first, tester.getRect(text).bottom + 12);
+        expect(tester.getSize(rows().first).height, extent);
+        for (var i = 1; i < tops.length; i++) {
+          expect(tops[i] - tops[i - 1], extent);
+        }
+        expect(tester.takeException(), isNull);
+      });
+    }
+
+    testWidgets('the keyboard goes from row to row under it, each one in view, and opens it', (tester) async {
+      await pumpApp(
+        tester,
+        desktop: true,
+        pointer: PointerKind.mouse,
+        size: const Size(1280, 800),
+        state: loadedState(catalogue(songs: 40), testNow),
+      );
+      await openRequester(tester, 'Corey');
+      final viewport = tester.getRect(find.byType(CustomScrollView));
+      String? focused() =>
+          FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<Semantics>()?.properties.label;
+      Rect focusedRect() => tester.getRect(find.byWidget(FocusManager.instance.primaryFocus!.context!.widget));
+      for (var i = 1; i <= 40; i++) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pumpAndSettle();
+        expect(focused(), startsWith('Rank $i, '));
+        expect(focusedRect().top, greaterThanOrEqualTo(viewport.top - 0.01), reason: 'row $i');
+        expect(focusedRect().bottom, lessThanOrEqualTo(viewport.bottom + 0.01), reason: 'row $i');
+      }
+      for (var i = 39; i >= 1; i--) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+        await tester.pumpAndSettle();
+        expect(focused(), startsWith('Rank $i, '));
+        expect(focusedRect().top, greaterThanOrEqualTo(viewport.top - 0.01), reason: 'row $i');
+        expect(focusedRect().bottom, lessThanOrEqualTo(viewport.bottom + 0.01), reason: 'row $i');
+      }
+      // the first row in view, under the line, which is not a row
+      expect(tester.getRect(find.text(line, skipOffstage: false)).bottom, lessThanOrEqualTo(focusedRect().top));
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(find.byType(SongSheet), findsOneWidget);
     });
   });
 }

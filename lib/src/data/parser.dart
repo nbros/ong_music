@@ -10,6 +10,7 @@ import 'dart:typed_data';
 import 'catalogue.dart';
 import 'csv.dart';
 import 'model.dart';
+import 'requester_aliases.dart';
 import 'sheet_zone.dart';
 import 'slices.dart';
 import 'text.dart';
@@ -109,6 +110,36 @@ String? _requesterCell(String cell) {
 }
 
 final _uptime = RegExp(r'^(\d+):(\d\d):(\d\d)$');
+
+/// A running time (`0:02:13`, `1:28:35`): what some rows of the Songs sheet carry in their Requester cell since
+/// September 2025, the time of the "Concert Grand" part. It names no requester.
+final _duration = RegExp(r'^\d+(?::\d+)+$');
+
+/// The title of a marker the moderators write among the songs of the Songs sheet (its whitespace collapsed): a
+/// second "Stream Start" of a stream, or a step of the "Concert Grand" (`Concert Grand Start`, `CG Played`,
+/// `(concert grand)`, `End of Concert Grand`...). A title that only holds those words further in, or that begins
+/// with a longer word (`Stream Started`), is a song's.
+final _markerTitle = RegExp(
+  r'^(?:stream start|\(? ?(?:start of |end of |end )?(?:concert grand|cg))\b',
+  caseSensitive: false,
+);
+
+/// Whether [title] is that of a marker ([_markerTitle]). Most titles begin with another letter than those of the
+/// markers: they are told apart without the regular expression (a millisecond for the 11,000 titles of the sheet).
+bool _isMarkerTitle(String title) {
+  if (title.isEmpty) return false;
+  // ASCII letters lowercased; "(" stays itself
+  final first = title.codeUnitAt(0) | 0x20;
+  return (first == 0x73 || first == 0x63 || first == 0x65 || first == 0x28) && _markerTitle.hasMatch(title);
+}
+
+/// Whether a row of the Songs sheet of [requesterCell] and [genreCell] is a marker: a running time instead of a
+/// requester, and no genre. With a genre it is a song played during the Concert Grand, without requester.
+bool _isTimeMarker(String requesterCell, String genreCell) {
+  final genre = genreCell.trim();
+  return (genre.isEmpty || genre == '-') && _duration.hasMatch(requesterCell.trim());
+}
+
 final _youtube = RegExp(r'(?:youtu\.be/|v=)([\w-]{11})');
 
 /// The ids of the YouTube videos linked in [text], in their order: the forms of
@@ -139,8 +170,10 @@ int? _instant(({CalendarDate date, int? minute})? cell) {
 ///
 /// Throws [CatalogueFormatException] when a payload does not look like its
 /// sheet: no title column header, HTML, or no highlight / no play at all.
-Catalogue parseCatalogue(String highlightsCsv, String songsCsv) {
-  final load = CatalogueLoad(highlightsCsv, songsCsv);
+///
+/// The names of one group of [aliases] are one requester (see [RequesterAliases]); the app's by default.
+Catalogue parseCatalogue(String highlightsCsv, String songsCsv, {RequesterAliases? aliases}) {
+  final load = CatalogueLoad(highlightsCsv, songsCsv, aliases: aliases);
   while (load.step()) {}
   return load.catalogue;
 }
@@ -148,9 +181,10 @@ Catalogue parseCatalogue(String highlightsCsv, String songsCsv) {
 /// Parses the "Youtube Catalogue" sheet alone: a catalogue without the Songs sheet (`Catalogue.hasSongs` false),
 /// which the Highlights list needs no more than.
 ///
-/// Throws [CatalogueFormatException] when the payload does not look like the sheet.
-Catalogue parseHighlights(String highlightsCsv) {
-  final load = HighlightsLoad(highlightsCsv);
+/// Throws [CatalogueFormatException] when the payload does not look like the sheet. [aliases] as for
+/// [parseCatalogue]: the catalogue keeps them, and [parseSongs] uses them too.
+Catalogue parseHighlights(String highlightsCsv, {RequesterAliases? aliases}) {
+  final load = HighlightsLoad(highlightsCsv, aliases: aliases);
   while (load.step()) {}
   return load.catalogue;
 }
@@ -190,10 +224,15 @@ void _checkSteps(int rowsPerStep, int unitsPerStep) {
 /// the catalogue) and every [unitsPerStep] code units in those over the text; the defaults, [rowsPerPause] and
 /// [unitsPerPause], keep a step around a millisecond or less on a fast laptop.
 final class HighlightsLoad {
-  /// A load of the "Youtube Catalogue" sheet, nothing done yet.
-  HighlightsLoad(String highlightsCsv, {int rowsPerStep = rowsPerPause, int unitsPerStep = unitsPerPause}) {
+  /// A load of the "Youtube Catalogue" sheet, nothing done yet. [aliases] as for [parseHighlights].
+  HighlightsLoad(
+    String highlightsCsv, {
+    int rowsPerStep = rowsPerPause,
+    int unitsPerStep = unitsPerPause,
+    RequesterAliases? aliases,
+  }) {
     _checkSteps(rowsPerStep, unitsPerStep);
-    _steps = _load(highlightsCsv, rowsPerStep, unitsPerStep).iterator;
+    _steps = _load(highlightsCsv, rowsPerStep, unitsPerStep, aliases ?? RequesterAliases.bundled).iterator;
   }
 
   late final Iterator<void> _steps;
@@ -206,27 +245,28 @@ final class HighlightsLoad {
   /// there. Throws what [parseHighlights] throws, and the load is over then.
   bool step() => _steps.moveNext();
 
-  Iterable<void> _load(String highlightsCsv, int rowsPerStep, int unitsPerStep) sync* {
+  Iterable<void> _load(String highlightsCsv, int rowsPerStep, int unitsPerStep, RequesterAliases aliases) sync* {
     final rows = <List<String>>[];
     yield* _decode(highlightsCsv, 'Highlights', rows, unitsPerStep: unitsPerStep, rowsPerStep: rowsPerStep);
     final cols = ColumnResolver(rows.first);
     if (cols.find(HighlightColumns.title) == null || cols.find(HighlightColumns.uploadDate) == null) {
       throw const CatalogueFormatException('Highlights: "Video Title" / "Upload Date" header not found');
     }
-    final b = _HighlightsBuilder(rows, cols, rowsPerStep);
+    final b = _HighlightsBuilder(rows, cols, rowsPerStep, aliases);
     yield* b.build();
     if (b.highlights.isEmpty) throw const CatalogueFormatException('Highlights: no row');
     yield* Catalogue.assembleHighlights(
       highlights: b.highlights,
       requesters: b.requesters,
       spellings: b.spellings,
+      aliases: aliases,
       done: (catalogue) => _catalogue = catalogue,
       pauseEvery: rowsPerStep,
     );
   }
 }
 
-/// [parseSongs] in steps, as [HighlightsLoad] does for its sheet.
+/// [parseSongs] in steps, as [HighlightsLoad] does for its sheet, with the aliases of the highlights' catalogue.
 final class SongsLoad {
   /// A load of the "Songs" sheet against the highlights of [highlights], nothing done yet.
   SongsLoad(Catalogue highlights, String songsCsv, {int rowsPerStep = rowsPerPause, int unitsPerStep = unitsPerPause}) {
@@ -261,6 +301,7 @@ final class SongsLoad {
       titles: b.titles,
       songs: b.songs,
       highlightPlays: b.highlightPlays,
+      aliases: highlights.aliases,
       done: (songs) => _songs = songs,
       pauseEvery: rowsPerStep,
     );
@@ -275,9 +316,10 @@ final class CatalogueLoad {
     String songsCsv, {
     int rowsPerStep = rowsPerPause,
     int unitsPerStep = unitsPerPause,
+    RequesterAliases? aliases,
   }) {
     _checkSteps(rowsPerStep, unitsPerStep);
-    _steps = _load(highlightsCsv, songsCsv, rowsPerStep, unitsPerStep).iterator;
+    _steps = _load(highlightsCsv, songsCsv, rowsPerStep, unitsPerStep, aliases).iterator;
   }
 
   late final Iterator<void> _steps;
@@ -290,8 +332,19 @@ final class CatalogueLoad {
   /// there. Throws what [parseCatalogue] throws, and the load is over then.
   bool step() => _steps.moveNext();
 
-  Iterable<void> _load(String highlightsCsv, String songsCsv, int rowsPerStep, int unitsPerStep) sync* {
-    final highlights = HighlightsLoad(highlightsCsv, rowsPerStep: rowsPerStep, unitsPerStep: unitsPerStep);
+  Iterable<void> _load(
+    String highlightsCsv,
+    String songsCsv,
+    int rowsPerStep,
+    int unitsPerStep,
+    RequesterAliases? aliases,
+  ) sync* {
+    final highlights = HighlightsLoad(
+      highlightsCsv,
+      rowsPerStep: rowsPerStep,
+      unitsPerStep: unitsPerStep,
+      aliases: aliases,
+    );
     while (highlights.step()) {
       yield null;
     }
@@ -331,40 +384,98 @@ class _PlayDraft {
 }
 
 /// The requesters met in a sheet: their ids in order of first use, and the spellings of their names.
+///
+/// A requester is a folded name, or a group of [aliases] (its key, `RequesterAliases.keyOf`). The work on a cell is
+/// done once per distinct cell, where it is first met: the rows only look the cell up in a map.
 class _Requesters {
-  _Requesters(this.spellings, [List<String> folds = const []])
+  _Requesters(this.spellings, this.aliases, [List<String> folds = const []])
     : _folds = [...folds],
       _ids = {for (var i = 0; i < folds.length; i++) folds[i]: i};
 
-  /// Folded name, then the count of each spelling, in order of first appearance.
+  /// Key, then the count of each spelling, in order of first appearance.
   final Map<String, Map<String, int>> spellings;
+  final RequesterAliases aliases;
   final List<String> _folds;
   final Map<String, int> _ids;
 
-  /// The folded names, by id.
+  /// The id of each cell met by [id] (trimmed), -1 for one that names no requester.
+  final Map<String, int> _idOfCell = {};
+
+  /// The count of each spelling met by [countSpelling], in order of first appearance, until [addCountedSpellings].
+  final Map<String, int> _counted = {};
+
+  /// The keys, by id.
   List<String> get folds => _folds;
+
+  /// The key of the requester [name] (a trimmed cell) names, or null: a running time names none.
+  String? _keyOf(String name) => _duration.hasMatch(name) ? null : aliases.keyOf(fold(name));
 
   void countSpelling(String cell) {
     final name = _requesterCell(cell);
     if (name == null) return;
-    final counts = spellings.putIfAbsent(fold(name), () => {});
-    counts[name] = (counts[name] ?? 0) + 1;
+    _counted[name] = (_counted[name] ?? 0) + 1;
+  }
+
+  /// Adds the spellings [countSpelling] counted to [spellings], under the keys of their requesters: those of one key
+  /// in the order the rows first gave them.
+  void addCountedSpellings() {
+    _counted.forEach((name, count) {
+      final key = _keyOf(name);
+      if (key == null) return;
+      final counts = spellings.putIfAbsent(key, () => {});
+      counts[name] = (counts[name] ?? 0) + count;
+    });
+    _counted.clear();
   }
 
   int? id(String cell) {
     final name = _requesterCell(cell);
     if (name == null) return null;
-    final key = fold(name);
-    return _ids.putIfAbsent(key, () {
+    final id = _idOfCell[name] ??= _newCell(name);
+    return id < 0 ? null : id;
+  }
+
+  int _newCell(String name) {
+    final key = _keyOf(name);
+    if (key == null) return -1;
+    final id = _ids.putIfAbsent(key, () {
       _folds.add(key);
       spellings.putIfAbsent(key, () => {name: 0});
       return _folds.length - 1;
     });
+    // a name of a group met only in the notes of a highlight is one of its other names, under no count
+    if (aliases.isGroup(key)) spellings.putIfAbsent(key, () => {}).putIfAbsent(name, () => 0);
+    return id;
   }
 
-  /// The requester of id [id], with the most frequent of its spellings.
-  Requester requester(int id, int requestCount) =>
-      Requester(id: id, name: _mostFrequent(spellings[_folds[id]]!), folded: _folds[id], requestCount: requestCount);
+  /// The requester of id [id], with the most frequent of its spellings, and for a group of [aliases] its other names.
+  Requester requester(int id, int requestCount) {
+    final key = _folds[id];
+    final counts = spellings[key]!;
+    final name = _mostFrequent(counts);
+    return Requester(
+      id: id,
+      name: name,
+      folded: key,
+      requestCount: requestCount,
+      otherNames: aliases.isGroup(key) ? _otherNames(counts, fold(name)) : const [],
+    );
+  }
+
+  /// The names of [counts] (the spellings of a group) other than [shown] (folded), each under its most frequent
+  /// spelling, the most counted first, then in order of first appearance.
+  static List<String> _otherNames(Map<String, int> counts, String shown) {
+    final byFold = <String, Map<String, int>>{};
+    counts.forEach((name, count) {
+      final f = fold(name);
+      if (f != shown) (byFold[f] ??= {})[name] = count;
+    });
+    final names = [
+      for (final (i, spellings) in byFold.values.indexed)
+        (name: _mostFrequent(spellings), count: spellings.values.fold(0, (sum, n) => sum + n), order: i),
+    ]..sort((a, b) => a.count != b.count ? b.count.compareTo(a.count) : a.order.compareTo(b.order));
+    return List.unmodifiable([for (final n in names) n.name]);
+  }
 
   static String _mostFrequent(Map<String, int> counts) {
     String? best;
@@ -393,8 +504,9 @@ Iterable<void> _inSteps(int pauseEvery, int from, int to, void Function(int from
 /// [pauseEvery] rows at a time ([_inSteps]). Written as a generator, a loop is a state machine on the web, its locals
 /// are kept off the registers, and a large one is not optimised: the whole build took half as long again.
 class _HighlightsBuilder {
-  _HighlightsBuilder(this.rows, ColumnResolver cols, this.pauseEvery)
-    : _upload = cols.resolve(HighlightColumns.uploadDate),
+  _HighlightsBuilder(this.rows, ColumnResolver cols, this.pauseEvery, RequesterAliases aliases)
+    : _requesters = _Requesters({}, aliases),
+      _upload = cols.resolve(HighlightColumns.uploadDate),
       _order = cols.resolve(HighlightColumns.order),
       _title = cols.resolve(HighlightColumns.title),
       _genre = cols.resolve(HighlightColumns.genre),
@@ -408,7 +520,7 @@ class _HighlightsBuilder {
   final int pauseEvery;
   final int _upload, _order, _title, _genre, _link, _requester, _stream, _vocals, _notes;
 
-  final _requesters = _Requesters({});
+  final _Requesters _requesters;
   final List<Highlight> _highlights = [];
   int _seq = 1;
 
@@ -418,6 +530,7 @@ class _HighlightsBuilder {
 
   Iterable<void> build() sync* {
     yield* _inSteps(pauseEvery, 1, rows.length, _countSpellings);
+    _requesters.addCountedSpellings();
     yield* _inSteps(pauseEvery, 1, rows.length, _addHighlights);
     highlights = List.unmodifiable(_highlights);
     requesters = List.unmodifiable([for (var i = 0; i < _requesters.folds.length; i++) _requesters.requester(i, 0)]);
@@ -526,7 +639,9 @@ class _SongsBuilder {
   final Map<String, List<int>> _songHighlights = {};
   late final List<String> _songKeys;
 
+  /// The id of [title], or -1 for the title of a marker ([_isMarkerTitle]): checked once per distinct title.
   int _title(String title) => _titleIds.putIfAbsent(title, () {
+    if (_isMarkerTitle(title)) return -1;
     titles.add(title);
     _titleKeys.add(songKey(title));
     return titles.length - 1;
@@ -535,8 +650,9 @@ class _SongsBuilder {
   /// Builds the lists, in steps: a pause point every [pauseEvery] rows of each loop.
   Iterable<void> build() sync* {
     final spellings = <String, Map<String, int>>{};
-    _requesters = _Requesters(spellings, _base.requesterFolds);
+    _requesters = _Requesters(spellings, _base.aliases, _base.requesterFolds);
     yield* _inSteps(pauseEvery, 1, sRows.length, _countSpellings);
+    _requesters.addCountedSpellings();
     _addHighlightSpellings();
     yield null;
 
@@ -602,7 +718,7 @@ class _SongsBuilder {
   }
 
   /// Adds the spellings of the highlights' sheet to those of the Songs sheet. A name taken from the notes of a
-  /// highlight, never written in a requester cell, is a spelling of its own only when neither sheet has another one.
+  /// highlight, never written in a requester cell, is shown only when neither sheet has another one (it counts 0).
   void _addHighlightSpellings() {
     final spellings = _requesters.spellings;
     _base.requesterSpellings.forEach((key, counts) {
@@ -611,12 +727,20 @@ class _SongsBuilder {
         spellings[key] = {...counts};
       } else {
         counts.forEach((name, count) {
-          if (count > 0) merged[name] = (merged[name] ?? 0) + count;
+          if (count > 0) {
+            merged[name] = (merged[name] ?? 0) + count;
+          } else {
+            // under no count, never the name shown: one of the other names of a group
+            merged.putIfAbsent(name, () => 0);
+          }
         });
       }
     });
   }
 
+  /// The plays of the rows [from] to [to], and their streams: a row of Order 0 starts a stream, a marker
+  /// ([_isMarkerTitle], [_isTimeMarker]) is no play. (Its requester cell still counted a spelling in [_countSpellings],
+  /// which reads every row: it is a running time or empty in the markers of the sheet.)
   void _addPlayDrafts(int from, int to) {
     final drafts = _drafts;
     var current = _current;
@@ -638,6 +762,17 @@ class _SongsBuilder {
       // no date, and none yet in its stream to give it
       if (date == null) continue;
       lastDate = date;
+      final requesterCell = _cell(row, _sRequester);
+      final genreCell = _cell(row, _sGenre);
+      final genre = Genre.parse(genreCell);
+      // a cell of no genre ("-", empty) is of Genre.other
+      final titleId = genre == Genre.other && _isTimeMarker(requesterCell, genreCell) ? -1 : _title(title);
+      if (titleId < 0) {
+        // a marker is no play and starts no stream, but its uptime counts for its stream (the last marker of a
+        // stream often carries its largest one), and its date for the rows after it
+        if (current != null) current.minutes = math.max(current.minutes, _uptimeMinutes(_cell(row, _sUptime)));
+        continue;
+      }
       if (current == null) {
         current = _StreamDraft(date, drafts.length);
         _streamDrafts.add(current);
@@ -648,10 +783,10 @@ class _SongsBuilder {
         _PlayDraft(
           _instant(when),
           date,
-          _title(title),
-          Genre.parse(_cell(row, _sGenre)),
+          titleId,
+          genre,
           PlayType.parse(_cell(row, _sType)),
-          _requesters.id(_cell(row, _sRequester)),
+          _requesters.id(requesterCell),
           PlayFlag.parse(_cell(row, _sNotes)),
           current,
         ),

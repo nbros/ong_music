@@ -38,6 +38,17 @@ void main(List<String> args) {
   print('requesters            ${c.requesters.length}');
   print('songs                 ${c.songCount}');
   print('parse+build           ${cold.elapsedMilliseconds} ms (cold), ${warm.elapsedMilliseconds} ms (warm)');
+  // one warm build varies by a third from one run to the next: the median of more
+  final builds = <int>[];
+  for (var i = 0; i < 15; i++) {
+    final sw = Stopwatch()..start();
+    parseCatalogue(highlightsCsv, songsCsv);
+    builds.add(sw.elapsedMicroseconds);
+  }
+  builds.sort();
+  print(
+    'parse+build, median   ${(builds[builds.length ~/ 2] / 1000).toStringAsFixed(1)} ms (of ${builds.length} warm)',
+  );
   print('');
   for (final q in ['zelda', 'alinsa loop', 'é', 'a', 'the legend of zelda', 'pokémon', '千と千尋']) {
     _time('plays "$q"', () => c.searchPlays(query: q).length, c);
@@ -120,6 +131,14 @@ void main(List<String> args) {
   }
   final r = CatalogueRankings(c);
   print('plays without artist  ${r.playsWithoutArtist}');
+  print('');
+  // the top of the Requesters ranking of the statistics page
+  final requesters = r.requesters;
+  print('requesters of a play  ${r.requesterCount}');
+  for (var i = 0; i < requesters.length && i < 15; i++) {
+    final e = requesters.entries[i];
+    print('${'${requesters.rankOf(i)}'.padLeft(4)}  ${e.name.padRight(30)} ${'${requesters.counts[i]}'.padLeft(5)}');
+  }
 }
 
 void _time(String label, int Function() run, Catalogue c) {
