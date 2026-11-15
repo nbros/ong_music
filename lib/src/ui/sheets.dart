@@ -18,6 +18,7 @@ import '../data/catalogue.dart';
 import '../data/model.dart';
 import '../state/catalogue_state.dart';
 import '../state/settings_state.dart';
+import '../state/vods_state.dart';
 import 'actions.dart';
 import 'format.dart';
 import 'instant_feedback.dart';
@@ -992,6 +993,20 @@ class _StreamSheetState extends ConsumerState<StreamSheet> {
   final _controller = ScrollController();
   final _headerKey = GlobalKey();
 
+  /// The links of the parts of the VOD of [_vodStream], taken when the fiche first shows it: a file of the VODs
+  /// coming while it is open adds no button that would push the setlist down (it shows the next time).
+  LiveStream? _vodStream;
+  List<Uri> _vodLinks = const [];
+
+  /// [_vodLinks] for [stream], taken once.
+  List<Uri> _vodLinksOf(LiveStream stream) {
+    if (!identical(_vodStream, stream)) {
+      _vodStream = stream;
+      _vodLinks = vodLinksFor(widget.catalogue, ref.read(vodFileProvider))?.streamLinks(stream) ?? const [];
+    }
+    return _vodLinks;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -1026,6 +1041,7 @@ class _StreamSheetState extends ConsumerState<StreamSheet> {
     final metrics = ListMetrics.of(context);
     final videos = s.highlightIds.length;
     final shape = _paneRowShape(context);
+    final vod = _vodLinksOf(s);
     return _SheetBody(
       controller: _controller,
       slivers: [
@@ -1047,6 +1063,18 @@ class _StreamSheetState extends ConsumerState<StreamSheet> {
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                 ),
+                if (vod.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: Wrap(
+                      spacing: _actionSpacing,
+                      runSpacing: _actionSpacing,
+                      children: [
+                        for (final (i, link) in vod.indexed)
+                          _VodButton(link: link, part: vod.length == 1 ? null : i + 1),
+                      ],
+                    ),
+                  ),
               ],
             ),
           ),
@@ -1073,6 +1101,37 @@ class _StreamSheetState extends ConsumerState<StreamSheet> {
           }),
         ),
       ],
+    );
+  }
+}
+
+/// A button of the head of the fiche of a stream: its VOD from the start ([watchTheVodText]), or part [part] of it
+/// when it has several videos ([watchTheVodPartText]), opened on YouTube.
+class _VodButton extends StatelessWidget {
+  const _VodButton({required this.link, this.part});
+
+  final Uri link;
+  final int? part;
+
+  @override
+  Widget build(BuildContext context) {
+    final part = this.part;
+    final label = part == null ? watchTheVodText : watchTheVodPartText(part);
+    return VodLink(
+      link: link,
+      label: label,
+      builder: (context, open) => FilledButton.tonalIcon(
+        onPressed: open,
+        style: platformButtonStyle(
+          context,
+          FilledButton.styleFrom(
+            minimumSize: const Size(0, 40),
+            textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+          ),
+        ),
+        icon: const Icon(vodIcon, size: 20),
+        label: Text(label),
+      ),
     );
   }
 }

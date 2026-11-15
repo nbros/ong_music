@@ -12,8 +12,10 @@ import 'package:material_ui/material_ui.dart';
 import '../data/catalogue.dart';
 import '../data/model.dart';
 import '../state/settings_state.dart';
+import '../state/vods_state.dart';
 import 'actions.dart';
 import 'instant_feedback.dart';
+import 'widgets.dart';
 
 /// An item of the menu of a row: its icon, its label, and what it does.
 typedef RowMenuItem = ({IconData icon, String label, VoidCallback onSelected});
@@ -44,7 +46,8 @@ List<RowMenuItem> highlightMenuItems(BuildContext context, WidgetRef ref, Highli
 }
 
 /// The items of the menu of [play]'s row, in their order: copy its title; with a video, watch it on YouTube ([onVideo],
-/// what the row's play button does), copy its link, share it (where there is a share sheet). [context] is the row's.
+/// what the row's play button does); when its stream has a VOD that reaches it, watch it there ([watchInTheVodText]);
+/// with a video, copy its link, share it (where there is a share sheet). [context] is the row's.
 List<RowMenuItem> playMenuItems(
   BuildContext context,
   WidgetRef ref,
@@ -54,10 +57,13 @@ List<RowMenuItem> playMenuItems(
 ) {
   final video = catalogue.highlightOf(play);
   final id = video?.youtubeId;
+  final vod = vodLinksFor(catalogue, ref.read(vodFileProvider))?.linkOf(play);
   return [
     (icon: Icons.copy, label: copyTitleText, onSelected: () => copyAndConfirm(context, songCopyText(play.title))),
-    if (video != null && id != null) ...[
+    if (video != null && id != null)
       (icon: Icons.play_arrow, label: watchOnYouTubeText, onSelected: () => onVideo(video)),
+    if (vod != null) (icon: vodIcon, label: watchInTheVodText, onSelected: () => openVod(context, ref, vod)),
+    if (video != null && id != null) ...[
       (icon: Icons.link, label: copyLinkText, onSelected: () => copyAndConfirm(context, shortVideoUrl(id))),
       if (ref.read(canShareProvider))
         (icon: Icons.share, label: shareText, onSelected: () => shareHighlight(context, ref, video)),

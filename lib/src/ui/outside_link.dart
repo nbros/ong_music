@@ -178,3 +178,24 @@ class VideoLink extends ConsumerWidget {
     builder: builder,
   );
 }
+
+/// [OutsideLink] to [link], a moment of the full recording of a stream (a VOD), opened on YouTube with [openVod]:
+/// never in the in-place player.
+class VodLink extends ConsumerWidget {
+  const VodLink({super.key, required this.link, required this.label, required this.builder});
+
+  final Uri link;
+
+  /// What screen readers call the link: the control's own name.
+  final String label;
+  final Widget Function(BuildContext context, VoidCallback open) builder;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => OutsideLink(
+    url: link.toString(),
+    label: label,
+    video: true,
+    onOpen: () => openVod(context, ref, link),
+    builder: builder,
+  );
+}

@@ -15,6 +15,7 @@ import 'package:material_ui/material_ui.dart';
 import '../data/catalogue.dart';
 import '../data/model.dart';
 import '../state/catalogue_state.dart';
+import '../state/vods_state.dart';
 import 'format.dart';
 import 'instant_feedback.dart';
 import 'new_highlights.dart';
@@ -273,8 +274,23 @@ class _ThumbnailLinkState extends State<_ThumbnailLink> {
   );
 }
 
+/// Whether a play whose stream has a VOD reaching it, and that has no video of its own, shows a [VodButton] in its
+/// row, where the plays with a video show theirs ([PlayRow], [HistoryRow]): a proposal the user judges on
+/// screenshots, turned off here alone. The item of the menu of a play (`watchInTheVodText`) stays either way.
+const showVodButtons = true;
+
+/// The link of [play] in the VOD of its stream for the button of its row ([showVodButtons]): null when it has a video
+/// (its own button stays), when the button is off, or when no VOD reaches it. Watches the VODs: a row gets its button
+/// when their file comes, in the column of the video button, where nothing else is.
+Uri? _rowVodLink(WidgetRef ref, Catalogue catalogue, Play play, Highlight? video) {
+  if (!showVodButtons) return null;
+  final file = ref.watch(vodFileProvider);
+  if (video != null && video.youtubeId != null) return null;
+  return vodLinksFor(catalogue, file)?.linkOf(play);
+}
+
 /// A play of the Ong Log or of a stream setlist: time (in the zone of the
-/// device), track, artist · requester, video button, type icon.
+/// device), track, artist · requester, video button (or the button of the VOD), type icon.
 class PlayRow extends ConsumerWidget {
   const PlayRow({
     super.key,
@@ -322,6 +338,7 @@ class PlayRow extends ConsumerWidget {
     final artist = p.artist;
     final requester = catalogue.requester(p.requesterId);
     final video = catalogue.highlightOf(p);
+    final vod = _rowVodLink(ref, catalogue, p, video);
     final subtitle = <InlineSpan>[
       ...markedSpans(artist, tokens, ong.mark, scheme.onSurface),
       if (artist.isNotEmpty && requester != null) const TextSpan(text: ' · '),
@@ -378,6 +395,12 @@ class PlayRow extends ConsumerWidget {
                 label: VideoPill.label,
                 onOpen: () => onVideo(video),
                 builder: (context, open) => VideoPill(onPressed: open),
+              )
+            else if (vod != null)
+              VodLink(
+                link: vod,
+                label: VodButton.label,
+                builder: (context, open) => VodButton(onPressed: open),
               )
             else
               const SizedBox(width: 6),
@@ -511,8 +534,8 @@ class _Tint extends StatelessWidget {
   }
 }
 
-/// A play in the history of a song: stream date, requester, video, type.
-class HistoryRow extends StatelessWidget {
+/// A play in the history of a song: stream date, requester, video (or the button of the VOD), type.
+class HistoryRow extends ConsumerWidget {
   const HistoryRow({
     super.key,
     required this.catalogue,
@@ -537,13 +560,14 @@ class HistoryRow extends StatelessWidget {
   static const double end = 14;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final metrics = ListMetrics.of(context);
     final scheme = Theme.of(context).colorScheme;
     final ong = OngColors.of(context);
     final p = play;
     final requester = catalogue.requester(p.requesterId);
     final video = catalogue.highlightOf(p);
+    final vod = _rowVodLink(ref, catalogue, p, video);
     return AppInkWell(
       onTap: onTap,
       customBorder: shape,
@@ -593,6 +617,12 @@ class HistoryRow extends StatelessWidget {
                   label: VideoPill.label,
                   onOpen: () => onVideo(video),
                   builder: (context, open) => VideoPill(onPressed: open),
+                )
+              else if (vod != null)
+                VodLink(
+                  link: vod,
+                  label: VodButton.label,
+                  builder: (context, open) => VodButton(onPressed: open),
                 ),
               const SizedBox(width: 6),
               PlayTypeIcon(p.type),
