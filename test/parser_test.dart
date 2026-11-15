@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:ong_music/src/data/catalogue.dart';
 import 'package:ong_music/src/data/model.dart';
 import 'package:ong_music/src/data/parser.dart';
 import 'package:ong_music/src/data/sheet_zone.dart';
@@ -415,6 +416,179 @@ void main() {
       );
       expect(c.titles, ['A - B', 'a - b']);
       expect(c.plays.map((p) => p.titleId), [0, 0, 1]);
+    });
+  });
+
+  group('markers of the Songs sheet', () {
+    /// The titles of the plays of [songs], one stream.
+    List<String> playTitles(List<List<String>> songs) =>
+        catalogueOf(songs: [start('2024-01-01'), ...songs]).plays.map((p) => p.title).toList();
+
+    test('a second "Stream Start" of a stream is no play and starts no stream', () {
+      final c = catalogueOf(
+        songs: [
+          start('2024-01-01'),
+          sRow(date: '2024-01-01 20:00:00', title: 'One'),
+          sRow(date: '2024-01-01 21:00:00', order: '12', title: 'Stream Start: part 2', genre: '-'),
+          sRow(date: '2024-01-01 21:00:00', order: '13', title: '  STREAM   start', genre: 'GAME OST'),
+          sRow(date: '2024-01-01 21:10:00', title: 'Two'),
+        ],
+      );
+      expect(c.plays.map((p) => p.title), ['One', 'Two']);
+      expect(c.streams.map((s) => s.playCount), [2]);
+      expect(c.titles, ['One', 'Two']);
+    });
+
+    test('a step of the Concert Grand is no play and no song, whatever its genre', () {
+      expect(
+        playTitles([
+          for (final title in [
+            'Concert Grand Start',
+            'Concert Grand End - 8min',
+            'concert grand',
+            'CG Played',
+            'cg',
+            'CG: phase 2',
+            '(concert grand)',
+            '( Concert Grand phase 3)',
+            '(CG)',
+            'Start of concert grand phase 3',
+            'End of Concert Grand',
+            'End Concert Grand (pending)',
+            'end cg',
+          ])
+            sRow(date: '2024-01-01 20:00:00', title: title, genre: 'POPULAR MUSIC', requester: 'Amy'),
+          sRow(date: '2024-01-01 20:00:00', title: 'A song'),
+        ]),
+        ['A song'],
+      );
+      final c = catalogueOf(
+        songs: [
+          start('2024-01-01'),
+          sRow(date: '2024-01-01 20:00:00', title: 'Concert Grand Start', requester: 'Amy'),
+          sRow(date: '2024-01-01 20:10:00', title: 'A song', requester: 'Bob'),
+        ],
+      );
+      expect(c.songs.map((song) => song.title), isNot(contains('Concert Grand Start')));
+      expect(c.songCount, 2, reason: 'A song, and the video of the highlights');
+      expect(c.searchPlays(query: 'concert').ids, isEmpty);
+      // a marker names no requester either
+      expect(c.requesters.map((r) => r.name), ['Bob']);
+    });
+
+    test('a title holding those words further in, or another word, is a song', () {
+      final songs = [
+        '(Not logging CG)',
+        'Yamaha CG demo',
+        'The concert grand piano',
+        'CGI theme',
+        'Concertgrand',
+        'Start concert grand',
+        'Ending of Concert Grand',
+        'Stream Started',
+        'Upstream Start',
+        'End',
+        '?',
+        'Piano repair',
+        'Unboxing',
+        'Improvisation',
+      ];
+      // "Stream Started" begins with "Stream Start": a marker
+      expect(playTitles([for (final title in songs) sRow(date: '2024-01-01 20:00:00', title: title)]), [
+        for (final title in songs)
+          if (title != 'Stream Started') title,
+      ]);
+    });
+
+    test('a running time instead of a requester and no genre is a marker; with a genre, a song without requester', () {
+      final c = catalogueOf(
+        songs: [
+          start('2024-01-01'),
+          sRow(date: '2024-01-01 20:00:00', title: 'Technical Difficulties', requester: '0:02:13', genre: '-'),
+          sRow(date: '2024-01-01 20:00:00', title: 'Pause', requester: '1:28:35', genre: ''),
+          sRow(date: '2024-01-01 20:00:00', title: 'Running time', requester: ' 12:05 ', genre: ' - '),
+          sRow(date: '2024-01-01 20:00:00', title: 'Zelda - Lost Woods', requester: '0:05:00', genre: 'GAME OST'),
+          sRow(date: '2024-01-01 20:00:00', title: 'Raid response', requester: '-', genre: '-'),
+          sRow(date: '2024-01-01 20:00:00', title: 'Odd one', requester: '', genre: ''),
+          sRow(date: '2024-01-01 20:00:00', title: 'Named', requester: 'Amy', genre: '-'),
+        ],
+      );
+      expect(c.plays.map((p) => (p.title, p.requesterId)), [
+        ('Zelda - Lost Woods', null),
+        ('Raid response', null),
+        ('Odd one', null),
+        ('Named', 0),
+      ]);
+    });
+
+    test('its uptime and date count for its stream as a play\'s do; a stream of markers alone is none', () {
+      final c = catalogueOf(
+        songs: [
+          start('2024-01-01'),
+          sRow(date: '2024-01-01 20:00:00', uptime: '0:10:00', title: 'One'),
+          sRow(date: '2024-01-02 01:00:00', uptime: '3:20:00', title: 'Concert Grand End', genre: '-'),
+          sRow(date: '', title: 'Encore'),
+          start('2024-01-05'),
+          sRow(date: '2024-01-05 20:00:00', uptime: '1:00:00', title: 'CG Played'),
+          sRow(date: '2024-01-05 20:30:00', uptime: '1:30:00', title: 'Pause', requester: '0:30:00', genre: '-'),
+          start('2024-01-07'),
+          sRow(date: '2024-01-07 20:00:00', uptime: '0:05:00', title: 'Three'),
+        ],
+      );
+      expect(c.streams.map((s) => (s.date.toIso(), s.playCount, s.durationMinutes)), [
+        ('2024-01-01', 2, 200),
+        ('2024-01-07', 1, 5),
+      ]);
+      // the row typed without its date is of the day of the marker before it
+      expect(c.plays.map((p) => (p.title, p.rowDate.toIso(), p.streamId)), [
+        ('One', '2024-01-01', 0),
+        ('Encore', '2024-01-02', 0),
+        ('Three', '2024-01-07', 1),
+      ]);
+    });
+
+    test('before any stream: no play, no stream', () {
+      final c = catalogueOf(
+        songs: [
+          sRow(date: '2023-12-31 20:00:00', title: 'Concert Grand Start'),
+          start('2024-01-01'),
+          sRow(date: '2024-01-01 20:00:00', title: 'One'),
+        ],
+      );
+      expect(c.streams.map((s) => (s.date.toIso(), s.playCount)), [('2024-01-01', 1)]);
+    });
+
+    test('a "Stream Start" of Order 0 still starts a stream', () {
+      final c = catalogueOf(
+        songs: [
+          sRow(date: '2024-01-01', order: '0', title: 'Stream Start: 1/1', genre: '-'),
+          sRow(date: '2024-01-01 20:00:00', title: 'One'),
+          sRow(date: '2024-01-03', order: '0', title: 'Concert Grand Start', genre: '-'),
+          sRow(date: '2024-01-03 20:00:00', title: 'Two'),
+        ],
+      );
+      expect(c.streams.map((s) => (s.date.toIso(), s.playCount)), [('2024-01-01', 1), ('2024-01-03', 1)]);
+    });
+
+    test('the same whatever the steps of the load', () {
+      final h = highlightsCsv([hRow(title: 'v')]);
+      final s = songsCsv([
+        start('2024-01-01'),
+        sRow(date: '2024-01-01 20:00:00', title: 'One'),
+        sRow(date: '2024-01-01 20:10:00', uptime: '2:00:00', title: 'CG Played'),
+        sRow(date: '2024-01-01 20:20:00', title: 'Pause', requester: '0:30:00', genre: '-'),
+        sRow(date: '2024-01-01 20:30:00', title: 'Two'),
+        sRow(date: '2024-01-01 20:40:00', title: 'CG Played'),
+      ]);
+      String describe(Catalogue c) => [
+        for (final p in c.plays) '${p.title} ${p.titleId} ${p.streamId}',
+        for (final s in c.streams) '${s.playCount} ${s.durationMinutes}',
+        ...c.titles,
+      ].join(';');
+      final load = CatalogueLoad(h, s, rowsPerStep: 1, unitsPerStep: 5);
+      while (load.step()) {}
+      expect(describe(load.catalogue), describe(parseCatalogue(h, s)));
+      expect(describe(load.catalogue), 'One 0 0;Two 1 0;2 120;One;Two');
     });
   });
 

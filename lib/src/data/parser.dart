@@ -114,6 +114,31 @@ final _uptime = RegExp(r'^(\d+):(\d\d):(\d\d)$');
 /// A running time (`0:02:13`, `1:28:35`): what some rows of the Songs sheet carry in their Requester cell since
 /// September 2025, the time of the "Concert Grand" part. It names no requester.
 final _duration = RegExp(r'^\d+(?::\d+)+$');
+
+/// The title of a marker the moderators write among the songs of the Songs sheet (its whitespace collapsed): a
+/// second "Stream Start" of a stream, or a step of the "Concert Grand" (`Concert Grand Start`, `CG Played`,
+/// `(concert grand)`, `End of Concert Grand`...). A title that only holds those words further in is a song's.
+final _markerTitle = RegExp(
+  r'^(?:stream start|\(? ?(?:start of |end of |end )?(?:concert grand|cg\b))',
+  caseSensitive: false,
+);
+
+/// Whether [title] is that of a marker ([_markerTitle]). Most titles begin with another letter than those of the
+/// markers: they are told apart without the regular expression (a millisecond for the 11,000 titles of the sheet).
+bool _isMarkerTitle(String title) {
+  if (title.isEmpty) return false;
+  // ASCII letters lowercased; "(" stays itself
+  final first = title.codeUnitAt(0) | 0x20;
+  return (first == 0x73 || first == 0x63 || first == 0x65 || first == 0x28) && _markerTitle.hasMatch(title);
+}
+
+/// Whether a row of the Songs sheet of [requesterCell] and [genreCell] is a marker: a running time instead of a
+/// requester, and no genre. With a genre it is a song played during the Concert Grand, without requester.
+bool _isTimeMarker(String requesterCell, String genreCell) {
+  final genre = genreCell.trim();
+  return (genre.isEmpty || genre == '-') && _duration.hasMatch(requesterCell.trim());
+}
+
 final _youtube = RegExp(r'(?:youtu\.be/|v=)([\w-]{11})');
 
 /// The ids of the YouTube videos linked in [text], in their order: the forms of
@@ -585,7 +610,9 @@ class _SongsBuilder {
   final Map<String, List<int>> _songHighlights = {};
   late final List<String> _songKeys;
 
+  /// The id of [title], or -1 for the title of a marker ([_isMarkerTitle]): checked once per distinct title.
   int _title(String title) => _titleIds.putIfAbsent(title, () {
+    if (_isMarkerTitle(title)) return -1;
     titles.add(title);
     _titleKeys.add(songKey(title));
     return titles.length - 1;
@@ -677,6 +704,9 @@ class _SongsBuilder {
     });
   }
 
+  /// The plays of the rows [from] to [to], and their streams: a row of Order 0 starts a stream, a marker
+  /// ([_isMarkerTitle], [_isTimeMarker]) is no play. (Its requester cell still counted a spelling in [_countSpellings],
+  /// which reads every row: it is a running time or empty in the markers of the sheet.)
   void _addPlayDrafts(int from, int to) {
     final drafts = _drafts;
     var current = _current;
@@ -698,6 +728,17 @@ class _SongsBuilder {
       // no date, and none yet in its stream to give it
       if (date == null) continue;
       lastDate = date;
+      final requesterCell = _cell(row, _sRequester);
+      final genreCell = _cell(row, _sGenre);
+      final genre = Genre.parse(genreCell);
+      // a cell of no genre ("-", empty) is of Genre.other
+      final titleId = genre == Genre.other && _isTimeMarker(requesterCell, genreCell) ? -1 : _title(title);
+      if (titleId < 0) {
+        // a marker is no play and starts no stream, but its uptime counts for its stream (the last marker of a
+        // stream often carries its largest one), and its date for the rows after it
+        if (current != null) current.minutes = math.max(current.minutes, _uptimeMinutes(_cell(row, _sUptime)));
+        continue;
+      }
       if (current == null) {
         current = _StreamDraft(date, drafts.length);
         _streamDrafts.add(current);
@@ -708,10 +749,10 @@ class _SongsBuilder {
         _PlayDraft(
           _instant(when),
           date,
-          _title(title),
-          Genre.parse(_cell(row, _sGenre)),
+          titleId,
+          genre,
           PlayType.parse(_cell(row, _sType)),
-          _requesters.id(_cell(row, _sRequester)),
+          _requesters.id(requesterCell),
           PlayFlag.parse(_cell(row, _sNotes)),
           current,
         ),
