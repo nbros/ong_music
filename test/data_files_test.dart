@@ -133,6 +133,23 @@ void main() {
         expect(joined(), isFalse);
       });
     }
+    test('a failure of the files alone, the sheets fresh: no error of a sheet, then or later', () async {
+      branch = FakeDataBranch({
+        DataFile.vods: [SheetHttpException(_missing, 404)],
+        DataFile.aliases: [SheetHttpException(_missing, 404)],
+      });
+      startWith(sheetsAge: const Duration(hours: 1));
+      await notifier().idle;
+      expect(branch.calls.values, [1, 1], reason: 'asked at the start, none being kept');
+      // what shows the state again: the Songs sheet asked for
+      notifier().songsWanted(SongsTrigger.ongLog);
+      await notifier().idle;
+      expect(state().hasSongs, isTrue);
+      expect(state().lastError, isNull);
+      expect(state().songsError, isNull);
+      expect(state().isUpdating, isFalse);
+      expect(google.total, 0, reason: 'no download of the sheets for them');
+    });
   });
 
   group('downloads', () {
