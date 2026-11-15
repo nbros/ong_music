@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:ong_music/src/data/vod_offsets.dart';
 import 'package:ong_music/src/data/vods.dart';
 import 'package:ong_music/src/state/vods_state.dart';
 import 'package:ong_music/src/ui/app.dart';
@@ -168,6 +169,31 @@ void main() {
       await tester.pumpAndSettle();
       expect(app.effects.opened.map((u) => '$u'), ['https://youtu.be/$_first?t=3900']);
       expect(find.byType(StreamSheet), findsNothing, reason: 'the button, not the row');
+    });
+
+    testWidgets('the offsets: when their file comes, the button and the menu open the moved moment; a play they put '
+        'before the start of the recording loses both', (tester) async {
+      final app = await pumpApp(tester);
+      await goToTab(tester, 'Ong Log');
+      await _arrive(tester);
+      final lostWoods = _playRow('2024-03-01', 'Lost Woods');
+      final survive = _playRow('2024-03-02', 'I Will Survive');
+      expect(find.descendant(of: survive, matching: find.byType(VodButton)), findsOneWidget);
+      ProviderScope.containerOf(tester.element(find.byType(OngMusicApp)))
+          .read(vodOffsetsProvider.notifier)
+          .take(OffsetFile.parse('date\tuptime\toffset\tnote\n2024-03-01\t\t-600\n2024-03-02\t2:00:00+\t-7400\n'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.descendant(of: lostWoods, matching: find.byType(VodButton)));
+      await tester.pumpAndSettle();
+      expect(app.effects.opened.map((u) => '$u'), ['https://youtu.be/$_first?t=3300']);
+      await _menu(tester, lostWoods);
+      await tester.tap(find.text('Watch in the VOD'));
+      await tester.pumpAndSettle();
+      expect(app.effects.opened.map((u) => '$u').last, 'https://youtu.be/$_first?t=3300');
+      // 2:03:00 - 7400 s: 20 s before the start of the recording
+      expect(find.descendant(of: survive, matching: find.byType(VodButton)), findsNothing);
+      await _menu(tester, survive);
+      expect(_items(tester), ['Copy title']);
     });
 
     testWidgets('screen readers: a button of its own, named, with its action', (tester) async {
