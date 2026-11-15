@@ -55,6 +55,35 @@ It prints the streams with a VOD per year, the plays that get a link, the VODs t
 streams a day before and after, and their lengths), the days of several streams, the lines ignored and why, the
 lines replaced by a later one, the parts whose missing length blocks links, and the streams longer than their VOD.
 
+## `offsets.tsv`: where a song is in a recording that does not start with its stream
+
+One line per correction, tab-separated, UTF-8, a header line first:
+
+    date	uptime	offset	note
+
+| column   | what it holds                                                                                          |
+|----------|--------------------------------------------------------------------------------------------------------|
+| `date`   | the stream, written as the `date` cell of `vods.tsv` (`2021-07-30`, `2022-05-08#2`)                     |
+| `uptime` | empty: the whole stream; `1:00:00+`: the songs from that uptime on; `2:03:23`: the songs of exactly that uptime |
+| `offset` | whole seconds added to the uptime to give the position in the VOD (all its parts end to end): `-1140` when the recording starts 19 minutes after the stream |
+| `note`   | free text (information only)                                                                            |
+
+A song takes the line of its exact uptime, else the last `+` line at or before its uptime (the whole-stream line
+counting as `0:00:00+`), else no offset. A song the offset puts before the start of the recording gets no link. A
+whole-stream line of `0` changes nothing: it records that the stream was checked.
+
+Rules:
+- the first line that is neither empty nor a comment must be the header (its first cells `date`, `uptime`,
+  `offset`): a file without it is not taken (the app keeps the copy it has), nor is a file larger than 256 KB;
+- lines beginning with `#` and empty lines are ignored; so is a line whose date, uptime or offset does not read (an
+  offset beyond a day either way does not);
+- when two lines have the same date and the same uptime cell, the **later one wins**;
+- the tool of the extension rewrites the lines of one stream at a time and leaves every other line as it is.
+
+Check it with `vods.tsv` (the fourth argument is optional):
+
+    dart run tool/vods_check.dart highlights.csv songs.csv vods.tsv offsets.tsv
+
 ## `aliases.txt`: the names of one person
 
 One group per line, the names separated by commas (case and accents do not matter); `#` comments and empty lines
