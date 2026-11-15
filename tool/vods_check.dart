@@ -11,7 +11,8 @@
 // - the dates of several streams, with their VODs;
 // - the lines left out and why, those replaced by a later one, the parts after a hole;
 // - the parts whose missing duration blocks links;
-// - the streams longer than their VOD (the largest uptime past the end of the last part).
+// - the streams longer than their VOD (the largest uptime of their rows, markers included, past the end of the last
+//   part).
 //
 // ignore_for_file: avoid_print
 
@@ -48,17 +49,8 @@ void main(List<String> args) {
     return '$h:${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
   }
 
-  int? largestUptime(LiveStream s) {
-    int? largest;
-    for (final p in catalogue.playsOf(s)) {
-      final u = catalogue.uptimeOf(p);
-      if (u != null && (largest == null || u > largest)) largest = u;
-    }
-    return largest;
-  }
-
   String describe(LiveStream s) =>
-      '${keys[s.id]}  started ${start(s)}, ${s.playCount} plays, largest uptime ${duration(largestUptime(s))}';
+      '${keys[s.id]}  started ${start(s)}, ${s.playCount} plays, length ${duration(s.durationSeconds)}';
 
   String line(VodLine l) =>
       '    line ${l.lineNumber}: part ${l.part} ${l.id} ${duration(l.seconds)} posted ${l.posted}  ${l.title}';
@@ -209,10 +201,13 @@ void main(List<String> args) {
     final vod = links.vodOf(s)!;
     if (vod.any((l) => l.seconds == null)) continue;
     final total = vod.fold(0, (sum, l) => sum + l.seconds!);
-    final largest = largestUptime(s);
-    if (largest != null && largest >= total) longer.add((s, largest, total));
+    // its length as the app knows it: the largest uptime of its rows, markers included (Concert Grand End...)
+    final length = s.durationSeconds;
+    if (length > 0 && length >= total) longer.add((s, length, total));
   }
-  print('Streams whose largest uptime is past the end of their VOD (all its lengths known): ${longer.length}');
+  print(
+    'Streams longer than their VOD (all its lengths known; the largest uptime of their rows, markers included): ${longer.length}',
+  );
   for (final (s, largest, total) in longer) {
     print('  ${describe(s)}, VOD ${duration(total)} (${duration(largest - total)} short)');
     for (final l in links.vodOf(s)!) {

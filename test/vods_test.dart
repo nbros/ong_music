@@ -332,6 +332,7 @@ void main() {
       expect(c.plays.single.title, 'Song');
       expect(c.uptimeOf(c.plays.single), 7384);
       expect(c.streams.single.durationMinutes, 180);
+      expect(c.streams.single.durationSeconds, 3 * 3600 + 59, reason: 'to the second, the marker included');
     });
 
     test('an uptime too long for the table is none, the length of the stream as before', () {

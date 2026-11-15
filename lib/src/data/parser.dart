@@ -163,9 +163,6 @@ int _uptimeSeconds(String cell) {
   return hours == null || hours > _maxUptimeHours ? -1 : hours * 3600 + int.parse(m[2]!) * 60 + int.parse(m[3]!);
 }
 
-/// The minutes of an uptime of [_uptimeSeconds], 0 for none.
-int _minutesOf(int uptimeSeconds) => uptimeSeconds < 0 ? 0 : uptimeSeconds ~/ 60;
-
 /// The largest uptime [Int32List] holds: beyond (68 years), a play has none (`Catalogue.uptimeOf`).
 const _maxStoredUptime = 0x7fffffff;
 
@@ -382,7 +379,9 @@ class _StreamDraft {
   /// The instant of its "Stream Start" row (`LiveStream.startMinute`), null when the row has no time.
   int? startMinute;
   int count = 0;
-  int minutes = 0;
+
+  /// The largest uptime of its rows, markers included, in seconds ([_uptimeSeconds]); 0 without any.
+  int seconds = 0;
 }
 
 class _PlayDraft {
@@ -724,7 +723,7 @@ class _SongsBuilder {
           date: kept[i].date!,
           firstPlayId: kept[i].start,
           playCount: kept[i].count,
-          durationMinutes: kept[i].minutes,
+          durationSeconds: kept[i].seconds,
           highlightIds: List.unmodifiable(streamHighlights[i]),
           startMinute: kept[i].startMinute,
         ),
@@ -806,7 +805,7 @@ class _SongsBuilder {
       if (titleId < 0) {
         // a marker is no play and starts no stream, but its uptime counts for its stream (the last marker of a
         // stream often carries its largest one), and its date for the rows after it
-        if (current != null) current.minutes = math.max(current.minutes, _minutesOf(uptime));
+        if (current != null) current.seconds = math.max(current.seconds, uptime);
         continue;
       }
       if (current == null) {
@@ -814,7 +813,7 @@ class _SongsBuilder {
         _streamDrafts.add(current);
       }
       current.count++;
-      current.minutes = math.max(current.minutes, _minutesOf(uptime));
+      current.seconds = math.max(current.seconds, uptime);
       drafts.add(
         _PlayDraft(
           _instant(when),

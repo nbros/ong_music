@@ -441,7 +441,7 @@ final class LiveStream {
     required this.date,
     required this.firstPlayId,
     required this.playCount,
-    required this.durationMinutes,
+    required this.durationSeconds,
     required this.highlightIds,
     this.startMinute,
   });
@@ -460,8 +460,12 @@ final class LiveStream {
   /// Number of plays, at least 1.
   final int playCount;
 
-  /// Length in minutes: the largest "Uptime" (`h:mm:ss`) of its rows, 0 if none.
-  final int durationMinutes;
+  /// Length in seconds: the largest "Uptime" (`h:mm:ss`) of its rows, the markers among them (`Concert Grand End`, a
+  /// running time...), 0 if none. What a VOD of it must hold (`tool/vods_check.dart`).
+  final int durationSeconds;
+
+  /// Length in whole minutes ([durationSeconds]).
+  int get durationMinutes => durationSeconds ~/ 60;
 
   /// Ids of the highlights linked to one of its plays, ascending.
   final List<int> highlightIds;
