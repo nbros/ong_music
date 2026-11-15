@@ -5,13 +5,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ong_music/src/data/catalogue.dart';
 import 'package:ong_music/src/data/csv.dart';
+import 'package:ong_music/src/data/data_files.dart';
 import 'package:ong_music/src/data/parser.dart';
 import 'package:ong_music/src/data/repository.dart';
+import 'package:ong_music/src/data/requester_aliases.dart';
 import 'package:ong_music/src/data/sheet_cache.dart';
 import 'package:ong_music/src/data/sheets.dart';
 import 'package:ong_music/src/data/slices.dart';
 import 'package:ong_music/src/data/text.dart';
 import 'package:ong_music/src/state/catalogue_state.dart';
+import 'package:ong_music/src/state/vods_state.dart';
 
 import 'catalogue_dump.dart';
 import 'fixtures.dart';
@@ -652,6 +655,8 @@ void main() {
         overrides: [
           loadsInSlicesProvider.overrideWithValue(true),
           sheetCacheProvider.overrideWithValue(MemorySheetCache()),
+          dataFileFetcherProvider.overrideWithValue(const NoDataFiles()),
+          dataFileCacheProvider.overrideWithValue(const NoDataFileCache()),
         ],
       );
       expect(web.read(sheetParserProvider), isA<ParseInSlices>());
@@ -681,6 +686,8 @@ void main() {
           loadsInSlicesProvider.overrideWithValue(true),
           sheetFetcherProvider.overrideWithValue(FakeFetcher(sheets)),
           sheetCacheProvider.overrideWithValue(cache),
+          dataFileFetcherProvider.overrideWithValue(const NoDataFiles()),
+          dataFileCacheProvider.overrideWithValue(const NoDataFileCache()),
           prefetchDiscarderProvider.overrideWithValue(() {}),
         ],
       );
@@ -715,6 +722,8 @@ void main() {
           sheetParserProvider.overrideWithValue(parser),
           sheetFetcherProvider.overrideWithValue(FakeFetcher(sampleSheets(tag: 'new'))),
           sheetCacheProvider.overrideWithValue(cache),
+          dataFileFetcherProvider.overrideWithValue(const NoDataFiles()),
+          dataFileCacheProvider.overrideWithValue(const NoDataFileCache()),
           prefetchDiscarderProvider.overrideWithValue(() {}),
         ],
       );
@@ -796,7 +805,12 @@ class _GatedParser implements SheetParser {
   final List<bool> backgrounds;
 
   @override
-  Future<Catalogue> highlights(String csv, {bool Function()? isAbandoned, bool background = false}) async {
+  Future<Catalogue> highlights(
+    String csv, {
+    bool Function()? isAbandoned,
+    bool background = false,
+    RequesterAliases? aliases,
+  }) async {
     asked.add(isAbandoned);
     backgrounds.add(background);
     await _release;

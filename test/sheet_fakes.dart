@@ -3,6 +3,7 @@ import 'dart:async';
 
 import 'package:ong_music/src/data/catalogue.dart';
 import 'package:ong_music/src/data/repository.dart';
+import 'package:ong_music/src/data/requester_aliases.dart';
 import 'package:ong_music/src/data/sheet_cache.dart';
 import 'package:ong_music/src/data/sheet_snapshot.dart';
 import 'package:ong_music/src/data/sheets.dart';
@@ -115,10 +116,19 @@ class RecordingParser implements SheetParser {
     if (!deaf.contains((sheet, tag)) && (isAbandoned?.call() ?? false)) throw const LoadAbandoned();
   }
 
+  /// The groups of names each parse of the highlights was given, in order.
+  final aliases = <RequesterAliases?>[];
+
   @override
-  Future<Catalogue> highlights(String csv, {bool Function()? isAbandoned, bool background = false}) async {
+  Future<Catalogue> highlights(
+    String csv, {
+    bool Function()? isAbandoned,
+    bool background = false,
+    RequesterAliases? aliases,
+  }) async {
+    this.aliases.add(aliases);
     await _before(Sheet.highlights, csv, isAbandoned, background);
-    return const ParseOnCurrentIsolate().highlights(csv);
+    return const ParseOnCurrentIsolate().highlights(csv, aliases: aliases);
   }
 
   @override

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ong_music/src/data/catalogue.dart';
+import 'package:ong_music/src/data/data_files.dart';
 import 'package:ong_music/src/data/parser.dart';
 import 'package:ong_music/src/data/repository.dart';
 import 'package:ong_music/src/data/sheet_cache.dart';
@@ -11,6 +12,7 @@ import 'package:ong_music/src/data/sheet_snapshot.dart';
 import 'package:ong_music/src/data/sheets.dart';
 import 'package:ong_music/src/state/catalogue_state.dart';
 import 'package:ong_music/src/state/settings_state.dart';
+import 'package:ong_music/src/state/vods_state.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'fixtures.dart';
@@ -45,6 +47,8 @@ void main() {
         sheetFetcherProvider.overrideWithValue(google),
         snapshotFetcherProvider.overrideWithValue(const NoSnapshot()),
         sheetCacheProvider.overrideWithValue(sheetCache ?? cache),
+        dataFileFetcherProvider.overrideWithValue(const NoDataFiles()),
+        dataFileCacheProvider.overrideWithValue(const NoDataFileCache()),
         sheetParserProvider.overrideWithValue(parse ?? parser),
         songsDeferralProvider.overrideWithValue(() async {
           deferrals++;
@@ -1077,6 +1081,8 @@ void main() {
               sheetFetcherProvider.overrideWithValue(google),
               snapshotFetcherProvider.overrideWithValue(const NoSnapshot()),
               sheetCacheProvider.overrideWithValue(kept),
+              dataFileFetcherProvider.overrideWithValue(const NoDataFiles()),
+              dataFileCacheProvider.overrideWithValue(const NoDataFileCache()),
               sheetParserProvider.overrideWithValue(const ParseOnCurrentIsolate()),
               clockProvider.overrideWithValue(() => clock),
               prefetchDiscarderProvider.overrideWithValue(() => discards++),

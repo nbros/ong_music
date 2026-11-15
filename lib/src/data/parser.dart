@@ -152,13 +152,22 @@ final _digits = RegExp(r'^\d+$');
 /// Beyond it an uptime is not one (over a century), and its minutes would not be exact in every build.
 const _maxUptimeHours = 999999;
 
-int _uptimeMinutes(String cell) {
+/// The uptime of a cell (`h:mm:ss`) in seconds, -1 when it is not one. Its minutes, `~/ 60`, are the length of a
+/// stream; its seconds the position of a play in the VOD (`Catalogue.uptimeOf`).
+int _uptimeSeconds(String cell) {
   final m = _uptime.firstMatch(cell.trim());
-  if (m == null) return 0;
-  // an absurdly long number must not reject the whole sheet (int.parse throws on native), and gives 0 in every build
+  if (m == null) return -1;
+  // an absurdly long number must not reject the whole sheet (int.parse throws on native), and gives none in every
+  // build
   final hours = tryParseExactInt(m[1]!);
-  return hours == null || hours > _maxUptimeHours ? 0 : hours * 60 + int.parse(m[2]!);
+  return hours == null || hours > _maxUptimeHours ? -1 : hours * 3600 + int.parse(m[2]!) * 60 + int.parse(m[3]!);
 }
+
+/// The minutes of an uptime of [_uptimeSeconds], 0 for none.
+int _minutesOf(int uptimeSeconds) => uptimeSeconds < 0 ? 0 : uptimeSeconds ~/ 60;
+
+/// The largest uptime [Int32List] holds: beyond (68 years), a play has none (`Catalogue.uptimeOf`).
+const _maxStoredUptime = 0x7fffffff;
 
 /// The instant of a date cell with a time, in minutes since the epoch (see `Play.loggedMinute`), or null.
 int? _instant(({CalendarDate date, int? minute})? cell) {
@@ -199,8 +208,10 @@ SongsPart parseSongs(Catalogue highlights, String songsCsv) {
   return load.songs;
 }
 
-/// [parseHighlights] taking one argument, for `compute` / `Isolate.run`.
-Catalogue parseHighlightsRecord(String highlightsCsv) => parseHighlights(highlightsCsv);
+/// [parseHighlights] taking one record argument, for `compute` / `Isolate.run`: the sheet and the groups of names of
+/// one requester (the app's by default).
+Catalogue parseHighlightsRecord(({String highlightsCsv, RequesterAliases? aliases}) input) =>
+    parseHighlights(input.highlightsCsv, aliases: input.aliases);
 
 /// [parseSongs] taking one record argument, for `compute` / `Isolate.run`: only the [SongsPart] comes back, without
 /// a copy of the highlights.
@@ -301,6 +312,7 @@ final class SongsLoad {
       titles: b.titles,
       songs: b.songs,
       highlightPlays: b.highlightPlays,
+      playUptimes: b.playUptimes,
       aliases: highlights.aliases,
       done: (songs) => _songs = songs,
       pauseEvery: rowsPerStep,
@@ -361,17 +373,30 @@ Catalogue parseCatalogueRecord(({String highlightsCsv, String songsCsv}) sheets)
     parseCatalogue(sheets.highlightsCsv, sheets.songsCsv);
 
 class _StreamDraft {
-  _StreamDraft(this.date, this.start);
+  _StreamDraft(this.date, this.start, [this.startMinute]);
 
   /// Null until known: the date of its "Stream Start" row could not be read.
   CalendarDate? date;
   final int start;
+
+  /// The instant of its "Stream Start" row (`LiveStream.startMinute`), null when the row has no time.
+  int? startMinute;
   int count = 0;
   int minutes = 0;
 }
 
 class _PlayDraft {
-  _PlayDraft(this.minute, this.date, this.titleId, this.genre, this.type, this.requester, this.flag, this.stream);
+  _PlayDraft(
+    this.minute,
+    this.date,
+    this.titleId,
+    this.genre,
+    this.type,
+    this.requester,
+    this.flag,
+    this.stream,
+    this.uptime,
+  );
   final int? minute;
   final CalendarDate date;
   final int titleId;
@@ -380,6 +405,9 @@ class _PlayDraft {
   final int? requester;
   final PlayFlag flag;
   final _StreamDraft stream;
+
+  /// Seconds, -1 for none ([_uptimeSeconds]).
+  final int uptime;
   int? highlight;
 }
 
@@ -621,6 +649,7 @@ class _SongsBuilder {
   late final List<LiveStream> streams;
   late final List<Requester> requesters;
   late final Int32List highlightPlays;
+  late final Int32List playUptimes;
   final Map<String, Song> songs = {};
 
   // the work in progress of the loops, from one call to the next
@@ -664,7 +693,11 @@ class _SongsBuilder {
     for (final s in kept) {
       final first = drafts[s.start].date;
       final date = s.date;
-      if (date == null || date.daysUntil(first).abs() > 1) s.date = first;
+      if (date == null || date.daysUntil(first).abs() > 1) {
+        s.date = first;
+        // the time of a mistyped day is no instant of the stream either
+        s.startMinute = null;
+      }
     }
     _streamIndex = <_StreamDraft, int>{for (var i = 0; i < kept.length; i++) kept[i]: i};
     yield null;
@@ -675,6 +708,7 @@ class _SongsBuilder {
     yield null;
 
     // --- plays, streams
+    playUptimes = Int32List(drafts.length);
     yield* _inSteps(pauseEvery, 0, drafts.length, _addPlays);
     plays = List.unmodifiable(_plays);
     yield null;
@@ -692,6 +726,7 @@ class _SongsBuilder {
           playCount: kept[i].count,
           durationMinutes: kept[i].minutes,
           highlightIds: List.unmodifiable(streamHighlights[i]),
+          startMinute: kept[i].startMinute,
         ),
     ]);
     yield null;
@@ -751,7 +786,7 @@ class _SongsBuilder {
       if (_cell(row, _sOrder).trim() == '0') {
         // a "Stream Start" row starts a stream even when its date is missing or mistyped: without it, its songs
         // would go to the stream before
-        current = _StreamDraft(when?.date, drafts.length);
+        current = _StreamDraft(when?.date, drafts.length, _instant(when));
         _streamDrafts.add(current);
         lastDate = when?.date;
         continue;
@@ -767,10 +802,11 @@ class _SongsBuilder {
       final genre = Genre.parse(genreCell);
       // a cell of no genre ("-", empty) is of Genre.other
       final titleId = genre == Genre.other && _isTimeMarker(requesterCell, genreCell) ? -1 : _title(title);
+      final uptime = _uptimeSeconds(_cell(row, _sUptime));
       if (titleId < 0) {
         // a marker is no play and starts no stream, but its uptime counts for its stream (the last marker of a
         // stream often carries its largest one), and its date for the rows after it
-        if (current != null) current.minutes = math.max(current.minutes, _uptimeMinutes(_cell(row, _sUptime)));
+        if (current != null) current.minutes = math.max(current.minutes, _minutesOf(uptime));
         continue;
       }
       if (current == null) {
@@ -778,7 +814,7 @@ class _SongsBuilder {
         _streamDrafts.add(current);
       }
       current.count++;
-      current.minutes = math.max(current.minutes, _uptimeMinutes(_cell(row, _sUptime)));
+      current.minutes = math.max(current.minutes, _minutesOf(uptime));
       drafts.add(
         _PlayDraft(
           _instant(when),
@@ -789,6 +825,7 @@ class _SongsBuilder {
           _requesters.id(requesterCell),
           PlayFlag.parse(_cell(row, _sNotes)),
           current,
+          uptime,
         ),
       );
     }
@@ -828,7 +865,10 @@ class _SongsBuilder {
 
   void _addPlays(int from, int to) {
     final drafts = _drafts;
+    final uptimes = playUptimes;
     for (var i = from; i < to; i++) {
+      final uptime = drafts[i].uptime;
+      uptimes[i] = uptime > _maxStoredUptime ? -1 : uptime;
       _plays.add(
         Play(
           id: i,

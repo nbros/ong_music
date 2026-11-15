@@ -321,4 +321,36 @@ void main() {
       expect(c.requesters.map((r) => r.name), names);
     });
   });
+
+  group('the table of the branch data (aliases.txt)', () {
+    test('reads as the bundled one, with comments and a byte order mark', () {
+      final aliases = RequesterAliases.tryParse(
+        '\uFEFF# the groups of names of one person\n\nAmy, amy_alt, Amyy\n  # Bob\nBob, bob2,\nCarol\n',
+      )!;
+      expect(aliases.keyOf(fold('Amyy')), aliases.keyOf(fold('Amy')));
+      expect(aliases.keyOf(fold('bob2')), aliases.keyOf(fold('Bob')));
+      expect(aliases.isGroup(fold('Carol')), isFalse, reason: 'a line of one name is no group');
+      expect(aliases.keyOf(fold('# Bob')), fold('# Bob'), reason: 'a comment is no name');
+    });
+
+    test('the bundled table written as the file gives the same groups', () {
+      final file = RequesterAliases.tryParse('# comment\n$requesterAliasTable')!;
+      for (final group in requesterAliasGroups(requesterAliasTable)) {
+        for (final name in group) {
+          expect(file.keyOf(fold(name)), RequesterAliases.bundled.keyOf(fold(name)), reason: name);
+          expect(
+            file.searchTextOf(file.keyOf(fold(name))),
+            RequesterAliases.bundled.searchTextOf(file.keyOf(fold(name))),
+          );
+        }
+      }
+    });
+
+    test('does not read when it holds no group, is a web page, or puts a name in two groups', () {
+      expect(RequesterAliases.tryParse(''), isNull);
+      expect(RequesterAliases.tryParse('# nothing\nCarol\n'), isNull);
+      expect(RequesterAliases.tryParse('<!DOCTYPE html>\n<html>Amy, Amyy</html>'), isNull);
+      expect(RequesterAliases.tryParse('Amy, Amyy\nAMY, Bob'), isNull, reason: 'Amy would join Bob');
+    });
+  });
 }

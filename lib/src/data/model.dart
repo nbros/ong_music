@@ -443,6 +443,7 @@ final class LiveStream {
     required this.playCount,
     required this.durationMinutes,
     required this.highlightIds,
+    this.startMinute,
   });
 
   /// Index in `Catalogue.streams` (oldest first).
@@ -464,6 +465,11 @@ final class LiveStream {
 
   /// Ids of the highlights linked to one of its plays, ascending.
   final List<int> highlightIds;
+
+  /// The instant of its "Stream Start" row, in minutes since 1970-01-01 00:00 UTC (as `Play.loggedMinute`): what
+  /// tells its date in Sydney, that of the title of its VOD (`streamKeys`). Null when the row has no time, when its
+  /// date was mistyped (replaced by that of its first play, see [date]), or when the stream has no such row.
+  final int? startMinute;
 
   /// Id of its last play.
   int get lastPlayId => firstPlayId + playCount - 1;

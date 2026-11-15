@@ -165,9 +165,11 @@ final class Catalogue {
     required Int32List highlightRequests,
     required Map<String, Map<String, int>> spellings,
     required Int32List? highlightPlays,
+    required Int32List? playUptimes,
     required Catalogue? highlightsOnly,
     required this.aliases,
   }) : _songs = songs,
+       _playUptimes = playUptimes,
        _titleFolds = titleFolds,
        _requesterFolds = requesterFolds,
        _requesterByFold = requesterByFold,
@@ -236,6 +238,7 @@ final class Catalogue {
         highlightRequests: highlightRequests,
         spellings: spellings,
         highlightPlays: null,
+        playUptimes: null,
         highlightsOnly: null,
         aliases: aliases,
       ),
@@ -268,6 +271,7 @@ final class Catalogue {
       highlightRequests: base._highlightRequests,
       spellings: base._spellings,
       highlightPlays: songs.highlightPlays,
+      playUptimes: songs.playUptimes,
       highlightsOnly: base,
       aliases: base.aliases,
     );
@@ -308,6 +312,10 @@ final class Catalogue {
 
   /// The play of each highlight (`playOf`), -1 for none; null without [hasSongs].
   final Int32List? _highlightPlays;
+
+  /// The uptime of each play in seconds (`uptimeOf`), -1 for none; null without [hasSongs]. Four bytes a play beside
+  /// the objects, rather than a field of each `Play`.
+  final Int32List? _playUptimes;
   final Catalogue? _highlightsOnly;
 
   /// Whether the Songs sheet is in: the Ong Log, the plays of the highlights, the request counts.
@@ -395,6 +403,13 @@ final class Catalogue {
 
   /// The highlight linked to a play, or null.
   Highlight? highlightOf(Play play) => play.highlightId == null ? null : highlights[play.highlightId!];
+
+  /// The "Uptime" of a play (`h:mm:ss`), in seconds: its position in the stream. Null when its cell is empty or not
+  /// an uptime. `0:00:00` is 0, as written (the moderators' placeholder: see `VodLinks`).
+  int? uptimeOf(Play play) {
+    final seconds = _playUptimes?[play.id] ?? -1;
+    return seconds < 0 ? null : seconds;
+  }
 
   /// The play linked to a highlight: the Ong Log row this video shows (same `Highlight.songKey`, played within one
   /// day of its `Highlight.streamDate`), or null. Null for all without [hasSongs].
@@ -534,6 +549,7 @@ final class SongsPart {
     required this.requesterSearch,
     required this.playGenreCounts,
     required this.highlightPlays,
+    required this.playUptimes,
   });
 
   /// Computes the indexes of the plays, in steps (see `SongsLoad`), then [done] receives the part. Only the parser
@@ -548,6 +564,7 @@ final class SongsPart {
     required List<String> titles,
     required Map<String, Song> songs,
     required Int32List highlightPlays,
+    required Int32List playUptimes,
     required RequesterAliases aliases,
     required void Function(SongsPart songs) done,
     int pauseEvery = rowsPerPause,
@@ -580,6 +597,7 @@ final class SongsPart {
         requesterSearch: requesterSearch,
         playGenreCounts: Catalogue._genreCounts(playGenres),
         highlightPlays: highlightPlays,
+        playUptimes: playUptimes,
       ),
     );
   }
@@ -597,6 +615,9 @@ final class SongsPart {
   final List<String> requesterSearch;
   final List<GenreCount> playGenreCounts;
   final Int32List highlightPlays;
+
+  /// The uptime of each play in seconds, -1 for none (`Catalogue.uptimeOf`).
+  final Int32List playUptimes;
 
   /// Number of highlights it was parsed against.
   int get highlightCount => highlightPlays.length;

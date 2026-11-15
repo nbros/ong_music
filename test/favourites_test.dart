@@ -3,12 +3,14 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ong_music/src/data/catalogue.dart';
+import 'package:ong_music/src/data/data_files.dart';
 import 'package:ong_music/src/data/repository.dart';
 import 'package:ong_music/src/data/sheet_cache.dart';
 import 'package:ong_music/src/data/sheet_snapshot.dart';
 import 'package:ong_music/src/data/sheets.dart';
 import 'package:ong_music/src/state/catalogue_state.dart';
 import 'package:ong_music/src/state/settings_state.dart';
+import 'package:ong_music/src/state/vods_state.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 // the storage under the plugin, to write to it as another window of the app would
 // ignore: depend_on_referenced_packages
@@ -52,6 +54,8 @@ void main() {
         sheetFetcherProvider.overrideWithValue(fetcher),
         snapshotFetcherProvider.overrideWithValue(const NoSnapshot()),
         sheetCacheProvider.overrideWithValue(MemorySheetCache()),
+        dataFileFetcherProvider.overrideWithValue(const NoDataFiles()),
+        dataFileCacheProvider.overrideWithValue(const NoDataFileCache()),
         sheetParserProvider.overrideWithValue(const ParseOnCurrentIsolate()),
         clockProvider.overrideWithValue(() => now),
       ],
