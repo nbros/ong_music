@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:ong_music/src/state/catalogue_state.dart';
 import 'package:ong_music/src/state/settings_state.dart';
 import 'package:ong_music/src/ui/highlights_page.dart';
 import 'package:ong_music/src/ui/launcher_shortcuts.dart';
@@ -120,23 +121,95 @@ void main() {
       expect(tester.testTextInput.isVisible, isTrue);
     });
 
-    testWidgets('asks for the keyboard once more when it did not come, not when it did', (tester) async {
+    testWidgets('a start on the shortcut: asks for the keyboard once more when it did not come', (tester) async {
       _inFront(tester);
-      final shortcuts = FakeLauncherShortcuts(launch: AppShortcut.search);
-      await pumpApp(tester, shortcuts: shortcuts);
+      await pumpApp(tester, shortcuts: FakeLauncherShortcuts(launch: AppShortcut.search));
       expect(_highlightsField(tester).focusNode!.hasFocus, isTrue);
       final asked = _keyboardRequests(tester);
       expect(asked, greaterThan(0));
       // Android ignored it (the app's window did not have the focus yet): no keyboard in the window
       await tester.pump(keyboardRetryDelay);
       expect(_keyboardRequests(tester), asked + 1);
+      await tester.pump(keyboardRetryDelay * 2);
+      expect(_keyboardRequests(tester), asked + 1, reason: 'once');
+    });
 
-      shortcuts.use(AppShortcut.search);
-      await tester.pumpAndSettle();
-      final again = _keyboardRequests(tester);
+    testWidgets('a start on the shortcut, the keyboard up: not asked again', (tester) async {
+      _inFront(tester);
+      await pumpApp(tester, shortcuts: FakeLauncherShortcuts(launch: AppShortcut.search));
+      final asked = _keyboardRequests(tester);
       tester.view.viewInsets = const FakeViewPadding(bottom: 300);
       await tester.pump(keyboardRetryDelay);
-      expect(_keyboardRequests(tester), again, reason: 'the keyboard is up');
+      expect(_keyboardRequests(tester), asked);
+    });
+
+    testWidgets('a start on the shortcut, the keyboard closed by the user meanwhile: not opened again', (tester) async {
+      _inFront(tester);
+      await pumpApp(tester, shortcuts: FakeLauncherShortcuts(launch: AppShortcut.search));
+      final asked = _keyboardRequests(tester);
+      tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+      await tester.pump(const Duration(milliseconds: 200));
+      // the keyboard's own Back: the app only sees the room it took come back
+      tester.view.viewInsets = FakeViewPadding.zero;
+      await tester.pump(keyboardRetryDelay);
+      expect(_keyboardRequests(tester), asked);
+    });
+
+    testWidgets('a start on the shortcut, the user doing something else meanwhile: not asked again', (tester) async {
+      _inFront(tester);
+      await pumpApp(tester, shortcuts: FakeLauncherShortcuts(launch: AppShortcut.search));
+      final asked = _keyboardRequests(tester);
+      // a finger on the list (a scroll begins)
+      final finger = await tester.startGesture(tester.getCenter(find.byType(HighlightRow).first));
+      await finger.moveBy(const Offset(0, -40));
+      await tester.pump(keyboardRetryDelay);
+      await finger.up();
+      expect(_keyboardRequests(tester), asked);
+    });
+
+    testWidgets('the app already in front: asked once, not again', (tester) async {
+      _inFront(tester);
+      final shortcuts = FakeLauncherShortcuts();
+      await pumpApp(tester, shortcuts: shortcuts);
+      shortcuts.use(AppShortcut.search);
+      await tester.pumpAndSettle();
+      expect(_highlightsField(tester).focusNode!.hasFocus, isTrue);
+      final asked = _keyboardRequests(tester);
+      // no keyboard in the window: a keyboard of its own (a computer), or the user closed it already
+      await tester.pump(keyboardRetryDelay * 2);
+      expect(_keyboardRequests(tester), asked);
+    });
+
+    testWidgets('before the catalogue: the cursor in the field when the list comes, if the user waited', (
+      tester,
+    ) async {
+      _inFront(tester);
+      final shortcuts = FakeLauncherShortcuts(launch: AppShortcut.search);
+      // (the status view animates: frames one by one)
+      final app = await pumpApp(tester, shortcuts: shortcuts, state: const CatalogueState(), settle: false);
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.byType(HighlightRow), findsNothing);
+      expect(_keyboardRequests(tester), 0, reason: 'no field yet');
+      app.notifier.emit(loadedState(testCatalogue(), testNow));
+      await tester.pumpAndSettle();
+      expect(_highlightsField(tester).focusNode!.hasFocus, isTrue);
+      expect(tester.testTextInput.isVisible, isTrue);
+    });
+
+    testWidgets('before the catalogue, then the Ong Log: the field never takes the focus later', (tester) async {
+      _inFront(tester);
+      final shortcuts = FakeLauncherShortcuts(launch: AppShortcut.search);
+      final app = await pumpApp(tester, shortcuts: shortcuts, state: const CatalogueState(), settle: false);
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.tap(find.descendant(of: navigation(), matching: find.text('Ong Log')));
+      await tester.pump(const Duration(milliseconds: 500));
+      app.notifier.emit(loadedState(testCatalogue(), testNow));
+      await tester.pumpAndSettle();
+      await tester.pump(keyboardRetryDelay * 2);
+      await goToTab(tester, 'Highlights');
+      expect(_highlightsField(tester).focusNode!.hasFocus, isFalse);
+      expect(tester.testTextInput.isVisible, isFalse);
+      expect(_keyboardRequests(tester), 0);
     });
   });
 

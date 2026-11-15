@@ -772,17 +772,17 @@ class FakeLauncherShortcuts implements LauncherShortcuts {
 
   final AppShortcut? launch;
   final offered = <List<AppShortcut>>[];
-  void Function(AppShortcut shortcut)? _onShortcut;
+  void Function(AppShortcut shortcut, {required bool launch})? _onShortcut;
 
   @override
-  Future<void> listen(void Function(AppShortcut shortcut) onShortcut) async {
+  Future<void> listen(void Function(AppShortcut shortcut, {required bool launch}) onShortcut) async {
     _onShortcut = onShortcut;
-    if (launch case final launch?) onShortcut(launch);
+    if (launch case final launch?) onShortcut(launch, launch: true);
   }
 
   @override
   Future<void> offer(List<AppShortcut> shortcuts) async => offered.add(shortcuts);
 
   /// A tap on [shortcut] in the launcher's menu while the app runs.
-  void use(AppShortcut shortcut) => _onShortcut!(shortcut);
+  void use(AppShortcut shortcut) => _onShortcut!(shortcut, launch: false);
 }
