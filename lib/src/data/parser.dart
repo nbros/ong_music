@@ -117,9 +117,10 @@ final _duration = RegExp(r'^\d+(?::\d+)+$');
 
 /// The title of a marker the moderators write among the songs of the Songs sheet (its whitespace collapsed): a
 /// second "Stream Start" of a stream, or a step of the "Concert Grand" (`Concert Grand Start`, `CG Played`,
-/// `(concert grand)`, `End of Concert Grand`...). A title that only holds those words further in is a song's.
+/// `(concert grand)`, `End of Concert Grand`...). A title that only holds those words further in, or that begins
+/// with a longer word (`Stream Started`), is a song's.
 final _markerTitle = RegExp(
-  r'^(?:stream start|\(? ?(?:start of |end of |end )?(?:concert grand|cg\b))',
+  r'^(?:stream start|\(? ?(?:start of |end of |end )?(?:concert grand|cg))\b',
   caseSensitive: false,
 );
 

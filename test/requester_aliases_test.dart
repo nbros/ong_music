@@ -37,6 +37,23 @@ void main() {
       }
     });
 
+    test('a table naming one name in two groups is refused where it is read (debug builds)', () {
+      expect(
+        () => RequesterAliases([
+          ['a1', 'b1'],
+          ['A1', 'c1'],
+        ]),
+        throwsA(isA<AssertionError>()),
+      );
+      // the same name twice in one group is one name
+      expect(
+        RequesterAliases([
+          ['a1', 'A1', 'b1'],
+        ]).keyOf('b1'),
+        'a1',
+      );
+    });
+
     test('every group holds two names at least, none empty or with a comma', () {
       expect(groups, isNotEmpty);
       for (final group in groups) {

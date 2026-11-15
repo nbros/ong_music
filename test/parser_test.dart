@@ -486,6 +486,7 @@ void main() {
         'Start concert grand',
         'Ending of Concert Grand',
         'Stream Started',
+        'Concert Grandiose',
         'Upstream Start',
         'End',
         '?',
@@ -493,11 +494,7 @@ void main() {
         'Unboxing',
         'Improvisation',
       ];
-      // "Stream Started" begins with "Stream Start": a marker
-      expect(playTitles([for (final title in songs) sRow(date: '2024-01-01 20:00:00', title: title)]), [
-        for (final title in songs)
-          if (title != 'Stream Started') title,
-      ]);
+      expect(playTitles([for (final title in songs) sRow(date: '2024-01-01 20:00:00', title: title)]), songs);
     });
 
     test('a running time instead of a requester and no genre is a marker; with a genre, a song without requester', () {

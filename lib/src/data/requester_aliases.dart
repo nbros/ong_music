@@ -111,6 +111,9 @@ final class RequesterAliases {
       final folds = {for (final name in group) fold(name)}.toList()..sort();
       if (folds.length < 2) continue;
       for (final f in folds) {
+        // a name in two groups would join them, or leave the name in the search text of a group it is not of: the
+        // tests of the table refuse it, and a hand edit that slips past them stops here in debug builds
+        assert(!_keys.containsKey(f), 'the name "$f" is in two groups of the table of the requesters');
         _keys[f] = folds.first;
       }
       _searchTexts[folds.first] = folds.join('\n');
