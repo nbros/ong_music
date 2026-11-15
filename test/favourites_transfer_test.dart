@@ -246,6 +246,45 @@ Sent from my phone''';
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('the page under the dialog is where it was once the dialog and its keyboard are gone', (tester) async {
+    // a phone with a gesture bar: the keyboard rises over it step by step, and takes its inset as it does
+    void keyboard(double height) {
+      tester.view.viewInsets = FakeViewPadding(bottom: height);
+      tester.view.padding = FakeViewPadding(top: 24, bottom: height > 24 ? 0 : 24 - height);
+    }
+
+    tester.view.viewPadding = const FakeViewPadding(top: 24, bottom: 24);
+    tester.view.padding = const FakeViewPadding(top: 24, bottom: 24);
+    addTearDown(tester.view.resetViewPadding);
+    addTearDown(tester.view.resetPadding);
+    addTearDown(tester.view.resetViewInsets);
+    await pumpApp(tester, state: _state(), size: const Size(412, 892));
+    await goToTab(tester, 'About');
+    // the end of the page, where the footer is
+    final position = tester.state<ScrollableState>(aboutScrollable()).position;
+    position.jumpTo(position.maxScrollExtent);
+    await tester.pumpAndSettle();
+    final before = position.pixels;
+    final button = tester.getRect(_button('Import').first);
+    await tester.tap(_button('Import').first);
+    await tester.pumpAndSettle();
+    for (final height in <double>[10, 40, 120, 300]) {
+      keyboard(height);
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    await tester.enterText(find.byType(TextField).last, 'nothing');
+    await tester.pumpAndSettle();
+    for (final height in <double>[120, 40, 10, 0]) {
+      keyboard(height);
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    await tester.pumpAndSettle();
+    await tester.tap(find.descendant(of: find.byType(AlertDialog), matching: _button('Cancel')));
+    await tester.pumpAndSettle();
+    expect(position.pixels, before);
+    expect(tester.getRect(_button('Import').first), button);
+  });
+
   testWidgets('what one device exports, another imports whole', (tester) async {
     // a title read back names the newest highlight without video of that title
     final keys = ['wxyzABCDEFG', testCatalogue(moreHighlights: _more).highlights[4].key, 'aaaaaaaaaaa'];

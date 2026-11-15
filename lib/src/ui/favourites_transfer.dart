@@ -172,8 +172,8 @@ class FavouritesSection extends ConsumerWidget {
 Future<void> _export(BuildContext context, WidgetRef ref, List<String> lines) async {
   final text = favouritesExportText(lines);
   if (ref.read(canShareProvider) && await ref.read(textSharerProvider)(text)) return;
-  final copied = await copyText(text);
-  if (context.mounted) showMessage(context, copied ? 'Copied' : 'Couldn’t copy');
+  // confirmed as every other copy is: no message where the system shows what is copied by itself
+  if (context.mounted) await copyAndConfirm(context, text);
 }
 
 /// The import dialog: the exported text pasted, its favourites added to the user's.

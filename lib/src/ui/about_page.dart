@@ -520,8 +520,8 @@ const Duration rankingsAheadDelay = Duration(milliseconds: 600);
 /// above it. Nothing in it depends on the data: it stays as it is when the data comes.
 ///
 /// While the About tab is on screen with the Ong Log's data, it makes ahead what the rankings share
-/// ([makeRankingTables]), once per catalogue, at a moment when nothing moves (no animation, no frame to draw: not
-/// during a scroll): some tens of milliseconds that the opening of the page would otherwise spend in its first
+/// ([makeRankingTables]), once per catalogue, at a moment when nothing moves (no animation, no frame to draw, no
+/// scroll under way): some tens of milliseconds that the opening of the page would otherwise spend in its first
 /// frame.
 class _StatsEntry extends ConsumerStatefulWidget {
   const _StatsEntry({required this.color});
@@ -557,7 +557,9 @@ class _StatsEntryState extends ConsumerState<_StatsEntry> {
     _ahead = Timer(rankingsAheadDelay, () {
       _ahead = null;
       final scheduler = SchedulerBinding.instance;
-      if (scheduler.transientCallbackCount > 0 || scheduler.hasScheduledFrame) return _makeAhead();
+      // a finger resting in the middle of a drag asks for no frame, and would get the work as it moves again
+      final scrolling = mounted && (Scrollable.maybeOf(context)?.position.isScrollingNotifier.value ?? false);
+      if (scheduler.transientCallbackCount > 0 || scheduler.hasScheduledFrame || scrolling) return _makeAhead();
       makeRankingTables(catalogue);
     });
   }

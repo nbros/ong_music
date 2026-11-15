@@ -208,6 +208,9 @@ class _LauncherShortcutsScopeState extends ConsumerState<LauncherShortcutsScope>
         // focus yet when the field takes it, and Android shows no keyboard until then
         final request = (cold: launch || WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed);
         _search = request;
+        // a search among every highlight: a chip left on (a genre, "You", the favourites, "New") would narrow it
+        // without a word on the screen the shortcut opens; what is already typed stays
+        ref.read(highlightFilterProvider.notifier).clearChips();
         ref.read(selectedTabProvider.notifier).select(AppTab.highlights);
         // once the tab is on the screen (its field cannot take the focus before), and the app in front
         WidgetsBinding.instance.addPostFrameCallback((_) => _whenResumed(() => _focusSearch(request)));

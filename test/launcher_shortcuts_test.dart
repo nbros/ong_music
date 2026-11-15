@@ -85,6 +85,26 @@ void main() {
       expect(tester.testTextInput.isVisible, isTrue, reason: 'the keyboard up');
     });
 
+    testWidgets('searches among every highlight: the chips left on go, what is typed stays', (tester) async {
+      _inFront(tester);
+      final shortcuts = FakeLauncherShortcuts();
+      await pumpApp(tester, shortcuts: shortcuts, prefs: _aFavourite());
+      await tester.enterText(searchField(), 'o');
+      await tester.pumpAndSettle();
+      final typed = _tracks(tester);
+      await tester.tap(chip('Favourites'));
+      await tester.pumpAndSettle();
+      expect(_tracks(tester), isNot(typed));
+      await goToTab(tester, 'Ong Log');
+
+      shortcuts.use(AppShortcut.search);
+      await tester.pumpAndSettle();
+      expect(selectedTab(tester), 0);
+      expect(tester.widget<FilterChip>(chip('Favourites')).selected, isFalse);
+      expect(_tracks(tester), typed);
+      expect(_highlightsField(tester).controller!.text, 'o');
+    });
+
     testWidgets('a field focused with its keyboard closed gets its keyboard back', (tester) async {
       _inFront(tester);
       final shortcuts = FakeLauncherShortcuts();

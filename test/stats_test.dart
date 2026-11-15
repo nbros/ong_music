@@ -133,6 +133,23 @@ void main() {
       expect(hasRankingTables(catalogue), isTrue);
     });
 
+    testWidgets('nor while a finger holds the page in the middle of a drag', (tester) async {
+      final catalogue = testCatalogue();
+      await pumpApp(tester, state: loadedState(catalogue, testNow.subtract(const Duration(hours: 2))));
+      await goToTab(tester, 'About');
+      final finger = await tester.startGesture(tester.getCenter(aboutScrollable()));
+      await finger.moveBy(const Offset(0, -40));
+      await finger.moveBy(const Offset(0, -40));
+      await tester.pump();
+      // resting: no frame is asked for
+      await tester.binding.delayed(rankingsAheadDelay * 2);
+      expect(hasRankingTables(catalogue), isFalse);
+      await finger.up();
+      await tester.pumpAndSettle();
+      await tester.pump(rankingsAheadDelay * 2);
+      expect(hasRankingTables(catalogue), isTrue);
+    });
+
     testWidgets('one button for screen readers', (tester) async {
       final handle = tester.ensureSemantics();
       await pumpApp(tester);

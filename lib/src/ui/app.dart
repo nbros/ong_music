@@ -273,18 +273,29 @@ class _AppShellState extends ConsumerState<AppShell> {
                       heightFactor: 1,
                       child: ConstrainedBox(
                         constraints: const BoxConstraints(maxWidth: maxContentWidth),
-                        child: NavigationBar(
-                          selectedIndex: tab.index,
-                          onDestinationSelected: _select,
-                          destinations: [
-                            // no tooltip: it would only repeat the label under the icon
-                            for (final d in _destinations)
-                              NavigationDestination(
-                                icon: d.newCount ? NewHighlightsBadge(child: Icon(d.icon)) : Icon(d.icon),
-                                label: d.label,
-                                tooltip: '',
-                              ),
-                          ],
+                        // as high under the keyboard as without it: a rising keyboard takes the inset of the system
+                        // bar under the navigation bar before it covers the bar itself, the bar would shrink by that
+                        // much, and the page over it grow for a moment: a page scrolled to its end moved down for
+                        // good (About under the dialog of the import, once its keyboard was gone)
+                        child: MediaQuery(
+                          data: MediaQuery.of(context).copyWith(
+                            padding: MediaQuery.paddingOf(
+                              context,
+                            ).copyWith(bottom: MediaQuery.viewPaddingOf(context).bottom),
+                          ),
+                          child: NavigationBar(
+                            selectedIndex: tab.index,
+                            onDestinationSelected: _select,
+                            destinations: [
+                              // no tooltip: it would only repeat the label under the icon
+                              for (final d in _destinations)
+                                NavigationDestination(
+                                  icon: d.newCount ? NewHighlightsBadge(child: Icon(d.icon)) : Icon(d.icon),
+                                  label: d.label,
+                                  tooltip: '',
+                                ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
