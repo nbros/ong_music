@@ -226,6 +226,9 @@ class Effects {
   /// How many times the app asked the system to close it (Android back).
   int exits = 0;
 
+  /// How many times the app asked for the haptic feedback of the platform (a long press, on Android).
+  int haptics = 0;
+
   /// What the app last told the system about Back: whether it takes it (true) or lets the system show the way home
   /// and leave (false, Android's predictive back); null before it said anything.
   bool? frameworkHandlesBack;
@@ -320,6 +323,7 @@ Future<TestApp> pumpApp(
   final effects = Effects();
   tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
     if (call.method == 'SystemNavigator.pop') effects.exits++;
+    if (call.method == 'HapticFeedback.vibrate') effects.haptics++;
     if (call.method == 'SystemNavigator.setFrameworkHandlesBack') effects.frameworkHandlesBack = call.arguments as bool;
     if (call.method == 'Clipboard.setData') {
       if (!effects.clipboardWorks) throw PlatformException(code: 'copy_fail');

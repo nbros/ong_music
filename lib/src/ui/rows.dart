@@ -15,6 +15,7 @@ import 'package:material_ui/material_ui.dart';
 import '../data/catalogue.dart';
 import '../data/model.dart';
 import '../state/catalogue_state.dart';
+import 'actions.dart';
 import 'format.dart';
 import 'instant_feedback.dart';
 import 'outside_link.dart';
@@ -153,13 +154,21 @@ class HighlightRow extends StatelessWidget {
     );
     final selected = this.selected;
     final content = h.youtubeId == null ? Opacity(opacity: 0.45, child: row) : row;
+    void onLongPress() => copySongFromRow(context, h.title);
     return Semantics(
       button: true,
       selected: selected,
       hint: h.youtubeId == null || selected != null ? 'Shows the details' : 'Opens the video',
+      onLongPressHint: copyTitleAndArtistText,
       child: selected == null
-          ? AppInkWell(onTap: onTap, child: content)
-          : _SelectableInk(selected: selected, shape: InsetRoundedBorder.row, onTap: onTap, child: content),
+          ? AppInkWell(onTap: onTap, onLongPress: onLongPress, child: content)
+          : _SelectableInk(
+              selected: selected,
+              shape: InsetRoundedBorder.row,
+              onTap: onTap,
+              onLongPress: onLongPress,
+              child: content,
+            ),
     );
   }
 }
@@ -168,11 +177,18 @@ class HighlightRow extends StatelessWidget {
 /// detail pane: its tap, hover and focus states in [shape], and the tint of
 /// [selected] behind the content. Only colours change: nothing moves.
 class _SelectableInk extends StatelessWidget {
-  const _SelectableInk({required this.selected, required this.shape, required this.onTap, required this.child});
+  const _SelectableInk({
+    required this.selected,
+    required this.shape,
+    required this.onTap,
+    required this.onLongPress,
+    required this.child,
+  });
 
   final bool selected;
   final ShapeBorder shape;
   final VoidCallback onTap;
+  final VoidCallback onLongPress;
   final Widget child;
 
   @override
@@ -181,6 +197,7 @@ class _SelectableInk extends StatelessWidget {
     type: MaterialType.transparency,
     child: AppInkWell(
       onTap: onTap,
+      onLongPress: onLongPress,
       customBorder: shape,
       hoverColor: hoveredRowColor(context),
       child: DecoratedBox(
@@ -369,14 +386,16 @@ class PlayRow extends ConsumerWidget {
       ),
     );
     final tint = tinted || (selected ?? false);
+    void onLongPress() => copySongFromRow(context, p.title);
     return Semantics(
       selected: selected,
+      onLongPressHint: copyTitleAndArtistText,
       child: shape == null
           ? Material(
               color: tint ? selectedRowColor(context) : Colors.transparent,
-              child: AppInkWell(onTap: onTap, child: body),
+              child: AppInkWell(onTap: onTap, onLongPress: onLongPress, child: body),
             )
-          : _SelectableInk(selected: tint, shape: shape, onTap: onTap, child: body),
+          : _SelectableInk(selected: tint, shape: shape, onTap: onTap, onLongPress: onLongPress, child: body),
     );
   }
 }

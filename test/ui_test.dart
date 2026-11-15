@@ -374,7 +374,7 @@ void main() {
       expect(find.text('Copied'), findsNothing);
       await tester.pump(const Duration(seconds: 3));
       await tester.pumpAndSettle();
-      expect(find.byIcon(Icons.copy), findsOneWidget);
+      expect(find.widgetWithIcon(IconButton, Icons.copy), findsNWidgets(2), reason: 'and the copy button of the title');
 
       // a clipboard that refuses: said so, no check mark
       app.effects.clipboardWorks = false;

@@ -97,6 +97,31 @@ Future<void> shareHighlight(BuildContext context, WidgetRef ref, Highlight highl
 /// clipboard preview, so a message would be a second notification.
 Future<bool> copyHighlight(Highlight highlight) => copyText(highlightShareText(highlight));
 
+/// What a copy button shows and screen readers hear once its text is copied, and the message of a copy by a long
+/// press.
+const copiedText = 'Copied';
+
+/// The message of a copy the clipboard refused.
+const copyFailedText = 'Couldn’t copy';
+
+/// Copying the title and the artist of a song: the hint of the long press on its row, the tooltip of the copy button
+/// of its fiche.
+const copyTitleAndArtistText = 'Copy title and artist';
+
+/// The tooltip of the copy button of the fiche of a song without artist.
+const copyTitleText = 'Copy title';
+
+/// What copying the title and the artist of a song gives: its title as the sheets write it, `"Artist - Track"` (the
+/// track alone without artist), the form "Copy title and link" gives too. The one place of that form.
+String songCopyText(String title) => title;
+
+/// Copies [songCopyText] of [title] from a long press on its row (whose ink already gave the haptic feedback of the
+/// platform), then says so in a short message.
+Future<void> copySongFromRow(BuildContext context, String title) async {
+  final copied = await copyText(songCopyText(title));
+  if (context.mounted) showMessage(context, copied ? copiedText : copyFailedText);
+}
+
 /// Copies [text]; false when the clipboard refused or is missing.
 Future<bool> copyText(String text) async {
   try {

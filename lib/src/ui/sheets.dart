@@ -16,6 +16,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../data/catalogue.dart';
 import '../data/model.dart';
+import '../data/text.dart';
 import '../state/catalogue_state.dart';
 import '../state/settings_state.dart';
 import 'actions.dart';
@@ -482,14 +483,14 @@ class _CopyButtonState extends State<_CopyButton> {
     final direction = Directionality.of(context);
     final copied = await copyHighlight(widget.highlight);
     if (!mounted) return;
-    if (!copied) return showMessage(context, 'Couldn’t copy');
+    if (!copied) return showMessage(context, copyFailedText);
     _reset?.cancel();
     setState(
       () => _reset = Timer(const Duration(seconds: 2), () {
         if (mounted) setState(() {});
       }),
     );
-    SemanticsService.sendAnnouncement(view, 'Copied', direction);
+    SemanticsService.sendAnnouncement(view, copiedText, direction);
   }
 
   @override
@@ -505,13 +506,79 @@ class _CopyButtonState extends State<_CopyButton> {
       key: ValueKey(_copied),
       icon: _copied ? Icons.check : Icons.copy,
       tooltip: _copied
-          ? 'Copied'
+          ? copiedText
           : widget.highlight.youtubeId == null
           ? 'Copy title'
           : 'Copy title and link',
       onPressed: _copy,
     ),
   );
+}
+
+/// Copies the title and the artist of a song ([songCopyText]), beside them at
+/// the top of its fiche, then shows a check mark for a moment in the same box
+/// instead of a message (and tells screen readers), as [_CopyButton] does. A
+/// plain small icon, as the star beside it, not a tonal circle like the
+/// actions under it; its tap target follows the theme as the star's does.
+class _CopyTitleButton extends StatefulWidget {
+  const _CopyTitleButton({required this.title});
+
+  /// The title of the song, as the sheets write it: `"Artist - Track"`.
+  final String title;
+
+  @override
+  State<_CopyTitleButton> createState() => _CopyTitleButtonState();
+}
+
+class _CopyTitleButtonState extends State<_CopyTitleButton> {
+  Timer? _reset;
+
+  bool get _copied => _reset?.isActive ?? false;
+
+  Future<void> _copy() async {
+    final view = View.of(context);
+    final direction = Directionality.of(context);
+    final copied = await copyText(songCopyText(widget.title));
+    if (!mounted) return;
+    if (!copied) return showMessage(context, copyFailedText);
+    _reset?.cancel();
+    setState(
+      () => _reset = Timer(const Duration(seconds: 2), () {
+        if (mounted) setState(() {});
+      }),
+    );
+    SemanticsService.sendAnnouncement(view, copiedText, direction);
+  }
+
+  @override
+  void dispose() {
+    _reset?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final copied = _copied;
+    return IconButton(
+      tooltip: copied
+          ? copiedText
+          : splitTitle(widget.title).artist.isEmpty
+          ? copyTitleText
+          : copyTitleAndArtistText,
+      onPressed: _copy,
+      iconSize: 20,
+      // only the icon changes, in the same box: the button keeps its place, its focus and its hover; its colour on
+      // the icon, as the star's (a colour given to the button would bring an overlay of its own to the desktop look)
+      icon: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 150),
+        child: Icon(
+          copied ? Icons.check : Icons.copy,
+          key: ValueKey(copied),
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
+      ),
+    );
+  }
 }
 
 /// The star of a highlight sheet: adds the highlight to the favourites, or
@@ -595,12 +662,14 @@ class HighlightSheet extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _Overline(genre: h.genre, text: '${h.genre.label} · Highlight #${h.seq}'),
-                // the star always has its place: the title wraps before it, and nothing moves when it changes
+                // the copy button and the star always have their places: the title wraps before them, and nothing
+                // moves when they change
                 Row(
                   children: [
                     Expanded(
                       child: _Title(title: h.track, subtitle: h.artist),
                     ),
+                    _CopyTitleButton(title: h.title),
                     _FavouriteButton(highlight: h),
                   ],
                 ),
@@ -771,7 +840,15 @@ class SongSheet extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _Overline(genre: s.genre, text: s.genre.label),
-                _Title(title: s.track, subtitle: s.artist),
+                // the copy button always has its place: the title wraps before it
+                Row(
+                  children: [
+                    Expanded(
+                      child: _Title(title: s.track, subtitle: s.artist),
+                    ),
+                    _CopyTitleButton(title: s.title),
+                  ],
+                ),
                 Padding(
                   padding: const EdgeInsets.only(top: 16, bottom: 8),
                   child: IntrinsicHeight(

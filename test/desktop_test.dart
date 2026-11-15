@@ -25,7 +25,10 @@ void main() {
     // the star as big as its round neighbours, and still in line with Copy
     final star = tester.getRect(find.widgetWithIcon(IconButton, Icons.star_border));
     expect(star.size, const Size(40, 40));
-    expect(star.right, tester.getRect(find.widgetWithIcon(IconButton, Icons.copy)).right);
+    expect(
+      star.right,
+      tester.getRect(find.byWidgetPredicate((w) => w is IconButton && w.tooltip == 'Copy title and link')).right,
+    );
   }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
   testWidgets('desktop browser: the full screen button at the right of the content column', (tester) async {
