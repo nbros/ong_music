@@ -130,6 +130,15 @@ void revealExtent(ScrollController controller, double top, double extent, {doubl
 
 // ------------------------------------------------------------------ keyboard
 
+/// Whether nothing is over the page of [context] (a sheet, a dialog, another page): the focus is in its route, or
+/// nowhere (on a scope around it, the navigator's after an unfocus). Not from [ModalRoute.of], which would build
+/// the page again each time a sheet opens and closes.
+bool nothingOver(BuildContext context) {
+  final route = Focus.maybeOf(context, scopeOk: true, createDependency: false)?.nearestScope;
+  final focus = FocusManager.instance.primaryFocus;
+  return route == null || focus == null || route.hasFocus || route.ancestors.contains(focus);
+}
+
 /// What a key asks of a list (see [listCommandOf]).
 enum ListCommand {
   /// ↑.
@@ -325,7 +334,9 @@ class ListKeyboard {
     FocusManager.instance.addListener(_onFocusChange);
   }
 
-  final AppTab tab;
+  /// The tab of the list; null for the list of a page over the tabs (the statistics), which has neither search
+  /// field nor detail pane: the keys act on it as on a list tab in a window narrower than expanded.
+  final AppTab? tab;
   final ListModel model;
   final ScrollController scroll;
 
@@ -436,7 +447,7 @@ class ListKeyboard {
       if (item < 0 || !_inView(item)) return;
       final row = _nodeOf(item);
       if (row == null) return _restore(tries - 1);
-      _moveTo(item, focus: true, expanded: AppLayout.readModeOf(model.context) == WindowMode.expanded);
+      _moveTo(item, focus: true, expanded: _withPane);
       _restores = tries - 1;
     });
     SchedulerBinding.instance.ensureVisualUpdate();
@@ -447,15 +458,8 @@ class ListKeyboard {
 
   bool get _hasList => scroll.hasClients && scroll.positions.length == 1;
 
-  /// Whether nothing is over the page (a sheet, a dialog, another page): the
-  /// focus is in its route, or nowhere (on a scope around it, the navigator's
-  /// after an unfocus). Not from [ModalRoute.of], which would build the page
-  /// again each time a sheet opens and closes.
-  bool get _onTop {
-    final route = Focus.maybeOf(model.context, scopeOk: true, createDependency: false)?.nearestScope;
-    final focus = FocusManager.instance.primaryFocus;
-    return route == null || focus == null || route.hasFocus || route.ancestors.contains(focus);
-  }
+  /// Whether the list has a detail pane beside it: a list tab in an expanded window.
+  bool get _withPane => tab != null && AppLayout.readModeOf(model.context) == WindowMode.expanded;
 
   /// Set by [_inList] when the key only brought the cursor back into view.
   bool _landing = false;
@@ -476,9 +480,12 @@ class ListKeyboard {
     final command = listCommandOf(event);
     if (command == null) return KeyEventResult.ignored;
     final page = model.context;
+    final tab = this.tab;
     // the tab on screen, nothing over it, and its list (not its loading screen)
-    if (model.ref.read(selectedTabProvider) != tab || !_onTop || !_hasList) return KeyEventResult.ignored;
-    final expanded = AppLayout.readModeOf(page) == WindowMode.expanded;
+    if ((tab != null && model.ref.read(selectedTabProvider) != tab) || !nothingOver(page) || !_hasList) {
+      return KeyEventResult.ignored;
+    }
+    final expanded = _withPane;
     final focus = FocusManager.instance.primaryFocus;
     if (node.hasFocus) {
       _landing = false;
@@ -487,7 +494,7 @@ class ListKeyboard {
       return result;
     }
     if (focus == null || focus is FocusScopeNode) return _onPage(command, expanded, control: false, chips: false);
-    if (focus == model.ref.read(searchFocusProvider(tab))) {
+    if (tab != null && focus == model.ref.read(searchFocusProvider(tab))) {
       // a word being composed (an input method): its keys are the field's
       final editing = focus.context?.findAncestorStateOfType<EditableTextState>()?.textEditingValue;
       if (editing != null && editing.composing.isValid && !editing.composing.isCollapsed) {
@@ -757,9 +764,7 @@ class ListKeyboard {
     final count = model.itemCount;
     if (count == 0 || !_hasList) return null;
     final cursor = _cursor;
-    final candidate = AppLayout.readModeOf(model.context) == WindowMode.expanded
-        ? model.selected
-        : (cursor == null ? null : model.itemOf(cursor));
+    final candidate = _withPane ? model.selected : (cursor == null ? null : model.itemOf(cursor));
     if (candidate != null && candidate >= 0 && candidate < count && _inView(candidate)) return candidate;
     return _firstInFullView();
   }

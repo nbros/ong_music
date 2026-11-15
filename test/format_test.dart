@@ -18,6 +18,15 @@ void main() {
     expect(formatCount(1234567), '1,234,567');
   });
 
+  test('formatShare', () {
+    expect(formatShare(393, 1000), '39.3%');
+    expect(formatShare(1, 3), '33.3%');
+    expect(formatShare(2, 2), '100.0%');
+    expect(formatShare(1, 31430), '<0.1%');
+    expect(formatShare(0, 10), '0%');
+    expect(formatShare(3, 0), '0%');
+  });
+
   test('plural', () {
     expect(plural(1, 'song'), '1 song');
     expect(plural(2, 'song'), '2 songs');

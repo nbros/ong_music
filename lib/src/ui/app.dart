@@ -336,7 +336,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                 for (final t in AppTab.values)
                   TickerMode(
                     enabled: t == tab,
-                    child: _ContentColumn(
+                    child: ContentColumn(
                       maxWidth: t == AppTab.about ? maxContentWidth : listWidth,
                       child: KeyedSubtree(
                         key: _pages[t],
@@ -446,17 +446,17 @@ class _Region extends StatelessWidget {
 /// In a wider window, a mouse wheel turned in the empty space beside the
 /// column scrolls what is at that height in it, as on a web page: without
 /// this, the wheel would do nothing there.
-class _ContentColumn extends StatefulWidget {
-  const _ContentColumn({required this.maxWidth, required this.child});
+class ContentColumn extends StatefulWidget {
+  const ContentColumn({super.key, required this.maxWidth, required this.child});
 
   final double maxWidth;
   final Widget child;
 
   @override
-  State<_ContentColumn> createState() => _ContentColumnState();
+  State<ContentColumn> createState() => _ContentColumnState();
 }
 
-class _ContentColumnState extends State<_ContentColumn> {
+class _ContentColumnState extends State<ContentColumn> {
   final _content = GlobalKey();
 
   void _onPointerSignal(PointerSignalEvent event) {

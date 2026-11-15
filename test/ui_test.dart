@@ -741,6 +741,9 @@ void main() {
       // the name is cleared, then typed again
       await selectBoth();
       await goToTab(tester, 'About');
+      // in view: at the bottom edge, the handle of its cursor would lie over the navigation bar
+      await tester.ensureVisible(twitchNameField());
+      await tester.pumpAndSettle();
       await tester.enterText(twitchNameField(), '');
       await tester.pump();
       await expectUnfiltered();
@@ -881,8 +884,7 @@ void main() {
       await pumpApp(tester);
       await goToTab(tester, 'About');
       await tester.scrollUntilVisible(find.text('Licences'), 200, scrollable: aboutScrollable());
-      await tester.tap(find.text('Licences'));
-      await tester.pumpAndSettle();
+      await tapVisible(tester, find.text('Licences'));
       expect(
         tester.widget<LicensePage>(find.byType(LicensePage)).applicationName,
         'Ong Music',

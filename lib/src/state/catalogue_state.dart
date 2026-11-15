@@ -14,6 +14,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/catalogue.dart';
 import '../data/model.dart';
 import '../data/parser.dart';
+import '../data/rankings.dart';
 import '../data/repository.dart';
 import '../data/sheet_cache.dart';
 import '../data/sheet_prefetch.dart';
@@ -61,6 +62,9 @@ enum SongsTrigger {
 
   /// The About tab is on the screen: its counts of songs and streams, the requests found under the Twitch name.
   about,
+
+  /// The statistics page is on the screen: its rankings are those of the Ong Log.
+  stats,
 }
 
 /// Waits, once the first frame of the Highlights list is drawn, before the Songs sheet is loaded:
@@ -1208,6 +1212,15 @@ final playResultsProvider = Provider.autoDispose.family<PlayResults?, PlayFilter
         requesterId: _myRequesterId(ref, filter.mine, myPlayCountProvider),
       ),
 );
+
+/// The rankings of the statistics page: of every play, or of the user's own requests alone with [mine] (when they
+/// have some, see [myPlayCountProvider]); null without the Songs sheet. Each ranking is made when first shown, the
+/// tables they share once per catalogue.
+final rankingsProvider = Provider.autoDispose.family<CatalogueRankings?, bool>((ref, mine) {
+  final catalogue = ref.watch(currentCatalogueProvider);
+  if (catalogue == null || !catalogue.hasSongs) return null;
+  return CatalogueRankings(catalogue, requesterId: _myRequesterId(ref, mine, myPlayCountProvider));
+});
 
 /// Number of plays matching a query (the "N in the Ong Log" link); 0 without
 /// catalogue or for an empty query.

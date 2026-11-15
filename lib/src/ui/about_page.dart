@@ -19,6 +19,7 @@ import 'instant_feedback.dart';
 import 'layout.dart';
 import 'list_scaffold.dart';
 import 'outside_link.dart';
+import 'stats_page.dart';
 import 'theme.dart';
 import 'view_state.dart';
 import 'widgets.dart';
@@ -151,6 +152,8 @@ class AboutPage extends ConsumerWidget {
           },
         ),
       ),
+      // under the links: the statistics are those of his streams, not a setting of the app
+      _StatsEntry(color: expanded ? scheme.surfaceContainerHigh : scheme.surfaceContainer),
       const InstallSection(),
     ];
     final settings = [
@@ -496,6 +499,63 @@ class _LinkTile extends StatelessWidget {
                 style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The row that opens the statistics page: an icon, its name and a chevron on a tile of [color], as the link tiles
+/// above it. Nothing in it depends on the data: it stays as it is when the data comes.
+class _StatsEntry extends StatelessWidget {
+  const _StatsEntry({required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    void open() => showStatsPage(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+      child: Semantics(
+        button: true,
+        label: statsTitle,
+        // the ink well's own action goes with its semantics
+        onTap: open,
+        excludeSemantics: true,
+        child: Material(
+          color: color,
+          // the corners of the install card under it, as wide as it
+          borderRadius: BorderRadius.circular(16),
+          clipBehavior: Clip.antiAlias,
+          child: AppInkWell(
+            onTap: open,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 56),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 12, 8),
+                child: Row(
+                  spacing: 14,
+                  children: [
+                    Icon(Icons.leaderboard, size: 22, color: scheme.onSurface),
+                    Expanded(
+                      child: Text(
+                        statsTitle,
+                        style: TextStyle(
+                          fontSize: 15,
+                          height: 20 / 15,
+                          fontWeight: FontWeight.w500,
+                          color: scheme.onSurface,
+                        ),
+                      ),
+                    ),
+                    Icon(Icons.chevron_right, size: 22, color: OngColors.of(context).on3),
+                  ],
+                ),
+              ),
+            ),
           ),
         ),
       ),

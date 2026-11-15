@@ -9,6 +9,7 @@ import 'dart:io';
 import 'package:ong_music/src/data/catalogue.dart';
 import 'package:ong_music/src/data/model.dart';
 import 'package:ong_music/src/data/parser.dart';
+import 'package:ong_music/src/data/rankings.dart';
 
 void main(List<String> args) {
   if (args.length != 2) {
@@ -69,6 +70,44 @@ void main(List<String> args) {
   }
   _time('plays (no query, Loop, with video)', () => c.searchPlays(type: PlayType.loop, withVideo: true).length, c);
   _time('countPlays "zelda"', () => c.countPlays('zelda'), c);
+  print('');
+  // the statistics page: the length of the streams (their largest "Uptime"), and the rankings, each one on a
+  // catalogue of its own (each catalogue makes the tables the rankings share once: the first time is reported apart)
+  final timed = c.streams.where((s) => s.durationMinutes > 0);
+  final minutes = timed.fold(0, (sum, s) => sum + s.durationMinutes);
+  print('streams with an uptime ${timed.length} of ${c.streamCount}, ${minutes ~/ 60} hours');
+  final requester = c.requesters.reduce((a, b) => a.requestCount >= b.requestCount ? a : b);
+  for (final (label, int Function(CatalogueRankings r) rank) in [
+    ('songs', (CatalogueRankings r) => r.songs.length),
+    ('artists', (CatalogueRankings r) => r.artists.length),
+    ('genres', (CatalogueRankings r) => r.genres.length),
+    ('requesters', (CatalogueRankings r) => r.requesters.length),
+  ]) {
+    for (final id in [null, requester.id]) {
+      _time('ranking $label${id == null ? '' : ' You'}', () => rank(CatalogueRankings(c, requesterId: id)), c);
+    }
+  }
+  // the first ranking of a catalogue makes the tables it needs: on catalogues of their own, after one to warm up
+  final catalogues = [for (var i = 0; i < 5; i++) parseCatalogue(highlightsCsv, songsCsv)];
+  CatalogueRankings(catalogues.removeLast())
+    ..songs
+    ..artists;
+  for (final (label, int Function(CatalogueRankings r) first) in [
+    ('songs', (CatalogueRankings r) => r.songs.length),
+    ('artists', (CatalogueRankings r) => r.artists.length),
+  ]) {
+    final sw = Stopwatch()..start();
+    for (final other in catalogues) {
+      first(CatalogueRankings(other));
+    }
+    sw.stop();
+    print(
+      '${'first ranking $label of a catalogue'.padRight(42)}        '
+      '${(sw.elapsedMicroseconds / catalogues.length / 1000).toStringAsFixed(2)} ms',
+    );
+  }
+  final r = CatalogueRankings(c);
+  print('plays without artist  ${r.playsWithoutArtist}');
 }
 
 void _time(String label, int Function() run, Catalogue c) {
