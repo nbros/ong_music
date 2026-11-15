@@ -85,6 +85,10 @@ class HighlightFilterNotifier extends Notifier<HighlightFilter> {
   /// Shows only the user's own requests, or all of them again ("You").
   void toggleMine() => state = _with(mine: !state.mine);
 
+  /// Shows the favourites alone, without query nor other chip (the Favourites shortcut of the launcher icon); every
+  /// highlight when there is no favourite.
+  void showFavourites(bool any) => state = HighlightFilter(favourites: any);
+
   /// Shows only the favourites, or all highlights again (the star chip).
   void toggleFavourites() => state = _with(favourites: !state.favourites);
 

@@ -442,6 +442,21 @@ class _Fact extends StatelessWidget {
   }
 }
 
+/// The side of the box of a plain icon button (the star, the copy button of a
+/// title): its tap target, which follows the theme (48 px on touch screens, 40
+/// with a mouse); its icon in the middle.
+double _iconButtonExtent(BuildContext context) =>
+    Theme.of(context).materialTapTargetSize == MaterialTapTargetSize.padded ? kMinInteractiveDimension : 40;
+
+/// The size of the icon of the copy button of a title.
+const double _copyTitleIconSize = 20;
+
+/// The side of a tonal round icon button ([_TonalIcon]).
+const double _tonalExtent = 40;
+
+/// The space between the buttons of the row of actions of a highlight fiche.
+const double _actionSpacing = 8;
+
 /// A tonal round icon button (Share, Copy).
 class _TonalIcon extends StatelessWidget {
   const _TonalIcon({super.key, required this.icon, required this.tooltip, required this.onPressed});
@@ -455,7 +470,10 @@ class _TonalIcon extends StatelessWidget {
     tooltip: tooltip,
     onPressed: onPressed,
     iconSize: 20,
-    style: IconButton.styleFrom(minimumSize: const Size(40, 40), fixedSize: const Size(40, 40)),
+    style: IconButton.styleFrom(
+      minimumSize: const Size.square(_tonalExtent),
+      fixedSize: const Size.square(_tonalExtent),
+    ),
     icon: Icon(icon),
   );
 }
@@ -482,14 +500,14 @@ class _CopyButtonState extends State<_CopyButton> {
     final direction = Directionality.of(context);
     final copied = await copyHighlight(widget.highlight);
     if (!mounted) return;
-    if (!copied) return showMessage(context, 'Couldn’t copy');
+    if (!copied) return showMessage(context, copyFailedText);
     _reset?.cancel();
     setState(
       () => _reset = Timer(const Duration(seconds: 2), () {
         if (mounted) setState(() {});
       }),
     );
-    SemanticsService.sendAnnouncement(view, 'Copied', direction);
+    SemanticsService.sendAnnouncement(view, copiedText, direction);
   }
 
   @override
@@ -503,15 +521,83 @@ class _CopyButtonState extends State<_CopyButton> {
     duration: const Duration(milliseconds: 150),
     child: _TonalIcon(
       key: ValueKey(_copied),
-      icon: _copied ? Icons.check : Icons.copy,
-      tooltip: _copied
-          ? 'Copied'
+      // a link where it copies the link with the title (the copy icon is the small button's, beside the title)
+      icon: _copied
+          ? Icons.check
           : widget.highlight.youtubeId == null
-          ? 'Copy title'
+          ? Icons.copy
+          : Icons.link,
+      tooltip: _copied
+          ? copiedText
+          : widget.highlight.youtubeId == null
+          ? copyTitleText
           : 'Copy title and link',
       onPressed: _copy,
     ),
   );
+}
+
+/// Copies the title of a song, artist included ([songCopyText]), beside it at
+/// the top of its fiche, then shows a check mark for a moment in the same box
+/// instead of a message (and tells screen readers), as [_CopyButton] does. A
+/// plain small icon, as the star beside it, not a tonal circle like the
+/// actions under it; its tap target follows the theme as the star's does
+/// ([_iconButtonExtent]).
+class _CopyTitleButton extends StatefulWidget {
+  const _CopyTitleButton({required this.title});
+
+  /// The title of the song, as the sheets write it: `"Artist - Track"`.
+  final String title;
+
+  @override
+  State<_CopyTitleButton> createState() => _CopyTitleButtonState();
+}
+
+class _CopyTitleButtonState extends State<_CopyTitleButton> {
+  Timer? _reset;
+
+  bool get _copied => _reset?.isActive ?? false;
+
+  Future<void> _copy() async {
+    final view = View.of(context);
+    final direction = Directionality.of(context);
+    final copied = await copyText(songCopyText(widget.title));
+    if (!mounted) return;
+    if (!copied) return showMessage(context, copyFailedText);
+    _reset?.cancel();
+    setState(
+      () => _reset = Timer(const Duration(seconds: 2), () {
+        if (mounted) setState(() {});
+      }),
+    );
+    SemanticsService.sendAnnouncement(view, copiedText, direction);
+  }
+
+  @override
+  void dispose() {
+    _reset?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final copied = _copied;
+    return IconButton(
+      tooltip: copied ? copiedText : copyTitleText,
+      onPressed: _copy,
+      iconSize: _copyTitleIconSize,
+      // only the icon changes, in the same box: the button keeps its place, its focus and its hover; its colour on
+      // the icon, as the star's (a colour given to the button would bring an overlay of its own to the desktop look)
+      icon: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 150),
+        child: Icon(
+          copied ? Icons.check : Icons.copy,
+          key: ValueKey(copied),
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
+      ),
+    );
+  }
 }
 
 /// The star of a highlight sheet: adds the highlight to the favourites, or
@@ -529,7 +615,7 @@ class _FavouriteButton extends ConsumerWidget {
     final key = highlight.key;
     final favourite = ref.watch(favouritesProvider.select((keys) => keys.contains(key)));
     return IconButton(
-      tooltip: favourite ? 'Remove from favourites' : 'Add to favourites',
+      tooltip: favourite ? removeFromFavouritesText : addToFavouritesText,
       onPressed: () => ref.read(favouritesProvider.notifier).toggle(highlight),
       // a toggle for screen readers, with its state
       icon: Semantics(
@@ -588,6 +674,10 @@ class HighlightSheet extends ConsumerWidget {
               child: VideoPreview(key: ValueKey(h.youtubeId), highlight: h),
             ),
           ),
+        // The plain icons beside the title stand over the tonal buttons under them, in two columns: the star over the
+        // last one (Copy title and link), the copy button of the title over the one before (Share; without share
+        // sheet, at the same distance from the star). The boxes of both rows follow the tap target of the theme, so the
+        // space between them is the same.
         SliverPadding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
           sliver: SliverToBoxAdapter(
@@ -595,25 +685,27 @@ class HighlightSheet extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _Overline(genre: h.genre, text: '${h.genre.label} · Highlight #${h.seq}'),
-                // the star always has its place: the title wraps before it, and nothing moves when it changes
+                // the copy button and the star always have their places: the title wraps before them, and nothing
+                // moves when they change; no copy button without video, where the tonal button copies the title alone
                 Row(
                   children: [
                     Expanded(
                       child: _Title(title: h.track, subtitle: h.artist),
                     ),
+                    if (hasVideo) ...[_CopyTitleButton(title: h.title), const SizedBox(width: _actionSpacing)],
                     _FavouriteButton(highlight: h),
                   ],
                 ),
                 Padding(
                   padding: const EdgeInsets.only(top: 16, bottom: 6),
                   child: Row(
-                    spacing: 8,
+                    spacing: _actionSpacing,
                     children: [
                       Expanded(
                         child: hasVideo
                             ? VideoLink(
                                 highlight: h,
-                                label: 'Watch on YouTube',
+                                label: watchOnYouTubeText,
                                 builder: (context, open) => FilledButton.icon(
                                   onPressed: open,
                                   style: platformButtonStyle(
@@ -626,7 +718,7 @@ class HighlightSheet extends ConsumerWidget {
                                     ),
                                   ),
                                   icon: const Icon(Icons.play_arrow, size: 20),
-                                  label: const Text('Watch on YouTube'),
+                                  label: const Text(watchOnYouTubeText),
                                 ),
                               )
                             : FilledButton.tonal(
@@ -638,7 +730,7 @@ class HighlightSheet extends ConsumerWidget {
                       if (ref.watch(canShareProvider))
                         _TonalIcon(
                           icon: Icons.share,
-                          tooltip: 'Share',
+                          tooltip: shareText,
                           onPressed: () => shareHighlight(context, ref, h),
                         ),
                       _CopyButton(highlight: h),
@@ -737,6 +829,10 @@ class SongSheet extends ConsumerWidget {
     final plays = s.playIds;
     final videos = s.highlightIds.reversed.map((id) => catalogue.highlights[id]).toList();
     final year = ref.watch(clockProvider)().toLocal().year;
+    // the right edge of the icon of the copy button on that of the type icons of the rows: as far from the edge of
+    // the content as theirs, the icon (20 px) in the middle of its box
+    final typeIconEnd = HistoryRow.end + (PlayTypeIcon.width - PlayTypeIcon.iconSize) / 2;
+    final beyond = 20 - typeIconEnd + (_iconButtonExtent(context) - _copyTitleIconSize) / 2;
     // read as "13 plays", not as two separate pieces
     Widget stat(String value, String label) => Expanded(
       child: MergeSemantics(
@@ -764,16 +860,29 @@ class SongSheet extends ConsumerWidget {
     );
     return _SheetBody(
       slivers: [
+        // The icon of the copy button stands in the column of the icons at the end of the rows under it (the type of
+        // each play): its box goes [beyond] the right edge of the content, into the margin. The title has its room up
+        // to it, and wraps before it.
         SliverPadding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
+          padding: EdgeInsets.only(left: 20, right: 20 - beyond),
           sliver: SliverToBoxAdapter(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _Overline(genre: s.genre, text: s.genre.label),
-                _Title(title: s.track, subtitle: s.artist),
                 Padding(
-                  padding: const EdgeInsets.only(top: 16, bottom: 8),
+                  padding: EdgeInsets.only(right: beyond),
+                  child: _Overline(genre: s.genre, text: s.genre.label),
+                ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _Title(title: s.track, subtitle: s.artist),
+                    ),
+                    _CopyTitleButton(title: s.title),
+                  ],
+                ),
+                Padding(
+                  padding: EdgeInsets.only(top: 16, bottom: 8, right: beyond),
                   child: IntrinsicHeight(
                     child: Row(
                       spacing: 8,

@@ -19,6 +19,7 @@ import 'format.dart';
 import 'instant_feedback.dart';
 import 'new_highlights.dart';
 import 'outside_link.dart';
+import 'row_menu.dart';
 import 'theme.dart';
 import 'widgets.dart';
 
@@ -171,9 +172,13 @@ class HighlightRow extends StatelessWidget {
       button: true,
       selected: selected,
       hint: h.youtubeId == null || selected != null ? 'Shows the details' : 'Opens the video',
-      child: selected == null
-          ? AppInkWell(onTap: onTap, child: content)
-          : _SelectableInk(selected: selected, shape: InsetRoundedBorder.row, onTap: onTap, child: content),
+      child: RowMenuArea(
+        shape: selected == null ? null : InsetRoundedBorder.row,
+        items: (context, ref) => highlightMenuItems(context, ref, h),
+        child: selected == null
+            ? AppInkWell(onTap: onTap, child: content)
+            : _SelectableInk(selected: selected, shape: InsetRoundedBorder.row, onTap: onTap, child: content),
+      ),
     );
   }
 }
@@ -385,12 +390,16 @@ class PlayRow extends ConsumerWidget {
     final tint = tinted || (selected ?? false);
     return Semantics(
       selected: selected,
-      child: shape == null
-          ? Material(
-              color: tint ? selectedRowColor(context) : Colors.transparent,
-              child: AppInkWell(onTap: onTap, child: body),
-            )
-          : _SelectableInk(selected: tint, shape: shape, onTap: onTap, child: body),
+      child: RowMenuArea(
+        shape: shape,
+        items: (context, ref) => playMenuItems(context, ref, catalogue, p, onVideo),
+        child: shape == null
+            ? Material(
+                color: tint ? selectedRowColor(context) : Colors.transparent,
+                child: AppInkWell(onTap: onTap, child: body),
+              )
+            : _SelectableInk(selected: tint, shape: shape, onTap: onTap, child: body),
+      ),
     );
   }
 }
@@ -524,6 +533,9 @@ class HistoryRow extends StatelessWidget {
   /// square row (a sheet).
   final ShapeBorder? shape;
 
+  /// The space after its last icon (the type of the play), to the right edge.
+  static const double end = 14;
+
   @override
   Widget build(BuildContext context) {
     final metrics = ListMetrics.of(context);
@@ -539,7 +551,7 @@ class HistoryRow extends StatelessWidget {
       child: SizedBox(
         height: metrics.historyRow,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 14, 0),
+          padding: const EdgeInsets.fromLTRB(20, 0, end, 0),
           child: Row(
             children: [
               Expanded(

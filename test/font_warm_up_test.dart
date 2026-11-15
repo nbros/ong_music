@@ -588,6 +588,8 @@ void main() {
         fontKitRegistration: (fonts) async => registered.addAll([for (final (kit, _) in fonts) kit.name]),
       );
       final press = await tester.startGesture(tester.getCenter(find.text('月')));
+      // a finger that moves, as when it scrolls (held still, it would open the menu of the row)
+      await press.moveBy(const Offset(0, -30));
       await tester.pump(fontWarmUpLongestWait - const Duration(milliseconds: 300));
       expect(registered, isEmpty);
       await press.cancel();

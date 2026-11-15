@@ -11,11 +11,13 @@ import '../state/catalogue_state.dart';
 import '../state/settings_state.dart';
 import '../web/web_platform.dart';
 import 'about_page.dart';
+import 'actions.dart';
 import 'address.dart';
 import 'detail_pane.dart';
 import 'font_warm_up.dart';
 import 'highlights_page.dart';
 import 'install_banner.dart';
+import 'launcher_shortcuts.dart';
 import 'layout.dart';
 import 'nav_rail.dart';
 import 'new_highlights.dart';
@@ -90,6 +92,8 @@ class _OngMusicAppState extends ConsumerState<OngMusicApp> {
     );
     // already in the background at the start: no change of state will tell
     if (ref.read(startsInBackgroundProvider)) ref.read(catalogueProvider.notifier).setForeground(false);
+    // read once, at the start: the confirmation of a copy depends on it (copyAndConfirm)
+    ref.read(androidSdkProvider);
   }
 
   @override
@@ -115,23 +119,26 @@ class _OngMusicAppState extends ConsumerState<OngMusicApp> {
     final themes = _themes != null && !fallbackChanged && _themes!.desktop == desktop
         ? _themes!
         : _themes = _buildThemes(desktop: desktop, fallback: fallback);
-    return MaterialApp.router(
-      title: 'Ong Music',
-      debugShowCheckedModeBanner: false,
-      themeMode: ref.watch(themePreferenceProvider).themeMode,
-      theme: themes.light,
-      darkTheme: themes.dark,
-      themeAnimationDuration: fallbackChanged ? Duration.zero : kThemeAnimationDuration,
-      builder: (context, child) => FontWarmUpScope(
-        child: AppLayout(
-          child: _browserUses24HourClock == true
-              ? MediaQuery(data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true), child: child!)
-              : child!,
+    return LauncherShortcutsScope(
+      navigatorKey: _router.navigatorKey,
+      child: MaterialApp.router(
+        title: 'Ong Music',
+        debugShowCheckedModeBanner: false,
+        themeMode: ref.watch(themePreferenceProvider).themeMode,
+        theme: themes.light,
+        darkTheme: themes.dark,
+        themeAnimationDuration: fallbackChanged ? Duration.zero : kThemeAnimationDuration,
+        builder: (context, child) => FontWarmUpScope(
+          child: AppLayout(
+            child: _browserUses24HourClock == true
+                ? MediaQuery(data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true), child: child!)
+                : child!,
+          ),
         ),
+        routerDelegate: _router,
+        routeInformationParser: const AppAddressParser(),
+        routeInformationProvider: _addressBar,
       ),
-      routerDelegate: _router,
-      routeInformationParser: const AppAddressParser(),
-      routeInformationProvider: _addressBar,
     );
   }
 }

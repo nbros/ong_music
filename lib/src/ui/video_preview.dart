@@ -309,7 +309,7 @@ class _Refused extends ConsumerWidget {
               // no link of the page over the player: the player is gone when this shows
               VideoLink(
                 highlight: highlight,
-                label: 'Watch on YouTube',
+                label: watchOnYouTubeText,
                 builder: (context, open) => FilledButton.icon(
                   onPressed: open,
                   style: platformButtonStyle(
@@ -322,7 +322,7 @@ class _Refused extends ConsumerWidget {
                     ),
                   ),
                   icon: const Icon(Icons.open_in_new, size: 18),
-                  label: const Text('Watch on YouTube'),
+                  label: const Text(watchOnYouTubeText),
                 ),
               ),
             ],

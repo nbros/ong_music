@@ -1221,7 +1221,11 @@ void main() {
         find
             .descendant(
               of: row,
-              matching: find.byWidgetPredicate((w) => w is DecoratedBox && w.decoration is ShapeDecoration),
+              // (not the tint of a row whose menu is open, in the foreground)
+              matching: find.byWidgetPredicate(
+                (w) =>
+                    w is DecoratedBox && w.decoration is ShapeDecoration && w.position == DecorationPosition.background,
+              ),
             )
             .first,
       );

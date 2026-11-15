@@ -3,6 +3,8 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
@@ -96,6 +98,74 @@ Future<void> shareHighlight(BuildContext context, WidgetRef ref, Highlight highl
 /// confirmation on the button itself: Android 13+ already shows its own
 /// clipboard preview, so a message would be a second notification.
 Future<bool> copyHighlight(Highlight highlight) => copyText(highlightShareText(highlight));
+
+// ------------------------------------------------------------------ wording of the copies and of the menus of rows
+// Each label in one place: the menu of a row, the buttons of a fiche and screen readers take them from here.
+
+/// What a copy button shows and screen readers hear once its text is copied, and the message of a copy from a menu
+/// where the system shows nothing of its own.
+const copiedText = 'Copied';
+
+/// The message of a copy the clipboard refused.
+const copyFailedText = 'Couldn’t copy';
+
+/// Copying the title of a song, artist included ([songCopyText]): an item of the menu of its row, the tooltip of the
+/// copy button of its fiche.
+const copyTitleText = 'Copy title';
+
+/// Copying the short link of a video ([shortVideoUrl]): an item of the menu of a row.
+const copyLinkText = 'Copy link';
+
+/// Sharing a highlight ([shareHighlight]): the button of its fiche, an item of the menu of a row.
+const shareText = 'Share';
+
+/// Opening a video on YouTube: the button of the fiche of a highlight, an item of the menu of a play.
+const watchOnYouTubeText = 'Watch on YouTube';
+
+/// The star of a highlight, as a button of its fiche and as an item of the menu of its row.
+const addToFavouritesText = 'Add to favourites';
+const removeFromFavouritesText = 'Remove from favourites';
+
+/// What the long press of a row does, for screen readers.
+const moreActionsHint = 'Shows more actions';
+
+/// What copying the title of a song gives: its title as the sheets write it, `"Artist - Track"` (the track alone
+/// without artist), the form "Copy title and link" gives too. The one place of that form.
+String songCopyText(String title) => title;
+
+/// The API level of Android, or null elsewhere (the web, Windows) or when it cannot be read: read once, from the
+/// activity of the app (`MainActivity.kt`). Overridden in tests.
+final androidSdkProvider = FutureProvider<int?>((ref) async {
+  if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return null;
+  try {
+    return await const MethodChannel('nbros.ong_music/system').invokeMethod<int>('sdkInt');
+  } catch (e) {
+    logger.w('Cannot read the version of Android', error: e);
+    return null;
+  }
+});
+
+/// Whether the system shows what is copied by itself: Android 13 and higher (API 33) preview the clipboard.
+bool systemPreviewsCopies(int? androidSdk) => androidSdk != null && androidSdk >= 33;
+
+/// Copies [text] from an item of a menu, then confirms it as the platform needs it: the message [copiedText] where the
+/// system shows nothing of its own, only an announcement for screen readers where it does (Android 13 and higher: a
+/// message would be a second notification); [copyFailedText] when the clipboard refused. [context] is the one of what
+/// the menu was opened on: the menu itself is gone by then.
+Future<void> copyAndConfirm(BuildContext context, String text) async {
+  final view = View.of(context);
+  final direction = Directionality.of(context);
+  final copied = await copyText(text);
+  if (!context.mounted) return;
+  if (!copied) return showMessage(context, copyFailedText);
+  final sdk = ProviderScope.containerOf(context, listen: false).read(androidSdkProvider).value;
+  if (systemPreviewsCopies(sdk)) {
+    SemanticsService.sendAnnouncement(view, copiedText, direction);
+  } else {
+    // the message is a live region: screen readers say it
+    showMessage(context, copiedText);
+  }
+}
 
 /// Copies [text]; false when the clipboard refused or is missing.
 Future<bool> copyText(String text) async {

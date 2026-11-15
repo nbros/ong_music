@@ -450,12 +450,17 @@ class PlayTypeIcon extends StatelessWidget {
 
   final PlayType type;
 
+  /// The width of its box, and the size of its icon, in the middle of it.
+  static const double width = 24, iconSize = 18;
+
   @override
   Widget build(BuildContext context) {
     final icon = playTypeIcon(type);
     return SizedBox(
-      width: 24,
-      child: icon == null ? null : Icon(icon, size: 18, color: OngColors.of(context).on3, semanticLabel: type.label),
+      width: width,
+      child: icon == null
+          ? null
+          : Icon(icon, size: iconSize, color: OngColors.of(context).on3, semanticLabel: type.label),
     );
   }
 }

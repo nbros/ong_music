@@ -21,6 +21,7 @@ import 'package:ong_music/src/ui/app.dart';
 import 'package:ong_music/src/ui/font_warm_up.dart';
 import 'package:ong_music/src/ui/fullscreen_button.dart';
 import 'package:ong_music/src/ui/install_banner.dart';
+import 'package:ong_music/src/ui/launcher_shortcuts.dart';
 import 'package:ong_music/src/ui/layout.dart';
 import 'package:ong_music/src/ui/nav_rail.dart';
 import 'package:ong_music/src/ui/new_highlights.dart';
@@ -226,6 +227,13 @@ class Effects {
   /// How many times the app asked the system to close it (Android back).
   int exits = 0;
 
+  /// How many times the app asked for the haptic feedback of the platform (a long press, on Android).
+  int haptics = 0;
+
+  /// What the app last told the system about Back: whether it takes it (true) or lets the system show the way home
+  /// and leave (false, Android's predictive back); null before it said anything.
+  bool? frameworkHandlesBack;
+
   /// The methods the app called on the navigation channel (the address of
   /// the web app).
   final navigation = <String>[];
@@ -272,6 +280,12 @@ class TestApp {
 ///
 /// The page's visibility is [pageVisibility], as in the web app; none, as in
 /// the native apps, by default.
+///
+/// The launcher icon has no shortcut, as in the web app, unless [shortcuts]
+/// gives it those of the Android app.
+///
+/// The version of Android is unknown, as on the web, unless [androidSdk]
+/// gives its API level (33 and higher preview what is copied).
 Future<TestApp> pumpApp(
   WidgetTester tester, {
   CatalogueState? state,
@@ -298,6 +312,8 @@ Future<TestApp> pumpApp(
   bool desktop = false,
   bool canShare = true,
   ValueListenable<bool>? pageVisibility,
+  FakeLauncherShortcuts? shortcuts,
+  int? androidSdk,
 }) async {
   // before the size: setting it makes MediaQuery read the clock format again
   tester.platformDispatcher.alwaysUse24HourFormatTestValue = alwaysUse24HourFormat;
@@ -316,6 +332,8 @@ Future<TestApp> pumpApp(
   final effects = Effects();
   tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
     if (call.method == 'SystemNavigator.pop') effects.exits++;
+    if (call.method == 'HapticFeedback.vibrate') effects.haptics++;
+    if (call.method == 'SystemNavigator.setFrameworkHandlesBack') effects.frameworkHandlesBack = call.arguments as bool;
     if (call.method == 'Clipboard.setData') {
       if (!effects.clipboardWorks) throw PlatformException(code: 'copy_fail');
       effects.clipboard = (call.arguments as Map)['text'] as String?;
@@ -353,6 +371,8 @@ Future<TestApp> pumpApp(
         fontKitRegistrationProvider.overrideWithValue(fontKitRegistration ?? (fonts) async {}),
         fontWarmUpPauseProvider.overrideWithValue(fontPause ?? () => Future<void>.delayed(Duration.zero)),
         desktopLookProvider.overrideWithValue(desktop),
+        launcherShortcutsProvider.overrideWithValue(shortcuts),
+        androidSdkProvider.overrideWith((ref) async => androidSdk),
         if (pointer != null) pointerProvider.overrideWith(() => PinnedPointer(pointer)),
         thumbnailImageProvider.overrideWithValue((url) => MemoryImage(transparentPng)),
         urlOpenerProvider.overrideWithValue((uri) async {
@@ -754,4 +774,26 @@ class _FakePlayerViewState extends State<FakePlayerView> {
 
   @override
   Widget build(BuildContext context) => const ColoredBox(color: Colors.black);
+}
+
+/// The shortcuts of the launcher icon of the Android app, used by the test: [launch] is the one the app is opened
+/// with, if any; [offered] lists what the app showed in the launcher's menu, each time.
+class FakeLauncherShortcuts implements LauncherShortcuts {
+  FakeLauncherShortcuts({this.launch});
+
+  final AppShortcut? launch;
+  final offered = <List<AppShortcut>>[];
+  void Function(AppShortcut shortcut, {required bool launch})? _onShortcut;
+
+  @override
+  Future<void> listen(void Function(AppShortcut shortcut, {required bool launch}) onShortcut) async {
+    _onShortcut = onShortcut;
+    if (launch case final launch?) onShortcut(launch, launch: true);
+  }
+
+  @override
+  Future<void> offer(List<AppShortcut> shortcuts) async => offered.add(shortcuts);
+
+  /// A tap on [shortcut] in the launcher's menu while the app runs.
+  void use(AppShortcut shortcut) => _onShortcut!(shortcut, launch: false);
 }

@@ -482,16 +482,21 @@ void main() {
     }, variant: TargetPlatformVariant.only(TargetPlatform.android));
 
     testWidgets('Android back on the Highlights tab: back in the pane before leaving', (tester) async {
+      // the app in front: only then does the framework tell the system whether it takes Back (predictive back)
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
       final app = await pumpApp(tester, size: const Size(1280, 800));
       await tester.tap(highlightRow('I Will Survive'));
       await tester.pumpAndSettle();
+      expect(app.effects.frameworkHandlesBack, isFalse);
       await tester.tap(inPane(find.text('Played 2 times live')));
       await tester.pumpAndSettle();
+      expect(app.effects.frameworkHandlesBack, isTrue, reason: 'a fiche stacked in the pane: no way home to preview');
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
       expect(app.effects.exits, 0);
       expect(paneHighlight(tester), 'I Will Survive');
       expect(backButton(), findsNothing);
+      expect(app.effects.frameworkHandlesBack, isFalse);
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
       expect(app.effects.exits, 1);
