@@ -802,7 +802,7 @@ class _DataSectionState extends ConsumerState<_DataSection> {
                       // what the Songs sheet counts, on one line of its own: its room is there before it is in
                       Text(
                         state.hasSongs
-                            ? '${plural(state.playCount, 'song')} · ${plural(state.streamCount, 'stream')}'
+                            ? '${plural(state.playCount, 'play')} · ${plural(state.streamCount, 'stream')}'
                             : ' ',
                         style: small,
                         maxLines: 1,

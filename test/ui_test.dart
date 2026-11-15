@@ -832,7 +832,8 @@ void main() {
       await goToTab(tester, 'About');
       await tester.scrollUntilVisible(find.text('Clear downloaded data'), 200, scrollable: aboutScrollable());
       expect(find.text('Updated 2 hours ago'), findsOneWidget);
-      expect(find.text('4 songs · 2 streams'), findsOneWidget);
+      // the songs played, not the different songs: plays
+      expect(find.text('4 plays · 2 streams'), findsOneWidget);
       expect(find.textContaining('at most every 6 hours'), findsOneWidget);
       await tester.tap(find.text('Refresh'));
       expect(app.notifier.refreshes, 1);
