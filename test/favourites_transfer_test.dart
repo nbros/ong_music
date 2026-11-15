@@ -7,6 +7,7 @@ import 'package:ong_music/src/state/catalogue_state.dart';
 import 'package:ong_music/src/state/settings_state.dart';
 import 'package:ong_music/src/ui/app.dart';
 import 'package:ong_music/src/ui/favourites_transfer.dart';
+import 'package:ong_music/src/ui/format.dart';
 
 import 'fixtures.dart';
 import 'ui_harness.dart';
@@ -256,6 +257,72 @@ Sent from my phone''';
     await _importText(tester, text);
     expect(find.text('3 favourites added'), findsOneWidget);
     expect(_favourites(tester).toList(), keys);
+    await waitForMessage(tester);
+  });
+
+  testWidgets('an export read back on the same device adds nothing, even for one of two titles alike', (tester) async {
+    final catalogue = testCatalogue(moreHighlights: _more);
+    // the older of the two "How Far I'll Go" without video
+    final text = favouritesExportText(favouriteLines({_moana}, catalogue));
+    expect(favouriteKeysIn(text, catalogue, favourites: {_moana}), [_moana]);
+    // elsewhere the text cannot tell them apart: the newest
+    expect(favouriteKeysIn(text, catalogue), [catalogue.highlights[4].key]);
+
+    await pumpApp(
+      tester,
+      prefs: {
+        _key: [_moana],
+      },
+      state: _state(),
+    );
+    await _toSection(tester);
+    await _importText(tester, text);
+    expect(find.text('Already in your favourites'), findsOneWidget);
+    expect(_favourites(tester), {_moana});
+    await waitForMessage(tester);
+  });
+
+  for (final (size, counts) in [
+    (const Size(360, 900), [9, 10]),
+    (const Size(412, 900), [100, 1000]),
+  ]) {
+    testWidgets('at large text, the section keeps its height when the count gains a digit ($size)', (tester) async {
+      final heights = <double>[];
+      for (final count in counts) {
+        await pumpApp(
+          tester,
+          size: size,
+          textScale: 2,
+          prefs: {
+            _key: [for (var i = 0; i < count; i++) 'z${i.toString().padLeft(10, '0')}'],
+          },
+          state: _state(),
+        );
+        await goToTab(tester, 'About');
+        await tester.scrollUntilVisible(find.byType(FavouritesSection), 100, scrollable: aboutScrollable());
+        await tester.pumpAndSettle();
+        expect(find.text('${formatCount(count)} favourites'), findsOneWidget);
+        heights.add(tester.getSize(find.byType(FavouritesSection)).height);
+        await tester.pumpWidget(const SizedBox());
+      }
+      expect(heights.toSet(), hasLength(1), reason: '$heights');
+    });
+  }
+
+  testWidgets('Export says so when the clipboard refuses', (tester) async {
+    final app = await pumpApp(
+      tester,
+      prefs: {
+        _key: ['aaaaaaaaaaa'],
+      },
+      state: _state(),
+      canShare: false,
+    );
+    app.effects.clipboardWorks = false;
+    await _toSection(tester);
+    await tapVisible(tester, _button('Export'));
+    expect(find.text('Couldn’t copy'), findsOneWidget);
+    expect(find.text('Copied'), findsNothing);
     await waitForMessage(tester);
   });
 }

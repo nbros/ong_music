@@ -5,6 +5,8 @@
 /// (Android's own backup carries the favourites to a new phone by itself.)
 library;
 
+import 'dart:math' as math;
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -61,8 +63,10 @@ String favouritesExportText(List<String> lines) => ['My Ong Music favourites (${
 /// link in it, wherever it is (a forwarded message, lines wrapped, words around the list); and a line without
 /// link, by its title, a highlight without video. A highlight not in [catalogue] is not named.
 ///
-/// Highlights without video sharing a title are named the newest first, one per line naming it.
-List<String> favouriteKeysIn(String text, Catalogue catalogue) {
+/// Highlights without video sharing a title are named one per line naming it: first those among [favourites] (an
+/// export read back on the same device adds nothing), then the newest. The text cannot tell them apart otherwise:
+/// on another device, the newest is the guess.
+List<String> favouriteKeysIn(String text, Catalogue catalogue, {Set<String> favourites = const {}}) {
   final byKey = _highlightsByKey(catalogue);
   final keys = <String>{};
   // the highlights without video by title, newest first: made only when a line has no link
@@ -84,12 +88,17 @@ List<String> favouriteKeysIn(String text, Catalogue catalogue) {
       }
       return map;
     }();
-    for (final h in untitled[title] ?? const <Highlight>[]) {
-      if (keys.add(h.key)) break;
-    }
+    final candidates = untitled[title] ?? const <Highlight>[];
+    final pick =
+        candidates.where((h) => favourites.contains(h.key) && !keys.contains(h.key)).firstOrNull ??
+        candidates.where((h) => !keys.contains(h.key)).firstOrNull;
+    if (pick != null) keys.add(pick.key);
   }
   return keys.toList();
 }
+
+/// The widest count the section can show: four digits (the catalogue holds about 2,000 highlights).
+const _widestCount = 8888;
 
 /// What the section says of the favourites: `12 favourites`.
 String favouriteCountText(int count) => plural(count, 'favourite');
@@ -106,6 +115,12 @@ class FavouritesSection extends ConsumerWidget {
     final lines = ref.watch(favouriteLinesProvider);
     final loaded = ref.watch(currentCatalogueProvider.select((c) => c != null));
     final scheme = Theme.of(context).colorScheme;
+    // tabular figures: every count of as many digits is as wide
+    final countStyle = TextStyle(
+      fontSize: 14,
+      color: scheme.onSurface,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
     final buttonStyle = TextButton.styleFrom(textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500));
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 4, 0),
@@ -116,7 +131,20 @@ class FavouritesSection extends ConsumerWidget {
           Padding(
             // its line as high as the buttons, in either layout
             padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Text(favouriteCountText(lines.length), style: TextStyle(fontSize: 14, color: scheme.onSurface)),
+            // In the room of the widest count it can show, unseen and unsaid under it: whether the buttons stand
+            // beside the count or under it never changes with the count (a star more, the highlights coming).
+            child: Stack(
+              children: [
+                Visibility(
+                  visible: false,
+                  maintainSize: true,
+                  maintainAnimation: true,
+                  maintainState: true,
+                  child: Text(favouriteCountText(math.max(lines.length, _widestCount)), style: countStyle),
+                ),
+                Text(favouriteCountText(lines.length), style: countStyle),
+              ],
+            ),
           ),
           // one under the other when even a line of their own is too narrow
           OverflowBar(
@@ -145,7 +173,7 @@ Future<void> _export(BuildContext context, WidgetRef ref, List<String> lines) as
   final text = favouritesExportText(lines);
   if (ref.read(canShareProvider) && await ref.read(textSharerProvider)(text)) return;
   final copied = await copyText(text);
-  if (copied && context.mounted) showMessage(context, 'Copied');
+  if (context.mounted) showMessage(context, copied ? 'Copied' : 'Couldn’t copy');
 }
 
 /// The import dialog: the exported text pasted, its favourites added to the user's.
@@ -174,7 +202,9 @@ class _ImportDialogState extends ConsumerState<_ImportDialog> {
 
   void _import() {
     final catalogue = ref.read(currentCatalogueProvider);
-    final keys = catalogue == null ? const <String>[] : favouriteKeysIn(_text.text, catalogue);
+    final keys = catalogue == null
+        ? const <String>[]
+        : favouriteKeysIn(_text.text, catalogue, favourites: ref.read(favouritesProvider));
     if (keys.isEmpty) {
       setState(() => _nothing = true);
       return;
