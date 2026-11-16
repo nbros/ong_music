@@ -88,6 +88,81 @@ String? _longPressHint(SemanticsData data) => [
       action.hint,
 ].singleOrNull;
 
+/// The surface of the open menu.
+Finder _surface() => find.ancestor(of: find.byType(PopupMenuItem<void>).first, matching: find.byType(Material)).first;
+
+/// How opaque [finder] is drawn: the product of the fades above it.
+double _opacity(WidgetTester tester, Finder finder) => tester
+    .widgetList<FadeTransition>(find.ancestor(of: finder, matching: find.byType(FadeTransition)))
+    .fold(1.0, (opacity, fade) => opacity * fade.opacity.value);
+
+/// The opacities of the open menu's surface and of each of its items, in their order.
+List<double> _opacities(WidgetTester tester) => [
+  _opacity(tester, _surface()),
+  for (var i = 0; i < find.byType(PopupMenuItem<void>).evaluate().length; i++)
+    _opacity(tester, find.byType(PopupMenuItem<void>).at(i)),
+];
+
+/// The places of the open menu's surface and of each of its items, in their order.
+List<Rect> _rects(WidgetTester tester) => [
+  tester.getRect(_surface()),
+  for (var i = 0; i < find.byType(PopupMenuItem<void>).evaluate().length; i++)
+    tester.getRect(find.byType(PopupMenuItem<void>).at(i)),
+];
+
+/// Follows the fade of a menu that has just been asked for (by the frame drawn next): at its full size and in its
+/// place from that frame on, all of it equally opaque, more and more, opaque at [rowMenuFadeIn].
+Future<void> _expectFadeIn(WidgetTester tester) async {
+  await tester.pump();
+  expect(find.byType(PopupMenuItem<void>), findsWidgets);
+  final first = _rects(tester);
+  final seen = <double>[];
+  for (final step in const [16, 44, 60]) {
+    await tester.pump(Duration(milliseconds: step));
+    final opacities = _opacities(tester);
+    expect(opacities.toSet(), hasLength(1), reason: 'the surface and the items together, no item after another');
+    expect(_rects(tester), first, reason: 'nothing grows, nothing moves (at ${seen.length})');
+    seen.add(opacities.first);
+  }
+  expect(seen[0], inExclusiveRange(0, 1));
+  expect(seen[1], inExclusiveRange(seen[0], 1));
+  expect(seen[2], 1, reason: 'opaque at the end of the fade, ${rowMenuFadeIn.inMilliseconds} ms');
+  await tester.pumpAndSettle();
+  expect(_rects(tester), first);
+  expect(_opacities(tester).toSet(), {1.0});
+}
+
+/// A window of [size] (system bars of [padding]) filled with one row whose menu has [count] items.
+Future<void> _pumpBare(
+  WidgetTester tester, {
+  Size size = const Size(412, 892),
+  FakeViewPadding padding = FakeViewPadding.zero,
+  int count = 3,
+  ThemeData? theme,
+}) async {
+  tester.view.physicalSize = size;
+  tester.view.devicePixelRatio = 1;
+  tester.view.padding = padding;
+  tester.view.viewPadding = padding;
+  addTearDown(tester.view.reset);
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [contextMenusProvider.overrideWith((ref) => null)],
+      child: MaterialApp(
+        theme: theme,
+        home: Material(
+          child: RowMenuArea(
+            items: (context, ref) => [
+              for (var i = 0; i < count; i++) (icon: Icons.copy, label: 'Item $i', onSelected: () {}),
+            ],
+            child: const SizedBox.expand(),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
 void main() {
   group('A highlight row', () {
     testWidgets('a long press: the menu, with the haptic feedback; nothing else happens', (tester) async {
@@ -469,6 +544,200 @@ void main() {
       await tester.pumpAndSettle();
       expect(_items(tester).first, 'Copy title');
       handle.dispose();
+    });
+  });
+  group('Its fade', () {
+    testWidgets('a right click: the whole menu fades in, at its full size and in its place from the first frame', (
+      tester,
+    ) async {
+      await pumpApp(tester);
+      final mouse = await tester.startGesture(
+        tester.getTopLeft(_highlightRow('Song of Storms')) + const Offset(30, 20),
+        kind: PointerDeviceKind.mouse,
+        buttons: kSecondaryMouseButton,
+      );
+      await mouse.up();
+      await _expectFadeIn(tester);
+    });
+
+    testWidgets('a long press with a finger: the same fade', (tester) async {
+      await pumpApp(tester);
+      final finger = await tester.startGesture(tester.getCenter(_highlightRow('I Will Survive')));
+      await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
+      await finger.up();
+      expect(find.byType(PopupMenuItem<void>), findsWidgets, reason: 'asked for');
+      final first = _rects(tester);
+      expect(_opacities(tester).toSet(), hasLength(1));
+      expect(_opacities(tester).first, lessThan(1));
+      await tester.pumpAndSettle();
+      expect(_rects(tester), first);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      await tester.longPress(_highlightRow('I Will Survive'));
+      // (the long press of the tester pumps no frame after it: the menu is asked for)
+      await _expectFadeIn(tester);
+    });
+
+    testWidgets('closing: a short fade out, in its place, then nothing', (tester) async {
+      await pumpApp(tester);
+      await _longPress(tester, _highlightRow('I Will Survive'));
+      final rects = _rects(tester);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 45));
+      expect(_rects(tester), rects);
+      expect(_opacities(tester).toSet(), hasLength(1));
+      expect(_opacities(tester).first, inExclusiveRange(0, 1));
+      await tester.pump(rowMenuFadeOut - const Duration(milliseconds: 45));
+      expect(_opacities(tester).toSet(), {0.0}, reason: 'faded out at ${rowMenuFadeOut.inMilliseconds} ms');
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(find.byType(PopupMenuItem<void>), findsNothing, reason: 'gone the frame after');
+    });
+
+    testWidgets('with less motion: there at once, gone at once, by a finger or a mouse', (tester) async {
+      tester.platformDispatcher.accessibilityFeaturesTestValue = const FakeAccessibilityFeatures(
+        disableAnimations: true,
+      );
+      addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
+      await pumpApp(tester);
+      final finger = await tester.startGesture(tester.getCenter(_highlightRow('I Will Survive')));
+      await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
+      await finger.up();
+      expect(_opacities(tester).toSet(), {1.0}, reason: 'fully shown at the first frame');
+      final rects = _rects(tester);
+      await tester.pumpAndSettle();
+      expect(_rects(tester), rects);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+      expect(find.byType(PopupMenuItem<void>), findsNothing, reason: 'gone at the first frame');
+
+      final mouse = await tester.startGesture(
+        tester.getTopLeft(_highlightRow('Song of Storms')) + const Offset(30, 20),
+        kind: PointerDeviceKind.mouse,
+        buttons: kSecondaryMouseButton,
+      );
+      await mouse.up();
+      await tester.pump();
+      expect(_opacities(tester).toSet(), {1.0});
+      await tester.tapAt(const Offset(5, 5));
+      await tester.pump();
+      expect(find.byType(PopupMenuItem<void>), findsNothing);
+    });
+  });
+
+  group('Its place and its look', () {
+    Future<Rect> openAt(WidgetTester tester, Offset at) async {
+      await _rightClick(tester, at);
+      final rect = tester.getRect(_surface());
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      return rect;
+    }
+
+    testWidgets('its corner at the pointer: to its right in the left half, to its left in the right half', (
+      tester,
+    ) async {
+      await _pumpBare(tester);
+      final left = await openAt(tester, const Offset(150, 300));
+      expect(left.topLeft, const Offset(150, 300));
+      final right = await openAt(tester, const Offset(262, 300));
+      expect(right.topRight, const Offset(262, 300));
+      expect(right.size, left.size);
+    });
+
+    testWidgets('kept 8 px inside the window and clear of the system bars, at each edge', (tester) async {
+      await _pumpBare(tester, padding: const FakeViewPadding(top: 24, bottom: 48));
+      final bottomRight = await openAt(tester, const Offset(410, 880));
+      expect(bottomRight.right, 412 - 8);
+      expect(bottomRight.bottom, 892 - 48 - 8);
+      final topLeft = await openAt(tester, const Offset(2, 2));
+      expect(topLeft.topLeft, const Offset(8, 24 + 8));
+      final bottomLeft = await openAt(tester, const Offset(2, 891));
+      expect(bottomLeft.left, 8);
+      expect(bottomLeft.bottom, 892 - 48 - 8);
+      final topRight = await openAt(tester, const Offset(411, 10));
+      expect(topRight.topRight, const Offset(412 - 8, 24 + 8));
+    });
+
+    testWidgets('taller than the window: inside it, and it scrolls', (tester) async {
+      await _pumpBare(tester, size: const Size(412, 300), count: 20);
+      await _rightClick(tester, const Offset(30, 40));
+      final surface = tester.getRect(_surface());
+      expect(surface.top, 8);
+      expect(surface.bottom, 300 - 8);
+      final last = find.text('Item 19');
+      expect(tester.getRect(last).top, greaterThan(surface.bottom));
+      await tester.drag(find.text('Item 2'), const Offset(0, -2000));
+      await tester.pumpAndSettle();
+      expect(tester.getRect(last).bottom, lessThanOrEqualTo(surface.bottom));
+      expect(find.byType(PopupMenuItem<void>), findsWidgets, reason: 'a drag inside does not close it');
+    });
+
+    testWidgets('Material 3\'s look, a width of 56 px steps; the theme\'s when the app sets one', (tester) async {
+      await _pumpBare(tester);
+      await _rightClick(tester, const Offset(30, 40));
+      final scheme = Theme.of(tester.element(_surface())).colorScheme;
+      var surface = tester.widget<Material>(_surface());
+      expect(surface.type, MaterialType.card);
+      expect(surface.color, scheme.surfaceContainer);
+      expect(surface.elevation, 3);
+      expect(surface.shadowColor, scheme.shadow);
+      expect(surface.surfaceTintColor, Colors.transparent);
+      expect(surface.shape, const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(4))));
+      expect(tester.getSize(_surface()).width % 56, 0);
+      expect(tester.getSize(_surface()).width, inInclusiveRange(112, 280));
+      expect(tester.getRect(find.byType(PopupMenuItem<void>).first).top - tester.getRect(_surface()).top, 8);
+
+      const shape = StadiumBorder();
+      await _pumpBare(
+        tester,
+        theme: ThemeData(
+          popupMenuTheme: const PopupMenuThemeData(
+            color: Colors.red,
+            elevation: 10,
+            shape: shape,
+            shadowColor: Colors.blue,
+            surfaceTintColor: Colors.green,
+            menuPadding: EdgeInsets.symmetric(vertical: 2),
+          ),
+        ),
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      await _rightClick(tester, const Offset(30, 40));
+      surface = tester.widget<Material>(_surface());
+      expect(
+        (surface.color, surface.elevation, surface.shape, surface.shadowColor, surface.surfaceTintColor),
+        (Colors.red, 10.0, shape, Colors.blue, Colors.green),
+      );
+      expect(tester.getRect(find.byType(PopupMenuItem<void>).first).top - tester.getRect(_surface()).top, 2);
+    });
+
+    testWidgets('screen readers: a menu, a route of its own, named "Popup menu"; focus stays among its items', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      await _pumpBare(tester);
+      await _rightClick(tester, const Offset(30, 40));
+      final menu = find.bySemanticsLabel('Popup menu');
+      expect(
+        tester.getSemantics(menu),
+        isSemantics(label: 'Popup menu', role: SemanticsRole.menu, scopesRoute: true, namesRoute: true),
+      );
+      handle.dispose();
+
+      FocusNode? focused() => FocusManager.instance.primaryFocus;
+      final labels = <String>[];
+      for (var i = 0; i < 4; i++) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.pump();
+        final item = find.ancestor(
+          of: find.byElementPredicate((e) => e == focused()?.context),
+          matching: find.byType(PopupMenuItem<void>),
+        );
+        labels.add(tester.widget<Text>(find.descendant(of: item, matching: find.byType(Text))).data!);
+      }
+      expect(labels, ['Item 0', 'Item 1', 'Item 2', 'Item 0']);
     });
   });
 }
