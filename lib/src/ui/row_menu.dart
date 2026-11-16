@@ -5,7 +5,9 @@
 /// of screen readers.
 library;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -124,26 +126,37 @@ class _RowMenuAreaState extends ConsumerState<RowMenuArea> {
     if (haptic) Feedback.forLongPress(context);
     final overlay = Overlay.of(context).context.findRenderObject()! as RenderBox;
     final at = overlay.globalToLocal(position);
+    final navigator = Navigator.of(context);
+    final localizations = MaterialLocalizations.of(context);
     setState(() => _open = true);
     _menus?.appMenuOpen = true;
     try {
-      await showMenu<void>(
-        context: context,
-        position: RelativeRect.fromRect(Rect.fromLTWH(at.dx, at.dy, 0, 0), Offset.zero & overlay.size),
-        items: [
-          for (final item in items)
-            PopupMenuItem<void>(
-              // in the tap itself (a copy in a browser needs the user's gesture), before the menu closes
-              onTap: item.onSelected,
-              child: Row(
-                children: [
-                  Icon(item.icon, size: 20),
-                  const SizedBox(width: 12),
-                  Flexible(child: Text(item.label)),
-                ],
+      await navigator.push(
+        _RowMenuRoute(
+          at: at,
+          items: [
+            for (final item in items)
+              PopupMenuItem<void>(
+                // in the tap itself (a copy in a browser needs the user's gesture), before the menu closes
+                onTap: item.onSelected,
+                child: Row(
+                  children: [
+                    Icon(item.icon, size: 20),
+                    const SizedBox(width: 12),
+                    Flexible(child: Text(item.label)),
+                  ],
+                ),
               ),
-            ),
-        ],
+          ],
+          // the name screen readers give the menu, as Material's: none on Apple's platforms, which name it themselves
+          semanticLabel: switch (defaultTargetPlatform) {
+            TargetPlatform.iOS || TargetPlatform.macOS => null,
+            _ => localizations.popupMenuLabel,
+          },
+          barrierLabel: localizations.menuDismissLabel,
+          capturedThemes: InheritedTheme.capture(from: context, to: navigator.context),
+          animated: !MediaQuery.disableAnimationsOf(context),
+        ),
       );
     } finally {
       // even when the row has gone meanwhile: the browser's menu must not stay closed
@@ -195,4 +208,168 @@ class _RowMenuAreaState extends ConsumerState<RowMenuArea> {
     );
     return Semantics(onLongPress: () => _show(_middle()), onLongPressHint: moreActionsHint, child: area);
   }
+}
+
+/// How long the menu of a row takes to appear: a fade, with a gentle ease-out, of the whole menu at its full size and
+/// in its place from the first frame (as the menus of Samsung's phones), not Material's unrolling from the top, whose
+/// width and height grow and whose items come one after the other over 300 ms.
+const rowMenuFadeIn = Duration(milliseconds: 120);
+
+/// How long the menu of a row takes to go once closed: a shorter fade, what comes after it not kept waiting.
+const rowMenuFadeOut = Duration(milliseconds: 90);
+
+/// The menu of a row over the page, at [at] (in the navigator's overlay): Material's menu of [showMenu] (its surface,
+/// its place, its barrier, its focus kept among its items, what screen readers get) with a fade of its own, which
+/// [showMenu] cannot give (its fade, its growth and its items' fades are one animation). Nothing moves when the system
+/// asks for less motion ([animated] false): it is there, and then gone, from one frame to the next.
+class _RowMenuRoute extends PopupRoute<void> {
+  _RowMenuRoute({
+    required this.at,
+    required this.items,
+    required this.semanticLabel,
+    required this.barrierLabel,
+    required this.capturedThemes,
+    required this.animated,
+  }) : super(traversalEdgeBehavior: TraversalEdgeBehavior.closedLoop); // as Material's: focus stays in the menu
+
+  final Offset at;
+  final List<PopupMenuItem<void>> items;
+  final String? semanticLabel;
+
+  /// The themes of the row's context, which apply inside the menu as they would in the row.
+  final CapturedThemes capturedThemes;
+
+  final bool animated;
+
+  @override
+  final String barrierLabel;
+
+  @override
+  bool get barrierDismissible => true;
+
+  @override
+  Color? get barrierColor => null;
+
+  @override
+  Duration get transitionDuration => animated ? rowMenuFadeIn : Duration.zero;
+
+  @override
+  Duration get reverseTransitionDuration => animated ? rowMenuFadeOut : Duration.zero;
+
+  @override
+  Widget buildPage(BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation) {
+    final padding = MediaQuery.paddingOf(context);
+    return MediaQuery.removePadding(
+      context: context,
+      removeTop: true,
+      removeBottom: true,
+      removeLeft: true,
+      removeRight: true,
+      child: CustomSingleChildLayout(
+        delegate: _RowMenuLayout(at, padding, Directionality.of(context)),
+        child: capturedThemes.wrap(_RowMenu(items: items, semanticLabel: semanticLabel)),
+      ),
+    );
+  }
+
+  /// The whole menu fades, its surface, its shadow and its items together; the same curve backwards makes the fade
+  /// out speed up as it goes.
+  @override
+  Widget buildTransitions(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) => FadeTransition(
+    opacity: animation.drive(CurveTween(curve: Curves.easeOut)),
+    child: child,
+  );
+}
+
+/// The surface of the menu of a row, with [items]: Material's for [showMenu] (the app is Material 3), its look from
+/// the [PopupMenuTheme] when one is set, and otherwise from Material 3's defaults, private to Material and so written
+/// again here. Its width is a step of 56 px between two and five steps; taller than the window, it scrolls.
+class _RowMenu extends StatelessWidget {
+  const _RowMenu({required this.items, required this.semanticLabel});
+
+  final List<PopupMenuItem<void>> items;
+  final String? semanticLabel;
+
+  static const _widthStep = 56.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = PopupMenuTheme.of(context);
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      type: MaterialType.card,
+      shape: theme.shape ?? const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(4))),
+      color: theme.color ?? scheme.surfaceContainer,
+      elevation: theme.elevation ?? 3,
+      shadowColor: theme.shadowColor ?? scheme.shadow,
+      surfaceTintColor: theme.surfaceTintColor ?? Colors.transparent,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minWidth: 2 * _widthStep, maxWidth: 5 * _widthStep),
+        child: IntrinsicWidth(
+          stepWidth: _widthStep,
+          // what screen readers get from Material's menu: a menu, a route of its own, named
+          child: Semantics(
+            role: SemanticsRole.menu,
+            scopesRoute: true,
+            namesRoute: true,
+            explicitChildNodes: true,
+            label: semanticLabel,
+            child: SingleChildScrollView(
+              padding: theme.menuPadding ?? const EdgeInsets.symmetric(vertical: 8),
+              child: ListBody(children: items),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Where the menu of a row goes: Material's rules for a menu of [showMenu] at a point. Its corner at [at]: to the right
+/// of the pointer in the left half of the window, to its left in the right half (in the reading direction in the
+/// middle); kept inside the window, 8 px clear of its edges and of the system bars ([padding]). (Material's menu also
+/// keeps to one side of the hinge of a folding screen: left out here, a row's menu opening at a finger on one side.)
+class _RowMenuLayout extends SingleChildLayoutDelegate {
+  const _RowMenuLayout(this.at, this.padding, this.textDirection);
+
+  final Offset at;
+  final EdgeInsets padding;
+  final TextDirection textDirection;
+
+  static const _margin = 8.0;
+
+  @override
+  BoxConstraints getConstraintsForChild(BoxConstraints constraints) =>
+      BoxConstraints.loose(constraints.biggest).deflate(const EdgeInsets.all(_margin) + padding);
+
+  @override
+  Offset getPositionForChild(Size size, Size childSize) {
+    final toTheLeft = switch (at.dx.compareTo(size.width - at.dx)) {
+      > 0 => true,
+      < 0 => false,
+      _ => textDirection == TextDirection.rtl,
+    };
+    var x = toTheLeft ? at.dx - childSize.width : at.dx;
+    var y = at.dy;
+    if (x < _margin + padding.left) {
+      x = _margin + padding.left;
+    } else if (x + childSize.width > size.width - _margin - padding.right) {
+      x = size.width - childSize.width - _margin - padding.right;
+    }
+    if (y < _margin + padding.top) {
+      y = _margin + padding.top;
+    } else if (y + childSize.height > size.height - _margin - padding.bottom) {
+      y = size.height - childSize.height - _margin - padding.bottom;
+    }
+    return Offset(x, y);
+  }
+
+  @override
+  bool shouldRelayout(_RowMenuLayout oldDelegate) =>
+      at != oldDelegate.at || padding != oldDelegate.padding || textDirection != oldDelegate.textDirection;
 }
