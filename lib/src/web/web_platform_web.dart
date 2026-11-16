@@ -9,6 +9,8 @@ import 'package:web/web.dart' as web;
 import '../logger.dart';
 import 'browser_history.dart';
 import 'browser_history_web.dart';
+import 'context_menu.dart';
+import 'context_menu_web.dart';
 import 'embedded_video.dart';
 import 'font_network.dart';
 import 'font_network_web.dart';
@@ -74,6 +76,11 @@ BrowserHistory? browserHistory() => PageHistory();
 
 /// The links of the page laid over the controls that open outside addresses.
 LinkAnchors? linkAnchors() => BrowserLinkAnchors();
+
+/// Which menu a right click opens, the browser's or the app's: one for the app's lifetime.
+ContextMenus? contextMenus() => _contextMenus;
+
+final BrowserContextMenus _contextMenus = BrowserContextMenus();
 
 /// Whether the browser is online, for the fonts it downloads: one for the app's lifetime.
 FontNetwork? fontNetwork() => _fontNetwork;

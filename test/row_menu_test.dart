@@ -1,5 +1,6 @@
-// The menu of a row: a long press with a finger or a stylus, a right click in the native apps, the long press action
-// of screen readers. Copy title, Copy link, Share, the star, Watch on YouTube.
+// The menu of a row: a long press with a finger or a stylus, a right click (in the web app, not on a link of the page,
+// whose menu stays the browser's), the long press action of screen readers. Copy title, Copy link, Share, the star,
+// Watch on YouTube.
 import 'package:flutter/gestures.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
@@ -10,6 +11,7 @@ import 'package:ong_music/src/ui/instant_feedback.dart';
 import 'package:ong_music/src/ui/rows.dart';
 import 'package:ong_music/src/ui/sheets.dart';
 import 'package:ong_music/src/ui/widgets.dart';
+import 'package:ong_music/src/web/context_menu.dart';
 
 import 'ui_harness.dart';
 
@@ -35,6 +37,41 @@ List<IconData?> _icons(WidgetTester tester) => [
 Future<void> _longPress(WidgetTester tester, Finder row) async {
   await tester.longPress(row);
   await tester.pumpAndSettle();
+}
+
+/// A click of the mouse's secondary button at [at].
+Future<void> _rightClick(WidgetTester tester, Offset at) async {
+  final mouse = await tester.startGesture(at, kind: PointerDeviceKind.mouse, buttons: kSecondaryMouseButton);
+  await mouse.up();
+  await tester.pumpAndSettle();
+}
+
+/// The browser's side of a right click in the web app: the pointer goes down on a link of the page when [onLink].
+class FakeContextMenus implements ContextMenus {
+  bool onLink = false;
+
+  /// The answers to the claims of the app, in order.
+  final claims = <bool>[];
+
+  /// The states of the app's menu the app reported, in order.
+  final reported = <bool>[];
+
+  bool _appMenuOpen = false;
+
+  @override
+  bool claimClick() {
+    claims.add(!onLink);
+    return !onLink;
+  }
+
+  @override
+  bool get appMenuOpen => _appMenuOpen;
+
+  @override
+  set appMenuOpen(bool open) {
+    _appMenuOpen = open;
+    reported.add(open);
+  }
 }
 
 Future<void> _choose(WidgetTester tester, String item) async {
@@ -120,13 +157,11 @@ void main() {
       expect(app.effects.haptics, 0);
     });
 
-    testWidgets('a right click opens it where the pointer is', (tester) async {
+    testWidgets('a right click opens it where the pointer is (the native apps: no menu of a browser)', (tester) async {
       final app = await pumpApp(tester);
       // (near the left edge: the menu fits at the right of the pointer)
       final at = tester.getTopLeft(_highlightRow('Song of Storms')) + const Offset(30, 20);
-      final mouse = await tester.startGesture(at, kind: PointerDeviceKind.mouse, buttons: kSecondaryMouseButton);
-      await mouse.up();
-      await tester.pumpAndSettle();
+      await _rightClick(tester, at);
       expect(_items(tester).first, 'Copy title');
       final menu = tester.getRect(find.byType(PopupMenuItem<void>).first);
       expect((menu.left - at.dx).abs(), lessThan(1), reason: 'its corner at the pointer');
@@ -205,6 +240,87 @@ void main() {
       await _longPress(tester, _highlightRow('Song of Storms'));
       expect(_items(tester), isNotEmpty);
       expect(selection(), before);
+    });
+  });
+
+  group('In the web app', () {
+    testWidgets('a right click on a row: its menu at the pointer, the browser\'s kept closed, reported open', (
+      tester,
+    ) async {
+      final menus = FakeContextMenus();
+      final app = await pumpApp(tester, contextMenus: menus, links: FakeLinkAnchors());
+      final at = tester.getTopLeft(_highlightRow('Song of Storms')) + const Offset(30, 20);
+      await _rightClick(tester, at);
+      expect(_items(tester).first, 'Copy title');
+      expect((tester.getRect(find.byType(PopupMenuItem<void>).first).left - at.dx).abs(), lessThan(1));
+      expect(menus.claims, [true], reason: 'claimed at the pointer down');
+      expect(menus.appMenuOpen, isTrue, reason: 'a right click that closes it opens no menu of the browser');
+      expect(app.effects.opened, isEmpty);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(find.byType(PopupMenuItem<void>), findsNothing);
+      expect(menus.reported, [true, false]);
+      expect(menus.appMenuOpen, isFalse);
+    });
+
+    testWidgets('a right click closing the menu: claims nothing, opens nothing more', (tester) async {
+      final menus = FakeContextMenus();
+      await pumpApp(tester, contextMenus: menus);
+      await _rightClick(tester, tester.getTopLeft(_highlightRow('Song of Storms')) + const Offset(30, 20));
+      // on the barrier, outside the menu
+      await _rightClick(tester, const Offset(400, 880));
+      expect(find.byType(PopupMenuItem<void>), findsNothing);
+      expect(menus.claims, [true], reason: 'the barrier is not a row');
+      expect(menus.reported, [true, false]);
+    });
+
+    testWidgets('a right click on a link of the page: the browser\'s menu alone, the row\'s does not open', (
+      tester,
+    ) async {
+      final menus = FakeContextMenus()..onLink = true;
+      final app = await pumpApp(tester, contextMenus: menus, links: FakeLinkAnchors());
+      final row = _highlightRow('Song of Storms');
+      await _rightClick(tester, tester.getCenter(row));
+      expect(find.byType(PopupMenuItem<void>), findsNothing);
+      expect(menus.claims, [false]);
+      expect(menus.reported, isEmpty);
+      expect(app.effects.opened, isEmpty, reason: 'nor the video');
+      // the next right click, off the link: the row's again
+      menus.onLink = false;
+      await _rightClick(tester, tester.getCenter(row));
+      expect(_items(tester).first, 'Copy title');
+      expect(menus.claims, [false, true]);
+    });
+
+    testWidgets('a right click on a play row too', (tester) async {
+      final menus = FakeContextMenus();
+      await pumpApp(tester, contextMenus: menus);
+      await goToTab(tester, 'Ong Log');
+      await _rightClick(tester, tester.getTopLeft(_playRow('Lost Woods')) + const Offset(30, 20));
+      expect(_items(tester), ['Copy title']);
+      expect(menus.claims, [true]);
+      menus.onLink = true;
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      await _rightClick(tester, tester.getTopLeft(_playRow('Lost Woods')) + const Offset(30, 20));
+      expect(find.byType(PopupMenuItem<void>), findsNothing);
+    });
+
+    testWidgets('a left click claims nothing; a long press with a finger reports the menu open', (tester) async {
+      final menus = FakeContextMenus();
+      final app = await pumpApp(tester, contextMenus: menus);
+      final mouse = await tester.startGesture(
+        tester.getCenter(_highlightRow('Song of Storms')),
+        kind: PointerDeviceKind.mouse,
+      );
+      await mouse.up();
+      await tester.pumpAndSettle();
+      expect(app.effects.opened.single.toString(), contains('aaaaaaaaaaa'));
+      expect(menus.claims, isEmpty);
+      await _longPress(tester, _highlightRow('I Will Survive'));
+      expect(_items(tester).first, 'Copy title');
+      expect(menus.claims, isEmpty);
+      expect(menus.reported, [true]);
     });
   });
 
