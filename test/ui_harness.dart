@@ -26,12 +26,14 @@ import 'package:ong_music/src/ui/layout.dart';
 import 'package:ong_music/src/ui/nav_rail.dart';
 import 'package:ong_music/src/ui/new_highlights.dart';
 import 'package:ong_music/src/ui/outside_link.dart';
+import 'package:ong_music/src/ui/row_menu.dart';
 import 'package:ong_music/src/ui/top_bar.dart';
 import 'package:ong_music/src/ui/video_preview.dart';
 import 'package:ong_music/src/ui/widgets.dart';
 import 'package:ong_music/src/web/embedded_video.dart';
 import 'package:ong_music/src/web/fullscreen.dart';
 import 'package:ong_music/src/web/browser_history.dart';
+import 'package:ong_music/src/web/context_menu.dart';
 import 'package:ong_music/src/web/font_network.dart';
 import 'package:ong_music/src/web/install_hint.dart';
 import 'package:ong_music/src/web/link_anchor.dart';
@@ -268,7 +270,8 @@ class TestApp {
 /// The app has no address, as the native apps, unless [browser] gives it the
 /// browser's address bar and history, as in the web app (it starts on
 /// [FakeBrowser.address]); its controls opening outside addresses are links
-/// of the page only with [links].
+/// of the page only with [links]; a right click on a row opens its menu, as in
+/// the native apps, unless [contextMenus] decides between it and the browser's.
 ///
 /// No font of rare characters is downloaded, as in the native apps, unless
 /// [fontNetwork] is given, as in the web app: [fontKitDownload] then answers
@@ -305,6 +308,7 @@ Future<TestApp> pumpApp(
   VideoEmbedder? videos,
   FakeBrowser? browser,
   LinkAnchors? links,
+  ContextMenus? contextMenus,
   FontNetwork? fontNetwork,
   FontKitDownload? fontKitDownload,
   FontKitRegistration? fontKitRegistration,
@@ -366,6 +370,7 @@ Future<TestApp> pumpApp(
         videoEmbedderProvider.overrideWithValue(videos),
         browserHistoryProvider.overrideWithValue(browser),
         linkAnchorsProvider.overrideWithValue(links),
+        contextMenusProvider.overrideWithValue(contextMenus),
         fontNetworkProvider.overrideWithValue(fontNetwork),
         fontKitDownloadProvider.overrideWithValue(fontKitDownload ?? (kit) => Completer<Uint8List>().future),
         fontKitRegistrationProvider.overrideWithValue(fontKitRegistration ?? (fonts) async {}),

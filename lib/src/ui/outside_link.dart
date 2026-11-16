@@ -35,8 +35,9 @@ bool browserHandlesClick() {
 /// - with a mouse resting on it ([linkAnchorDelay]), an invisible link of the
 ///   page lies over it (one at a time in the whole app, see
 ///   `link_anchor_web.dart`): the browser shows the address, a Ctrl/⌘-click
-///   or a middle click opens it in another tab, its context menu offers to
-///   copy it; a plain click is the control's, as before;
+///   or a middle click opens it in another tab, its context menu (the
+///   browser's, not the menu of the row under it: see `RowMenuArea`) offers
+///   to copy it; a plain click is the control's, as before;
 /// - screen readers have one node, said as a link to [url], named [label]
 ///   (the control's own name) with the control's action, in place of the
 ///   control's own node; without [linkSemantics], the control's own node

@@ -3,6 +3,7 @@ import 'dart:ui' show Color;
 import 'package:flutter/foundation.dart' show ValueListenable;
 
 import 'browser_history.dart';
+import 'context_menu.dart';
 import 'embedded_video.dart';
 import 'font_network.dart';
 import 'fullscreen.dart';
@@ -26,6 +27,9 @@ BrowserHistory? browserHistory() => null;
 /// The links of the page over the controls that open outside addresses;
 /// null outside a browser, where the controls only open them.
 LinkAnchors? linkAnchors() => null;
+
+/// Which menu a right click opens; null outside a browser, where the app's rows always open their own.
+ContextMenus? contextMenus() => null;
 
 /// Whether the browser is online, for the fonts it downloads; null outside a browser, where no font is downloaded.
 FontNetwork? fontNetwork() => null;
