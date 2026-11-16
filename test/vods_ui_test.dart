@@ -47,6 +47,38 @@ Finder _playRow(String date, String track) => find.byWidgetPredicate(
 Finder _historyRow(String date) =>
     find.byWidgetPredicate((w) => w is HistoryRow && w.catalogue.streamOf(w.play).date.toIso() == date);
 
+/// The file of the offsets comes.
+Future<void> _offsetsArrive(WidgetTester tester, String lines) async {
+  ProviderScope.containerOf(
+    tester.element(find.byType(OngMusicApp)),
+  ).read(vodOffsetsProvider.notifier).take(OffsetFile.parse('date\tuptime\toffset\tnote\n$lines'));
+  await tester.pumpAndSettle();
+}
+
+/// Whether the one [VodButton] under [of] is drawn filled (the colours of a [VideoPill], no outline), checked against
+/// the outlined look otherwise; and its pill, 36 × 28 either way.
+bool _filled(WidgetTester tester, Finder of) {
+  final button = find.descendant(of: of, matching: find.byType(VodButton));
+  final scheme = Theme.of(tester.element(button)).colorScheme;
+  final pill = find.descendant(of: button, matching: find.byType(Container));
+  final decoration = tester.widget<Container>(pill).decoration! as BoxDecoration;
+  final icon = tester.widget<Icon>(find.descendant(of: button, matching: find.byType(Icon)));
+  expect(icon.icon, vodIcon);
+  expect(tester.getSize(pill), const Size(36, 28));
+  final filled = tester.widget<VodButton>(button).exact;
+  if (filled) {
+    expect(
+      (decoration.color, decoration.border, icon.color),
+      (scheme.primaryContainer, null, scheme.onPrimaryContainer),
+    );
+  } else {
+    expect(decoration.color, isNull);
+    expect(decoration.border, Border.all(color: scheme.outlineVariant));
+    expect(icon.color, scheme.onSurfaceVariant);
+  }
+  return filled;
+}
+
 /// The items of the open menu.
 List<String> _items(WidgetTester tester) => [
   for (final item in tester.widgetList<PopupMenuItem<void>>(find.byType(PopupMenuItem<void>)))
@@ -196,6 +228,64 @@ void main() {
       expect(_items(tester), ['Copy title']);
     });
 
+    testWidgets('filled for a play with a line of its own in the offsets (any seconds, 0 too); outlined for a line '
+        'of the stream, one from an uptime on, or none; a play with a video keeps its pill', (tester) async {
+      await pumpApp(tester);
+      await goToTab(tester, 'Ong Log');
+      await _arrive(tester);
+      final lostWoods = _playRow('2024-03-01', 'Lost Woods');
+      final survive = _playRow('2024-03-02', 'I Will Survive');
+      // no file of offsets
+      expect((_filled(tester, lostWoods), _filled(tester, survive)), (false, false));
+      // a line for Lost Woods alone, of 0 s; one from 2:00:00 on for 2 March; a line of its own for Song of Storms,
+      // which has a video
+      await _offsetsArrive(tester, '2024-03-01\t1:05:00\t0\n2024-03-02\t2:00:00+\t-30\n2024-03-02\t0:20:00\t5\n');
+      expect((_filled(tester, lostWoods), _filled(tester, survive)), (true, false));
+      final storms = _playRow('2024-03-02', 'Song of Storms');
+      expect(find.descendant(of: storms, matching: find.byType(VideoPill)), findsOneWidget);
+      expect(find.descendant(of: storms, matching: find.byType(VodButton)), findsNothing);
+      // a line of the whole stream for 1 March, one of its own for I Will Survive (it wins over the "from" line)
+      await _offsetsArrive(tester, '2024-03-01\t\t-10\n2024-03-02\t2:00:00+\t-30\n2024-03-02\t2:03:00\t12\n');
+      expect((_filled(tester, lostWoods), _filled(tester, survive)), (false, true));
+      // a line of its own for another uptime of the stream: not for Lost Woods
+      await _offsetsArrive(tester, '2024-03-01\t1:05:01\t0\n');
+      expect((_filled(tester, lostWoods), _filled(tester, survive)), (false, false));
+    });
+
+    testWidgets('filled in the dark theme too, in its colours', (tester) async {
+      await pumpApp(tester, prefs: {'themeMode': 'dark'});
+      await goToTab(tester, 'Ong Log');
+      await _arrive(tester);
+      await _offsetsArrive(tester, '2024-03-01\t1:05:00\t0\n');
+      final lostWoods = _playRow('2024-03-01', 'Lost Woods');
+      expect(Theme.of(tester.element(lostWoods)).brightness, Brightness.dark);
+      expect((_filled(tester, lostWoods), _filled(tester, _playRow('2024-03-02', 'I Will Survive'))), (true, false));
+    });
+
+    testWidgets('it fills when the file of the offsets comes, and empties when another drops the line: nothing moves', (
+      tester,
+    ) async {
+      await pumpApp(tester);
+      await goToTab(tester, 'Ong Log');
+      await _arrive(tester);
+      final lostWoods = _playRow('2024-03-01', 'Lost Woods');
+      final button = find.descendant(of: lostWoods, matching: find.byType(VodButton));
+      Map<String, Rect> places() => {
+        ..._places(tester),
+        'button': tester.getRect(button),
+        'pill': tester.getRect(find.descendant(of: button, matching: find.byType(Container))),
+        'icon': tester.getRect(find.descendant(of: button, matching: find.byType(Icon))),
+      };
+      final before = places();
+      expect(_filled(tester, lostWoods), isFalse);
+      await _offsetsArrive(tester, '2024-03-01\t1:05:00\t-20\n');
+      expect(_filled(tester, lostWoods), isTrue);
+      expect(places(), before);
+      await _offsetsArrive(tester, '2024-03-01\t\t-20\n');
+      expect(_filled(tester, lostWoods), isFalse);
+      expect(places(), before);
+    });
+
     testWidgets('screen readers: a button of its own, named, with its action', (tester) async {
       final semantics = tester.ensureSemantics();
       await pumpApp(tester);
@@ -294,6 +384,17 @@ void main() {
       expect(find.descendant(of: find.byType(StreamSheet), matching: find.byType(VodButton)), findsOneWidget);
     });
 
+    testWidgets('a play of its setlist with a line of its own: its button filled', (tester) async {
+      await pumpApp(tester);
+      await goToTab(tester, 'Ong Log');
+      await _arrive(tester);
+      await _offsetsArrive(tester, '2024-03-02\t2:03:00\t0\n');
+      await tester.tap(find.widgetWithText(StreamHeader, 'Sat 2 Mar 2024'));
+      await tester.pumpAndSettle();
+      // (its one button: Song of Storms has a video)
+      expect(_filled(tester, find.byType(StreamSheet)), isTrue);
+    });
+
     testWidgets('open when another file comes: its buttons open the new links, none added or moved', (tester) async {
       final app = await pumpApp(tester);
       await goToTab(tester, 'Ong Log');
@@ -376,5 +477,27 @@ void main() {
       await tester.pumpAndSettle();
       expect(app.effects.opened.map((u) => '$u'), ['https://youtu.be/$_secondPart2?t=3780']);
     });
+
+    for (final wide in [false, true]) {
+      testWidgets('its plays with a line of their own in the offsets: filled; the others outlined '
+          '(${wide ? 'two panes, desktop look' : 'phone'})', (tester) async {
+        await pumpApp(tester, size: wide ? const Size(1280, 800) : const Size(412, 892), desktop: wide);
+        await goToTab(tester, 'Ong Log');
+        await _arrive(tester);
+        await tester.tap(_playRow('2024-03-01', 'I Will Survive'));
+        await tester.pumpAndSettle();
+        final history = _historyRow('2024-03-02');
+        final before = tester.getRect(find.descendant(of: history, matching: find.byType(VodButton)));
+        expect(_filled(tester, history), isFalse);
+        await _offsetsArrive(tester, '2024-03-02\t2:03:00\t0\n');
+        expect(_filled(tester, history), isTrue);
+        expect(tester.getRect(find.descendant(of: history, matching: find.byType(VodButton))), before);
+        expect(find.descendant(of: _historyRow('2024-03-01'), matching: find.byType(VideoPill)), findsOneWidget);
+        if (wide) {
+          // the row of the list beside the pane: filled too
+          expect(_filled(tester, _playRow('2024-03-02', 'I Will Survive')), isTrue);
+        }
+      });
+    }
   });
 }
