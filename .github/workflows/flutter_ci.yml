@@ -9,11 +9,18 @@ on:
 
 # Flutter version used to build: bump it deliberately (and test locally) instead of
 # following "stable", so that a new Flutter release can't silently break a release build.
-# pages.yml has its own copy: bump both together (pages.yml checks that they match).
+# checks.yml reads it from here, with sed: keep it on one line, quoted. pages.yml has its own copy: bump both together
+# (pages.yml checks that they match).
 env:
   FLUTTER_VERSION: "3.50.0"
 
 jobs:
+  # Analyze and the tests (checks.yml), side by side with the builds. The upload to Google Play waits for them.
+  checks:
+    uses: ./.github/workflows/checks.yml
+    permissions:
+      contents: read
+
   build-android:
     runs-on: ubuntu-latest
     permissions:
@@ -67,20 +74,6 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Analyze
-        run: flutter analyze
-
-      - name: Run tests
-        run: flutter test
-
-      # The tests that run in a browser (the list and the reasons: tool/browser_tests.sh): Chrome is on the runner.
-      # Twice, as the site holds the app twice: compiled to JavaScript and to WebAssembly.
-      - name: Run browser tests
-        run: bash tool/browser_tests.sh
-
-      - name: Run browser tests (WebAssembly)
-        run: bash tool/browser_tests.sh --wasm
-
       - name: Build App Bundle
         run: flutter build appbundle --build-name=${{ steps.version.outputs.majorMinorPatch }}+${{ steps.version.outputs.shortSha }} --build-number=${{ github.run_number }} --dart-define=APP_VERSION=${{ steps.version.outputs.majorMinorPatch }}
 
@@ -91,9 +84,24 @@ jobs:
           path: build/app/outputs/bundle/release/app-release.aab
           retention-days: 30
 
-      # if a tag is being pushed, upload to Google Play
+  # If a tag is being pushed, upload the App Bundle built above to Google Play, once the checks and the build have
+  # passed: if any of them failed or was skipped, this job is skipped too (no status function in its if).
+  upload-google-play:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [checks, build-android]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      # Into the directory it was uploaded from: the artifact holds the file alone, at its root.
+      - name: Download App Bundle
+        uses: actions/download-artifact@v8
+        with:
+          name: app-release.aab
+          path: build/app/outputs/bundle/release
+
       - name: Upload to Google Play
-        if: startsWith(github.ref, 'refs/tags/')
         uses: r0adkll/upload-google-play@v1
         with:
           serviceAccountJsonPlainText: ${{ secrets.SERVICE_ACCOUNT_JSON }}
