@@ -106,7 +106,7 @@ void main() {
         (
           'Ong Log',
           OngLogPage,
-          ['All', 'You', 'Piano', 'Loop', 'With video'],
+          ['All', 'You', 'Piano', 'Loop', 'Highlighted'],
           <String>[],
           [
             for (final label in ['You', 'Piano', 'You', 'All', 'You', 'All']) tap(label),
@@ -230,7 +230,7 @@ void main() {
       await tapVisible(tester, chip('Loop'));
       expect(find.byType(PlayRow), findsNWidgets(2));
       expect(find.text('2 songs · 2 streams'), findsOneWidget);
-      await tapVisible(tester, chip('With video'));
+      await tapVisible(tester, chip('Highlighted'));
       expect(find.byType(PlayRow), findsOneWidget);
       await tapVisible(tester, chip('All'));
       await tester.enterText(searchField(), 'zelda');
@@ -690,9 +690,9 @@ void main() {
       expect(plays(), 0, reason: 'type and "You" together');
       await tap('Loop');
       expect(plays(), 2);
-      await tap('With video');
+      await tap('Highlighted');
       expect(plays(), 1, reason: 'with video and "You" together');
-      await tap('With video');
+      await tap('Highlighted');
       await tap('Popular');
       expect(plays(), 0, reason: 'genre and "You" together');
       await tap('Popular');

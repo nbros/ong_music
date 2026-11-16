@@ -244,7 +244,7 @@ class _OngLogPageState extends ConsumerState<OngLogPage> implements ListModel {
                 onTap: () => notifier.toggleType(PlayType.loop),
               ),
               ListChip(
-                label: 'With video',
+                label: 'Highlighted',
                 icon: Icons.play_arrow,
                 selected: filter.withVideo,
                 onTap: notifier.toggleWithVideo,
