@@ -6,6 +6,8 @@
 # Requires Settings → Pages → Build and deployment → Source: "GitHub Actions" (see README.md),
 # and the "github-pages" environment must allow tags (Settings → Environments → github-pages).
 #
+# The checks (checks.yml, the same as flutter_ci.yml's) run beside the build; the deployment waits for both.
+#
 # Kept separate from flutter_ci.yml so that a Pages failure never turns the Play Store / Windows release run red.
 name: GitHub Pages
 
@@ -29,6 +31,14 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Analyze and the tests, the browser tests under both compilers among them: a commit that fails them must not go
+  # online here either. The site is what the browser tests are about, and this workflow does not wait for
+  # flutter_ci.yml (nor does a deployment by hand run it).
+  checks:
+    uses: ./.github/workflows/checks.yml
+    permissions:
+      contents: read
+
   build:
     runs-on: ubuntu-latest
     permissions:
@@ -88,21 +98,6 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      # The same checks as flutter_ci.yml: a commit that fails them must not go online here either.
-      - name: Analyze
-        run: flutter analyze
-
-      - name: Run tests
-        run: flutter test
-
-      # In Chrome too, under both compilers: the site is what these tests are about, and this workflow does not wait
-      # for flutter_ci.yml (nor does a deployment by hand run it).
-      - name: Run browser tests
-        run: bash tool/browser_tests.sh
-
-      - name: Run browser tests (WebAssembly)
-        run: bash tool/browser_tests.sh --wasm
-
       # --wasm: the app compiled twice, to WebAssembly (main.dart.<hash>.wasm and .mjs, drawn by Skwasm), which recent
       # Chromium browsers run, and to JavaScript (main.dart.<hash>.js, drawn by CanvasKit) for every other browser;
       # the loader picks one at the start (web/flutter_bootstrap.js).
@@ -147,8 +142,9 @@ jobs:
         with:
           path: _site
 
+  # Only once the checks and the build have passed: if either failed or was skipped, so is this job.
   deploy:
-    needs: build
+    needs: [checks, build]
     runs-on: ubuntu-latest
     permissions:
       pages: write # to deploy to Pages
