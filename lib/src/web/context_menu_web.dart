@@ -25,6 +25,9 @@ final class BrowserContextMenus implements ContextMenus {
   /// Whether the browser's menu stays closed for the click of the last pointer down.
   bool _claimed = false;
 
+  /// Whether the browser's menu event of the click of the last pointer down has come already.
+  bool _menuEventPassed = false;
+
   @override
   bool appMenuOpen = false;
 
@@ -33,16 +36,20 @@ final class BrowserContextMenus implements ContextMenus {
     _onLink = target != null && target.isA<web.Element>() && (target as web.Element).closest('a[href]') != null;
     // known now: on Windows, the app's menu has closed by the browser's event of the click that closes it
     _claimed = appMenuOpen;
+    _menuEventPassed = false;
   }
 
   void _onContextMenu(web.MouseEvent event) {
     if (_claimed || appMenuOpen) event.preventDefault();
     _claimed = false;
+    _menuEventPassed = true;
   }
 
   @override
   bool claimClick() {
-    if (_onLink) return false;
+    // too late once the browser's menu event has come (the engine holds the pointer events of a tappable node of the
+    // semantics tree back for a moment): the browser has opened its menu, the app must not open its own too
+    if (_onLink || _menuEventPassed) return false;
     return _claimed = true;
   }
 }

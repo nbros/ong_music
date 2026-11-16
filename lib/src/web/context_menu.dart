@@ -12,7 +12,8 @@ library;
 abstract interface class ContextMenus {
   /// Keeps the browser's menu closed for the click whose pointer has just gone down (asked at that pointer down, which
   /// the app hears before the browser's menu event): true when it will, false when that pointer is on a link of the
-  /// page, whose menu stays the browser's. A claim ends with the browser's menu event of that click, or with the next
+  /// page, whose menu stays the browser's, or when the browser's menu event of that click has come already (the app
+  /// heard the pointer down late: the browser's menu is open). A claim ends with the browser's menu event of that click, or with the next
   /// pointer down, whichever comes first: it never keeps a later menu of the browser closed.
   bool claimClick();
 

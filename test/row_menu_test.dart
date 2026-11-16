@@ -4,10 +4,12 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:ong_music/src/state/settings_state.dart';
 import 'package:ong_music/src/ui/instant_feedback.dart';
+import 'package:ong_music/src/ui/row_menu.dart';
 import 'package:ong_music/src/ui/rows.dart';
 import 'package:ong_music/src/ui/sheets.dart';
 import 'package:ong_music/src/ui/widgets.dart';
@@ -244,6 +246,27 @@ void main() {
   });
 
   group('In the web app', () {
+    testWidgets('the browser\'s side is there as a row comes in, before the first right click', (tester) async {
+      // (it only knows whether a pointer went down on a link if it was listening then)
+      var made = 0;
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            contextMenusProvider.overrideWith((ref) {
+              made++;
+              return FakeContextMenus();
+            }),
+          ],
+          child: MaterialApp(
+            home: Material(
+              child: RowMenuArea(items: (context, ref) => const [], child: const SizedBox(width: 100, height: 50)),
+            ),
+          ),
+        ),
+      );
+      expect(made, 1);
+    });
+
     testWidgets('a right click on a row: its menu at the pointer, the browser\'s kept closed, reported open', (
       tester,
     ) async {

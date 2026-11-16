@@ -106,6 +106,16 @@ void main() {
     expect(browserMenuOpens(plain), isTrue, reason: 'a menu event without its pointer down: the keyboard\'s menu key');
   });
 
+  test('a claim that comes after the browser\'s menu event (the app heard the pointer down late): refused', () {
+    pointerDown(plain);
+    expect(browserMenuOpens(plain), isTrue);
+    expect(menus.claimClick(), isFalse, reason: 'the browser\'s menu is open: not the app\'s too');
+    // the next right click, heard in time: the app's
+    pointerDown(plain);
+    expect(menus.claimClick(), isTrue);
+    expect(browserMenuOpens(plain), isFalse);
+  });
+
   test('a claim after a refusal, off the link: accepted', () {
     final a = attach(link('https://youtu.be/aaaaaaaaaaa'));
     pointerDown(a);

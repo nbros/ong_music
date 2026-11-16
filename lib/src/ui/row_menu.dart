@@ -97,8 +97,10 @@ class RowMenuArea extends ConsumerStatefulWidget {
 }
 
 class _RowMenuAreaState extends ConsumerState<RowMenuArea> {
-  // read once: it never changes, and a list builds this for each row coming in
-  late final ContextMenus? _menus = ref.read(contextMenusProvider);
+  /// Read once (it never changes, and a list builds this for each row coming in), as the row comes in and not at its
+  /// first right click: the browser's side must be listening already at that pointer down, to know whether it is on
+  /// a link of the page.
+  late final ContextMenus? _menus;
 
   bool _open = false;
 
@@ -108,6 +110,12 @@ class _RowMenuAreaState extends ConsumerState<RowMenuArea> {
 
   /// The pointers that may open the menu by a long press.
   static const _fingers = {PointerDeviceKind.touch, PointerDeviceKind.stylus, PointerDeviceKind.invertedStylus};
+
+  @override
+  void initState() {
+    super.initState();
+    _menus = ref.read(contextMenusProvider);
+  }
 
   Future<void> _show(Offset position, {bool haptic = false}) async {
     if (_open) return;
