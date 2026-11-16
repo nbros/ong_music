@@ -14,6 +14,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../data/catalogue.dart';
 import '../data/model.dart';
+import '../data/vod_offsets.dart';
 import '../state/catalogue_state.dart';
 import '../state/vods_state.dart';
 import 'format.dart';
@@ -302,16 +303,21 @@ bool vodButtonsFit(BuildContext context, double titleColumn) {
   return titleColumn >= vodButtonTitleRoom * scale;
 }
 
-/// The link of [play] in the VOD of its stream for the button of its row ([showVodButtons]): null when it has a video
-/// (its own button stays), when the button is off, or when no VOD reaches it. Watches the VODs and their offsets: a
-/// row gets its button when their file comes, in the column of the video button, where nothing else is, and the link
-/// of the file of offsets when it comes (a play the offset puts before the start of the recording has none).
-Uri? _rowVodLink(WidgetRef ref, Catalogue catalogue, Play play, Highlight? video) {
+/// The link of [play] in the VOD of its stream for the button of its row ([showVodButtons]), and whether the line of
+/// `offsets.tsv` that applies to it is one for that play alone (`VodOffsetKind.play`: the [VodButton] filled,
+/// [VodButton.exact]): null when it has a video (its own button stays), when the button is off, or when no VOD
+/// reaches it. Watches the VODs and their offsets: a row gets its button when their file comes, in the column of the
+/// video button, where nothing else is, and the link and the fill of the file of offsets when it comes (a play the
+/// offset puts before the start of the recording has none).
+({Uri link, bool exact})? _rowVod(WidgetRef ref, Catalogue catalogue, Play play, Highlight? video) {
   if (!showVodButtons) return null;
   final file = ref.watch(vodFileProvider);
   final offsets = ref.watch(vodOffsetsProvider);
   if (video != null && video.youtubeId != null) return null;
-  return vodLinksFor(catalogue, file, offsets)?.linkOf(play);
+  final links = vodLinksFor(catalogue, file, offsets);
+  final link = links?.linkOf(play);
+  if (link == null) return null;
+  return (link: link, exact: links!.offsetOf(play)?.kind == VodOffsetKind.play);
 }
 
 /// A play of the Ong Log or of a stream setlist: time (in the zone of the
@@ -363,7 +369,7 @@ class PlayRow extends ConsumerWidget {
     final artist = p.artist;
     final requester = catalogue.requester(p.requesterId);
     final video = catalogue.highlightOf(p);
-    final vod = _rowVodLink(ref, catalogue, p, video);
+    final vod = _rowVod(ref, catalogue, p, video);
     final subtitle = <InlineSpan>[
       ...markedSpans(artist, tokens, ong.mark, scheme.onSurface),
       if (artist.isNotEmpty && requester != null) const TextSpan(text: ' · '),
@@ -426,9 +432,9 @@ class PlayRow extends ConsumerWidget {
               else if (vod != null &&
                   vodButtonsFit(context, constraints.maxWidth - metrics.timeWidth - 12 - _vodButtonAndIcon))
                 VodLink(
-                  link: vod,
+                  link: vod.link,
                   label: VodButton.label,
-                  builder: (context, open) => VodButton(onPressed: open),
+                  builder: (context, open) => VodButton(onPressed: open, exact: vod.exact),
                 )
               else
                 const SizedBox(width: 6),
@@ -596,7 +602,7 @@ class HistoryRow extends ConsumerWidget {
     final p = play;
     final requester = catalogue.requester(p.requesterId);
     final video = catalogue.highlightOf(p);
-    final vod = _rowVodLink(ref, catalogue, p, video);
+    final vod = _rowVod(ref, catalogue, p, video);
     return AppInkWell(
       onTap: onTap,
       customBorder: shape,
@@ -651,9 +657,9 @@ class HistoryRow extends ConsumerWidget {
                   )
                 else if (vod != null && vodButtonsFit(context, constraints.maxWidth - _vodButtonAndIcon))
                   VodLink(
-                    link: vod,
+                    link: vod.link,
                     label: VodButton.label,
-                    builder: (context, open) => VodButton(onPressed: open),
+                    builder: (context, open) => VodButton(onPressed: open, exact: vod.exact),
                   ),
                 const SizedBox(width: 6),
                 PlayTypeIcon(p.type),

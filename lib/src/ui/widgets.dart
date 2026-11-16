@@ -510,15 +510,21 @@ class VideoPill extends StatelessWidget {
 const IconData vodIcon = Icons.ondemand_video;
 
 /// The button of a play whose stream has a VOD reaching it, in the place of the [VideoPill] of the plays with a
-/// video (which keep theirs): the same box of 48 px, an outlined pill instead of a filled one, the [vodIcon], the
-/// tooltip [label]. Nothing else of the row moves for it.
+/// video (which keep theirs): the same box of 48 px, the [vodIcon], the tooltip [label]. An outlined pill, or, when
+/// [exact], one filled as the [VideoPill] is. Nothing else of the row moves for it, nor when it fills or empties: the
+/// pill keeps its size and place either way.
 class VodButton extends StatelessWidget {
-  const VodButton({super.key, required this.onPressed});
+  const VodButton({super.key, required this.onPressed, this.exact = false});
 
-  /// Its tooltip, and what screen readers call it.
+  /// Its tooltip, and what screen readers call it (the same filled or not).
   static const label = watchInTheVodText;
 
   final VoidCallback onPressed;
+
+  /// Whether its play has a line of its own in `offsets.tsv` (`VodOffsetKind.play`, whatever its seconds, 0
+  /// included): a position set by hand for that play, checked by ear. The pill is then filled
+  /// (`primaryContainer`, the icon in `onPrimaryContainer`, no outline); otherwise outlined.
+  final bool exact;
 
   @override
   Widget build(BuildContext context) {
@@ -541,11 +547,16 @@ class VodButton extends StatelessWidget {
               child: Container(
                 width: 36,
                 height: 28,
-                decoration: BoxDecoration(
-                  border: Border.all(color: scheme.outlineVariant),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Icon(vodIcon, size: 16, color: scheme.onSurfaceVariant),
+                // the outline is drawn inside the 36 × 28 of the box, and the icon centred in it: filled or not, the
+                // pill and its icon keep their size and place
+                alignment: Alignment.center,
+                decoration: exact
+                    ? BoxDecoration(color: scheme.primaryContainer, borderRadius: BorderRadius.circular(14))
+                    : BoxDecoration(
+                        border: Border.all(color: scheme.outlineVariant),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                child: Icon(vodIcon, size: 16, color: exact ? scheme.onPrimaryContainer : scheme.onSurfaceVariant),
               ),
             ),
           ),
