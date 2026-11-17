@@ -247,6 +247,20 @@ class _MiniPlayerState extends ConsumerState<_MiniPlayer> {
     unawaited(showFiche(navigator.context, fiche));
   }
 
+  /// Escape while a button of the mini player has the focus: what is open over the app closes, as it does
+  /// with the focus inside it. The mini player is in no route, so the route's own action is out of its reach.
+  void _dismiss() {
+    final navigator = widget.navigatorKey.currentState;
+    if (navigator == null) return;
+    Route<void>? top;
+    navigator.popUntil((route) {
+      top = route;
+      return true;
+    });
+    final route = top;
+    if (route is ModalRoute && !route.isFirst && route.barrierDismissible) unawaited(navigator.maybePop());
+  }
+
   @override
   Widget build(BuildContext context) {
     // (asked at each build: a place that does not show the video lets it go)
@@ -273,85 +287,91 @@ class _MiniPlayerState extends ConsumerState<_MiniPlayer> {
               parentNode: widget.navigatorKey.currentState?.focusNode,
               canRequestFocus: false,
               skipTraversal: true,
-              child: FocusTraversalGroup(
-                child: Material(
-                  color: scheme.surfaceContainerHigh,
-                  elevation: 6,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  clipBehavior: Clip.antiAlias,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // the bar: nothing of it over the player, which would take the pointer
-                      SizedBox(
-                        height: miniPlayerBarHeight,
-                        child: Row(
-                          children: [
-                            // for the pointer only, as the place is
-                            ExcludeSemantics(
-                              child: _Handle(
-                                cursor: SystemMouseCursors.resizeUpLeftDownRight,
-                                onStart: () => _start(room, rect),
-                                onUpdate: _resize,
-                                onEnd: _end,
-                                child: SizedBox.square(
-                                  dimension: miniPlayerBarHeight,
-                                  child: RotatedBox(
-                                    quarterTurns: 1,
-                                    child: Icon(Icons.open_in_full, size: 16, color: scheme.onSurfaceVariant),
+              child: Actions(
+                actions: {DismissIntent: CallbackAction<DismissIntent>(onInvoke: (_) => _dismiss())},
+                child: FocusTraversalGroup(
+                  child: Material(
+                    color: scheme.surfaceContainerHigh,
+                    elevation: 6,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    clipBehavior: Clip.antiAlias,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // the bar: nothing of it over the player, which would take the pointer
+                        SizedBox(
+                          height: miniPlayerBarHeight,
+                          child: Row(
+                            children: [
+                              // for the pointer only, as the place is; in a window too low for the whole bar (the
+                              // width follows the height), Close stays, then the title by which it is moved
+                              if (rect.width >= 4 * miniPlayerBarHeight)
+                                ExcludeSemantics(
+                                  child: _Handle(
+                                    cursor: SystemMouseCursors.resizeUpLeftDownRight,
+                                    onStart: () => _start(room, rect),
+                                    onUpdate: _resize,
+                                    onEnd: _end,
+                                    child: SizedBox.square(
+                                      dimension: miniPlayerBarHeight,
+                                      child: RotatedBox(
+                                        quarterTurns: 1,
+                                        child: Icon(Icons.open_in_full, size: 16, color: scheme.onSurfaceVariant),
+                                      ),
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ),
-                            Expanded(
-                              child: _Handle(
-                                cursor: moving ? SystemMouseCursors.grabbing : SystemMouseCursors.grab,
-                                onStart: () => _start(room, rect),
-                                onUpdate: _move,
-                                onEnd: _end,
-                                child: Align(
-                                  alignment: AlignmentDirectional.centerStart,
-                                  child: Text(
-                                    playing.highlight.track,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      height: 18 / 13,
-                                      fontWeight: FontWeight.w500,
-                                      color: scheme.onSurface,
+                              Expanded(
+                                child: _Handle(
+                                  cursor: moving ? SystemMouseCursors.grabbing : SystemMouseCursors.grab,
+                                  onStart: () => _start(room, rect),
+                                  onUpdate: _move,
+                                  onEnd: _end,
+                                  child: Align(
+                                    alignment: AlignmentDirectional.centerStart,
+                                    child: Text(
+                                      playing.highlight.track,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        height: 18 / 13,
+                                        fontWeight: FontWeight.w500,
+                                        color: scheme.onSurface,
+                                      ),
                                     ),
                                   ),
                                 ),
                               ),
-                            ),
-                            _BarButton(
-                              tooltip: showVideoDetailsText,
-                              icon: Icons.info_outline,
-                              onPressed: fiche == null ? null : () => _showDetails(fiche),
-                            ),
-                            _BarButton(tooltip: closeVideoText, icon: Icons.close, onPressed: _videos.stop),
-                          ],
-                        ),
-                      ),
-                      Expanded(
-                        child: Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            const ColoredBox(color: Colors.black),
-                            // the player is transparent while it loads
-                            if (loading)
-                              const Center(
-                                child: SizedBox.square(
-                                  dimension: 24,
-                                  child: CircularProgressIndicator(strokeWidth: 3, color: Colors.white),
+                              if (rect.width >= 3 * miniPlayerBarHeight)
+                                _BarButton(
+                                  tooltip: showVideoDetailsText,
+                                  icon: Icons.info_outline,
+                                  onPressed: fiche == null ? null : () => _showDetails(fiche),
                                 ),
-                              ),
-                            ?view,
-                          ],
+                              _BarButton(tooltip: closeVideoText, icon: Icons.close, onPressed: _videos.stop),
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
+                        Expanded(
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              const ColoredBox(color: Colors.black),
+                              // the player is transparent while it loads
+                              if (loading)
+                                const Center(
+                                  child: SizedBox.square(
+                                    dimension: 24,
+                                    child: CircularProgressIndicator(strokeWidth: 3, color: Colors.white),
+                                  ),
+                                ),
+                              ?view,
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),

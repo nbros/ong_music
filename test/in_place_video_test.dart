@@ -693,6 +693,11 @@ void main() {
       }
       expect(reached, isTrue);
       expect(find.byType(BottomSheet), findsOneWidget);
+      // Escape still closes the sheet from there
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(find.byType(BottomSheet), findsNothing);
+      expectInMiniPlayer(tester, video, videos);
     });
   });
 
