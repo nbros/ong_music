@@ -1,10 +1,12 @@
 /// The large preview of a highlight fiche, and in the web app the video
 /// played in its place: YouTube's player, at the same place and size, as long
-/// as the fiche is on screen.
+/// as the fiche is on screen; in the mini player over the app when the fiche
+/// goes (see `mini_player.dart`).
 library;
 
 import 'dart:math' as math;
 
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -26,16 +28,24 @@ final videoEmbedderProvider = Provider<VideoEmbedder?>((ref) => videoEmbedder())
 /// The videos played inside the app: at most one at a time.
 final inPlaceVideosProvider = Provider<InPlaceVideos>((ref) {
   final videos = InPlaceVideos(ref.watch(videoEmbedderProvider));
-  // both list tabs stay alive out of sight: a video of the tab left would go on playing unseen
-  ref.listen(selectedTabProvider, (_, _) => videos.stop());
-  ref.onDispose(videos.stop);
+  ref.onDispose(videos.dispose);
   return videos;
 });
 
+/// The video playing inside the app: the highlight, and its player.
+typedef PlayingVideo = ({Highlight highlight, EmbeddedVideo video});
+
 /// The videos played inside the app, through [embedder] (null: none, they
-/// open on YouTube): the one playing, the ones YouTube refused this session,
-/// the previews on screen.
-class InPlaceVideos {
+/// open on YouTube): the one [playing], the ones YouTube refused this session,
+/// the previews on screen. Listeners hear when the video starts, shows, fails,
+/// stops or changes places.
+///
+/// The video plays in place of the preview of its fiche while that preview is
+/// on screen, and in the mini player over the app otherwise: another fiche,
+/// the sheet closed, another tab, a page over the fiche. It stops only when
+/// asked ([stop], the close button of the mini player, anything opening
+/// YouTube), when another one starts, or when it fails.
+class InPlaceVideos extends ChangeNotifier {
   InPlaceVideos(this.embedder);
 
   final VideoEmbedder? embedder;
@@ -44,14 +54,77 @@ class InPlaceVideos {
   /// at once for the rest of the session.
   final Set<String> refused = {};
 
+  PlayingVideo? _playing;
+
+  /// The previews alive, and among them those on screen, the latest one last:
+  /// the last one of the playing video shows it.
   final _previews = <_VideoPreviewState>{};
-  _VideoPreviewState? _playing;
+  final _shown = <_VideoPreviewState>{};
+
+  /// The place whose last build showed the video's view: a preview, or
+  /// [_miniPlayer].
+  Object? _shownBy;
+
+  /// The mini player, as a place of the video.
+  static const Object _miniPlayer = #miniPlayer;
+
+  bool _handOverScheduled = false;
 
   /// Whether a video can play in place of its preview.
   bool get available => embedder != null;
 
-  /// Stops the video playing inside the app, if any; its preview comes back.
-  void stop() => _playing?._stop();
+  /// The video playing, loading or shown, if any.
+  PlayingVideo? get playing => _playing;
+
+  /// Whether the video plays in the mini player: no preview of it on screen.
+  bool get inMiniPlayer => _playing != null && _previewShowing() == null;
+
+  /// The view of the video for the mini player to build, when it is there
+  /// ([inMiniPlayer]); called by each of its builds.
+  Widget? miniPlayerView() => _viewFor(_miniPlayer, here: inMiniPlayer);
+
+  /// Plays the video of [highlight] in place of its preview (which must be
+  /// on screen), stopping the one playing: never two sounds.
+  void play(Highlight highlight) {
+    final embedder = this.embedder;
+    final id = highlight.youtubeId;
+    if (embedder == null || id == null || refused.contains(id) || _playing?.highlight.youtubeId == id) return;
+    _end();
+    final video = embedder.play(id);
+    _playing = (highlight: highlight, video: video);
+    video.state.addListener(_stateChanged);
+    notifyListeners();
+  }
+
+  /// Stops the video playing inside the app, if any; its preview comes back,
+  /// the mini player goes.
+  void stop() {
+    if (_end()) notifyListeners();
+  }
+
+  /// Stops the video without telling: false when there was none.
+  bool _end() {
+    final playing = _playing;
+    if (playing == null) return false;
+    _playing = null;
+    _shownBy = null;
+    playing.video.state.removeListener(_stateChanged);
+    playing.video.dispose();
+    return true;
+  }
+
+  void _stateChanged() {
+    final playing = _playing;
+    if (playing == null) return;
+    final state = playing.video.state.value;
+    if (state.isFailure) {
+      if (state == EmbeddedVideoState.refused) refused.add(playing.highlight.youtubeId!);
+      // the preview that showed it says so; the mini player just goes
+      _previewShowing()?._failedHere();
+      _end();
+    }
+    notifyListeners();
+  }
 
   /// Plays [highlight] in place of its preview in the detail pane of [tab]
   /// (Enter in an expanded window); false when there is none to play it in,
@@ -61,11 +134,70 @@ class InPlaceVideos {
     if (!available || id == null || refused.contains(id)) return false;
     for (final preview in _previews) {
       if (preview.mounted && preview.widget.highlight.youtubeId == id && preview.paneTab == tab) {
-        preview._play();
+        play(preview.widget.highlight);
         return true;
       }
     }
     return false;
+  }
+
+  /// The preview that shows the playing video: the last one of it put on
+  /// screen.
+  _VideoPreviewState? _previewShowing() {
+    final id = _playing?.highlight.youtubeId;
+    if (id == null) return null;
+    _VideoPreviewState? last;
+    for (final p in _shown) {
+      if (p._id == id) last = p;
+    }
+    return last;
+  }
+
+  /// The view of the playing video for [place] to build, if it is the place
+  /// of the video ([here]) and no other place shows it: null otherwise.
+  ///
+  /// A place takes the view only once the one before has let it go (in its
+  /// next build, a frame later): the view, an element over the canvas of the
+  /// web app, must not be drawn at two places in one frame. The video plays
+  /// on meanwhile: the player is the video's, not the view's (see
+  /// [EmbeddedVideo.view]).
+  Widget? _viewFor(Object place, {required bool here}) {
+    final playing = _playing;
+    if (playing == null) return null;
+    if (here && (_shownBy == null || identical(_shownBy, place))) {
+      _shownBy = place;
+      return playing.video.view;
+    }
+    if (here || identical(_shownBy, place)) {
+      // waiting for the other place to let it go, or letting it go: the places build again after this frame
+      if (identical(_shownBy, place)) _shownBy = null;
+      _handOver();
+    }
+    return null;
+  }
+
+  /// [place] is gone: the place of the video now takes it.
+  void _gone(Object place) {
+    if (!identical(_shownBy, place)) return;
+    _shownBy = null;
+    _handOver();
+  }
+
+  /// Builds the places again after this frame: called during builds, which
+  /// cannot rebuild other widgets.
+  void _handOver() {
+    if (_handOverScheduled) return;
+    _handOverScheduled = true;
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      _handOverScheduled = false;
+      if (hasListeners) notifyListeners();
+    });
+  }
+
+  @override
+  void dispose() {
+    _end();
+    super.dispose();
   }
 }
 
@@ -77,8 +209,9 @@ class InPlaceVideos {
 /// the video right there ([InPlaceVideos]); when YouTube refuses it, the
 /// preview comes back darkened, with "Watch on YouTube" over it.
 ///
-/// The video stops and goes away with the preview: another fiche, the sheet
-/// closed, another tab, or anything opening a video on YouTube ([openVideo]).
+/// The video goes to the mini player when the preview leaves the screen:
+/// another fiche, the sheet closing, another tab; it comes back in place when
+/// the preview does.
 class VideoPreview extends ConsumerStatefulWidget {
   const VideoPreview({super.key, required this.highlight});
 
@@ -90,13 +223,16 @@ class VideoPreview extends ConsumerStatefulWidget {
 
 class _VideoPreviewState extends ConsumerState<VideoPreview> {
   late final InPlaceVideos _videos = ref.read(inPlaceVideosProvider);
-  EmbeddedVideo? _video;
 
   /// The video could not be had (not refused): until the preview goes.
   bool _failed = false;
 
   /// The failure happened here and now: screen readers are told.
   bool _failedNow = false;
+
+  /// The sheet of the preview is closing: the video leaves at once, not at
+  /// the end of the slide.
+  bool _leaving = false;
 
   Animation<double>? _routeAnimation;
 
@@ -109,12 +245,12 @@ class _VideoPreviewState extends ConsumerState<VideoPreview> {
   void initState() {
     super.initState();
     _videos._previews.add(this);
+    _videos.addListener(_changed);
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // a sheet closing (its route going away) stops the video at once, not at the end of the slide
     final animation = ModalRoute.of(context)?.animation;
     if (!identical(animation, _routeAnimation)) {
       _routeAnimation?.removeStatusListener(_routeChanged);
@@ -123,24 +259,42 @@ class _VideoPreviewState extends ConsumerState<VideoPreview> {
   }
 
   void _routeChanged(AnimationStatus status) {
-    if (status == AnimationStatus.reverse || status == AnimationStatus.dismissed) _stop();
+    final leaving = status == AnimationStatus.reverse || status == AnimationStatus.dismissed;
+    if (leaving != _leaving && mounted) setState(() => _leaving = leaving);
+  }
+
+  /// The video started, showed, failed or stopped.
+  void _changed() {
+    if (mounted) setState(() {});
+  }
+
+  /// The video failed while this preview showed it.
+  void _failedHere() {
+    if (mounted) setState(() => _failed = _failedNow = true);
   }
 
   @override
   void didUpdateWidget(VideoPreview oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // another video for the same fiche (its link changed in a refresh): the old one stops
-    if (oldWidget.highlight.youtubeId != widget.highlight.youtubeId) {
-      _stop(rebuild: false);
-      _failed = _failedNow = false;
-    }
+    // another video for the same fiche (its link changed in a refresh): the old one goes to the mini player
+    if (oldWidget.highlight.youtubeId != widget.highlight.youtubeId) _failed = _failedNow = false;
+  }
+
+  @override
+  void deactivate() {
+    // out of the tree (another fiche, the pane gone), maybe for good: the video goes to the mini player
+    _videos
+      .._shown.remove(this)
+      .._gone(this);
+    super.deactivate();
   }
 
   @override
   void dispose() {
     _routeAnimation?.removeStatusListener(_routeChanged);
-    _stop(rebuild: false);
-    _videos._previews.remove(this);
+    _videos
+      .._previews.remove(this)
+      ..removeListener(_changed);
     super.dispose();
   }
 
@@ -149,57 +303,28 @@ class _VideoPreviewState extends ConsumerState<VideoPreview> {
     if (!_videos.available) {
       openVideo(context, ref, widget.highlight);
     } else {
-      _play();
+      setState(() => _failed = _failedNow = false);
+      _videos.play(widget.highlight);
     }
-  }
-
-  void _play() {
-    final embedder = _videos.embedder;
-    if (embedder == null || _video != null || _videos.refused.contains(_id)) return;
-    // never two sounds
-    _videos.stop();
-    final video = embedder.play(_id);
-    video.state.addListener(_stateChanged);
-    _videos._playing = this;
-    setState(() {
-      _video = video;
-      _failed = _failedNow = false;
-    });
-  }
-
-  void _stateChanged() {
-    final video = _video;
-    if (video == null) return;
-    final state = video.state.value;
-    if (state.isFailure) {
-      if (state == EmbeddedVideoState.refused) _videos.refused.add(_id);
-      _stop(rebuild: false);
-      if (mounted) {
-        setState(() => _failed = _failedNow = true);
-      }
-    } else if (mounted) {
-      setState(() {});
-    }
-  }
-
-  /// Stops the video and removes the player; the preview comes back.
-  void _stop({bool rebuild = true}) {
-    final video = _video;
-    if (video == null) return;
-    _video = null;
-    if (identical(_videos._playing, this)) _videos._playing = null;
-    video.state.removeListener(_stateChanged);
-    video.dispose();
-    if (rebuild && mounted) setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
     final h = widget.highlight;
     final inPlace = _videos.available;
-    final video = _video;
-    final playing = video != null && video.state.value == EmbeddedVideoState.playing;
-    final loading = video != null && !playing;
+    // on screen: its tab, its route neither closing nor under a page
+    if (TickerMode.valuesOf(context).enabled && !_leaving) {
+      // (one shown before keeps its rank)
+      _videos._shown.add(this);
+    } else {
+      _videos._shown.remove(this);
+    }
+    final playing = _videos._playing;
+    final here = playing != null && identical(_videos._previewShowing(), this);
+    final view = _videos._viewFor(this, here: here);
+    final video = here ? playing.video : null;
+    final showing = video != null && video.state.value == EmbeddedVideoState.playing;
+    final loading = video != null && !showing;
     final failed = inPlace && video == null && (_failed || _videos.refused.contains(_id));
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -219,17 +344,17 @@ class _VideoPreviewState extends ConsumerState<VideoPreview> {
                 Thumbnail(youtubeId: h.youtubeId, width: width, big: true, radius: 16),
                 if (failed)
                   _Refused(highlight: h, announce: _failedNow)
-                else if (!playing)
+                else if (!showing)
                   Center(child: _PlayBadge(loading: loading)),
                 // last: YouTube's player over the canvas (transparent while it loads, the badge seen through it);
                 // keyed, so that it keeps its element when the badge goes: a new one would load the player again
-                if (video != null) KeyedSubtree(key: ObjectKey(video), child: video.view),
+                ?view,
               ],
             ),
           ),
         );
         // The same widgets in every state, only their settings change: the player must keep its element.
-        final tappable = !failed && !playing;
+        final tappable = !failed && !showing;
         return Center(
           child: Semantics(
             // the web app: a button of its own, the one under it opening YouTube; the player then speaks for itself

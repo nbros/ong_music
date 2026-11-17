@@ -363,7 +363,7 @@ void main() {
       expect(container.read(detailPaneProvider(AppTab.ongLog)), ongLog);
     });
 
-    testWidgets('a tab left by Back stops the video playing in place', (tester) async {
+    testWidgets('a tab left by Forward: the video playing in place goes on in the mini player', (tester) async {
       final browser = FakeBrowser();
       final videos = FakeVideoEmbedder();
       await pumpApp(tester, size: desk, browser: browser, videos: videos);
@@ -377,8 +377,11 @@ void main() {
       await tester.pumpAndSettle();
       expect(videos.alive, hasLength(1));
       await browser.forward();
+      await tester.pumpAndSettle();
       expect(selectedTab(tester), 1);
-      expect(videos.alive, isEmpty);
+      expect(videos.alive, hasLength(1));
+      expect(find.byTooltip('Close'), findsOneWidget);
+      expect(find.byType(FakePlayerView), findsOneWidget);
     });
   });
 
