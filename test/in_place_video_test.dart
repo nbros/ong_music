@@ -70,6 +70,31 @@ Future<FakeVideo> play(WidgetTester tester, FakeVideoEmbedder videos) async {
   return video;
 }
 
+/// The mini player: its box, the bar and the video.
+Finder miniPlayer() => find.ancestor(of: find.byTooltip('Close'), matching: find.byType(Positioned));
+
+/// [video] plays in the mini player: the same player, alive, the only one.
+void expectInMiniPlayer(WidgetTester tester, FakeVideo video, FakeVideoEmbedder videos, {String? reason}) {
+  expect(video.disposed, isFalse, reason: reason);
+  expect(videos.alive, [video], reason: reason);
+  expect(miniPlayer(), findsOneWidget, reason: reason);
+  expect(player(), findsOneWidget, reason: reason);
+  final box = tester.getRect(miniPlayer());
+  expect(
+    tester.getRect(player()),
+    Rect.fromLTRB(box.left, box.top + 40, box.right, box.bottom),
+    reason: '$reason: under the bar',
+  );
+}
+
+/// [video] plays in place of the preview of its fiche, the mini player gone.
+void expectInPlace(WidgetTester tester, FakeVideo video, FakeVideoEmbedder videos, {String? reason}) {
+  expect(video.disposed, isFalse, reason: reason);
+  expect(videos.alive, [video], reason: reason);
+  expect(miniPlayer(), findsNothing, reason: reason);
+  expect(tester.getRect(player()), tester.getRect(previewBox()), reason: reason);
+}
+
 /// Where the parts of a highlight fiche are: nothing may move when the video comes or goes.
 List<Rect> ficheLayout(WidgetTester tester) => [
   tester.getRect(previewBox()),
@@ -101,6 +126,8 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pumpAndSettle();
       expect(app.effects.opened, hasLength(2));
+      // nothing over the navigator: no mini player
+      expect(find.ancestor(of: find.byType(Navigator), matching: find.byType(Overlay)), findsNothing);
       handle.dispose();
     });
 
@@ -248,55 +275,67 @@ void main() {
   });
 
   group('lifetime', () {
-    testWidgets('stops when another row is chosen, with the pointer or the keyboard', (tester) async {
+    testWidgets('another row: the same player goes on in the mini player, and back in place with its row', (
+      tester,
+    ) async {
       final videos = FakeVideoEmbedder();
       await pumpApp(tester, size: desk, videos: videos);
       await choose(tester, 'I Will Survive');
-      final first = await play(tester, videos);
+      final video = await play(tester, videos);
+      expect(miniPlayer(), findsNothing);
       await choose(tester, 'Song of Storms');
-      expect(first.disposed, isTrue);
-      expect(player(), findsNothing);
-      final second = await play(tester, videos);
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      expectInMiniPlayer(tester, video, videos);
+      expect(playBadge(), findsOneWidget, reason: 'the other fiche, its own preview');
+      // where it first appears: the bottom right corner of the window
+      expect(tester.getRect(miniPlayer()), const Rect.fromLTWH(1440 - 16 - 320, 900 - 16 - 40 - 180, 320, 220));
+      // with the keyboard too, and back
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await tester.pumpAndSettle();
-      expect(second.disposed, isTrue);
-      expect(videos.alive, isEmpty);
+      expectInMiniPlayer(tester, video, videos);
+      await choose(tester, 'I Will Survive');
+      expectInPlace(tester, video, videos);
     });
 
-    testWidgets('stops on a link of the fiche, and Back does not start it again', (tester) async {
+    testWidgets('a link of the fiche: in the mini player; Back: in place again', (tester) async {
       final videos = FakeVideoEmbedder();
       await pumpApp(tester, size: desk, videos: videos);
       await choose(tester, 'I Will Survive');
       final video = await play(tester, videos);
       await tester.tap(inPane(find.text('Played 2 times live')));
       await tester.pumpAndSettle();
-      expect(video.disposed, isTrue);
+      expectInMiniPlayer(tester, video, videos);
       await tester.tap(inPane(find.byTooltip('Back')));
       await tester.pumpAndSettle();
-      expect(playBadge(), findsOneWidget);
-      expect(videos.videos, hasLength(1));
+      expectInPlace(tester, video, videos);
     });
 
-    testWidgets('stops on a tab change (both panes stay alive out of sight), and does not come back', (tester) async {
+    testWidgets('another tab (both panes stay alive out of sight): the mini player over it, until the tab is back', (
+      tester,
+    ) async {
       final videos = FakeVideoEmbedder();
       await pumpApp(tester, size: desk, videos: videos);
       await choose(tester, 'I Will Survive');
       final video = await play(tester, videos);
-      await goToTab(tester, 'Ong Log');
-      expect(video.disposed, isTrue);
+      for (final tab in ['Ong Log', 'About']) {
+        await goToTab(tester, tab);
+        expectInMiniPlayer(tester, video, videos);
+      }
       await goToTab(tester, 'Highlights');
-      expect(playBadge(), findsOneWidget);
-      expect(videos.videos, hasLength(1));
+      expectInPlace(tester, video, videos);
       // "Requested by" switches tabs too
-      await play(tester, videos);
       await tester.tap(inPane(find.textContaining('Requested by')));
       await tester.pumpAndSettle();
-      expect(videos.alive, isEmpty);
+      expectInMiniPlayer(tester, video, videos);
     });
 
-    testWidgets('stops when the sheet closes, at once, not at the end of its slide', (tester) async {
+    testWidgets('the sheet closing: the mini player at once, not at the end of its slide; in place when it opens', (
+      tester,
+    ) async {
       final videos = FakeVideoEmbedder();
       await pumpApp(tester, videos: videos);
+      await tester.tap(detailsButtons().at(1));
+      await tester.pumpAndSettle();
+      final video = await play(tester, videos);
       for (final (how, close) in [
         ('the scrim', () => tester.tapAt(const Offset(206, 20))),
         ('back', () => tester.binding.handlePopRoute()),
@@ -310,48 +349,55 @@ void main() {
           ),
         ),
       ]) {
-        await tester.tap(detailsButtons().at(1));
-        await tester.pumpAndSettle();
-        final video = await play(tester, videos);
         await close();
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 16));
-        expect(video.disposed, isTrue, reason: how);
+        expect(find.byType(BottomSheet), findsOneWidget, reason: '$how: still sliding');
+        expectInMiniPlayer(tester, video, videos, reason: how);
         await tester.pumpAndSettle();
         expect(find.byType(BottomSheet), findsNothing, reason: how);
+        expectInMiniPlayer(tester, video, videos, reason: how);
+        await tester.tap(detailsButtons().at(1));
+        await tester.pumpAndSettle();
+        expectInPlace(tester, video, videos, reason: how);
       }
+      // above the navigation bar of a phone
+      await tester.tapAt(const Offset(206, 20));
+      await tester.pumpAndSettle();
+      final width = (412 - 2 * 16) * 2 / 3;
+      expect(
+        tester.getRect(miniPlayer()),
+        Rect.fromLTWH(412 - 16 - width, 892 - 68 - 16 - 40 - width * 9 / 16, width, 40 + width * 9 / 16),
+      );
       // a link of the sheet replaces it
       await tester.tap(detailsButtons().at(1));
       await tester.pumpAndSettle();
-      await play(tester, videos);
       await tester.tap(find.text('Played 2 times live'));
       await tester.pumpAndSettle();
-      expect(videos.alive, isEmpty);
+      expectInMiniPlayer(tester, video, videos);
     });
 
-    testWidgets('window modes: a sheet moving into the pane stops, and nothing starts by itself', (tester) async {
+    testWidgets('window modes: the video follows its fiche from the sheet to the pane and back', (tester) async {
       final videos = FakeVideoEmbedder();
       await pumpApp(tester, size: medium, videos: videos);
       await tester.tap(detailsButtons().at(1));
       await tester.pumpAndSettle();
       final video = await play(tester, videos);
-      // compact ↔ medium keeps the sheet, and its video
+      // compact ↔ medium keeps the sheet, and its video where it is
       tester.view.physicalSize = const Size(412, 892);
       await tester.pumpAndSettle();
-      expect(video.disposed, isFalse);
+      expectInPlace(tester, video, videos);
       expect(video.mounts, 1);
       tester.view.physicalSize = desk;
       await tester.pumpAndSettle();
-      expect(video.disposed, isTrue);
       expect(find.byType(BottomSheet), findsNothing);
-      expect(playBadge(), findsOneWidget);
-      expect(videos.videos, hasLength(1));
+      expectInPlace(tester, video, videos);
+      expect(inPane(find.byType(VideoPreview)), findsOneWidget);
+      expect(videos.videos, hasLength(1), reason: 'nothing starts by itself');
       // the pane goes when the window narrows
-      final second = await play(tester, videos);
       tester.view.physicalSize = medium;
       await tester.pumpAndSettle();
-      expect(second.disposed, isTrue);
-      expect(videos.alive, isEmpty);
+      expectInMiniPlayer(tester, video, videos);
     });
 
     testWidgets('goes on through scrolling, searching, filtering, the star, a refresh, the pointer, a resize', (
@@ -429,6 +475,227 @@ void main() {
     });
   });
 
+  group('mini player', () {
+    /// I Will Survive playing in the mini player of an expanded window, Song of Storms in the pane.
+    Future<FakeVideo> inMiniPlayer(WidgetTester tester, FakeVideoEmbedder videos) async {
+      await choose(tester, 'I Will Survive');
+      final video = await play(tester, videos);
+      await choose(tester, 'Song of Storms');
+      expectInMiniPlayer(tester, video, videos);
+      return video;
+    }
+
+    testWidgets('another video replaces it: never two sounds', (tester) async {
+      final videos = FakeVideoEmbedder();
+      await pumpApp(tester, size: desk, videos: videos);
+      final first = await inMiniPlayer(tester, videos);
+      final second = await play(tester, videos);
+      expect(first.disposed, isTrue);
+      expectInPlace(tester, second, videos);
+    });
+
+    testWidgets('its close button stops the video; the fiche then shows its preview', (tester) async {
+      final videos = FakeVideoEmbedder();
+      await pumpApp(tester, size: desk, videos: videos);
+      final video = await inMiniPlayer(tester, videos);
+      await tester.tap(find.byTooltip('Close'));
+      await tester.pumpAndSettle();
+      expect(video.disposed, isTrue);
+      expect(miniPlayer(), findsNothing);
+      expect(player(), findsNothing);
+      await choose(tester, 'I Will Survive');
+      expect(playBadge(), findsOneWidget);
+      expect(videos.videos, hasLength(1));
+    });
+
+    testWidgets('a failure closes it; a refusal is remembered', (tester) async {
+      final videos = FakeVideoEmbedder();
+      await pumpApp(tester, size: desk, videos: videos);
+      var video = await inMiniPlayer(tester, videos);
+      video.playerState = EmbeddedVideoState.failed;
+      await tester.pumpAndSettle();
+      expect(video.disposed, isTrue);
+      expect(miniPlayer(), findsNothing);
+      // nothing said in the fiche, which did not see it: it may play another time
+      await choose(tester, 'I Will Survive');
+      expect(find.text(refusedText), findsNothing);
+      expect(playBadge(), findsOneWidget);
+
+      // loading in the mini player (a spinner over black), then refused
+      await tapPreview(tester);
+      video = videos.videos.last;
+      // (the spinner turns: no settling)
+      await tester.tap(highlightRow('Song of Storms').first);
+      await tester.pump();
+      await tester.pump();
+      expect(find.descendant(of: miniPlayer(), matching: find.byType(CircularProgressIndicator)), findsOneWidget);
+      video.playerState = EmbeddedVideoState.refused;
+      await tester.pumpAndSettle();
+      expect(video.disposed, isTrue);
+      expect(miniPlayer(), findsNothing);
+      await choose(tester, 'I Will Survive');
+      expect(find.text(refusedText), findsOneWidget);
+    });
+
+    testWidgets('anything opening YouTube stops it', (tester) async {
+      final videos = FakeVideoEmbedder();
+      final app = await pumpApp(tester, size: desk, videos: videos, pointer: PointerKind.mouse);
+      final video = await inMiniPlayer(tester, videos);
+      await tester.tap(inPane(find.widgetWithText(FilledButton, 'Watch on YouTube')));
+      await tester.pumpAndSettle();
+      expect(app.effects.opened.single.toString(), 'https://www.youtube.com/watch?v=aaaaaaaaaaa');
+      expect(video.disposed, isTrue);
+      expect(miniPlayer(), findsNothing);
+    });
+
+    testWidgets('Show details: the fiche again, the video back in place (pane, sheet)', (tester) async {
+      final videos = FakeVideoEmbedder();
+      await pumpApp(tester, size: desk, videos: videos);
+      final video = await inMiniPlayer(tester, videos);
+      await tester.tap(find.byTooltip('Show details'));
+      await tester.pumpAndSettle();
+      expectInPlace(tester, video, videos);
+      expect(tester.widget<VideoPreview>(find.byType(VideoPreview)).highlight.track, 'I Will Survive');
+
+      // a phone: the sheet comes again, in place of another one
+      tester.view.physicalSize = const Size(412, 892);
+      await tester.pumpAndSettle();
+      expectInMiniPlayer(tester, video, videos);
+      await tester.tap(detailsButtons().at(0));
+      await tester.pumpAndSettle();
+      expectInMiniPlayer(tester, video, videos);
+      await tester.tap(find.byTooltip('Show details'));
+      await tester.pumpAndSettle();
+      expect(find.byType(BottomSheet), findsOneWidget);
+      expectInPlace(tester, video, videos);
+      expect(tester.widget<VideoPreview>(find.byType(VideoPreview)).highlight.track, 'I Will Survive');
+    });
+
+    testWidgets('moved by its title, resized by its corner: inside the window, the video in 16:9, remembered', (
+      tester,
+    ) async {
+      final videos = FakeVideoEmbedder();
+      final app = await pumpApp(tester, size: desk, videos: videos, pointer: PointerKind.mouse);
+      final video = await inMiniPlayer(tester, videos);
+      final start = tester.getRect(miniPlayer());
+      final title = find.descendant(of: miniPlayer(), matching: find.text('I Will Survive'));
+
+      // the player lets the pointer through while it moves
+      final gesture = await tester.startGesture(tester.getCenter(title), kind: PointerDeviceKind.mouse);
+      await gesture.moveBy(const Offset(-300, 0));
+      await gesture.moveBy(const Offset(-200, -300));
+      await tester.pump();
+      expect(video.pointerThrough, isTrue);
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(video.pointerThrough, isFalse);
+      expect(tester.getRect(miniPlayer()), start.shift(const Offset(-500, -300)));
+      expect(app.prefs.getString('miniPlayer'), '516.0,316.0,320.0');
+
+      // no further than the edges
+      await tester.drag(title, const Offset(-5000, -5000));
+      await tester.pumpAndSettle();
+      expect(tester.getRect(miniPlayer()).topLeft, const Offset(8, 8));
+
+      // its corner: wider and higher at once, the bottom right corner where it was
+      final grip = find.descendant(of: miniPlayer(), matching: find.byIcon(Icons.open_in_full));
+      await tester.drag(title, const Offset(600, 400));
+      await tester.pumpAndSettle();
+      final before = tester.getRect(miniPlayer());
+      await tester.drag(grip, const Offset(-160, -90));
+      await tester.pumpAndSettle();
+      var after = tester.getRect(miniPlayer());
+      expect(after.bottomRight, before.bottomRight);
+      expect(after.width, closeTo(before.width + 160, 1));
+      var shown = tester.getRect(player());
+      expect(shown.width / shown.height, closeTo(16 / 9, 0.001));
+      // no narrower than 200, no larger than the window
+      await tester.drag(grip, const Offset(2000, 2000));
+      await tester.pumpAndSettle();
+      expect(tester.getRect(miniPlayer()).width, 200);
+      await tester.drag(grip, const Offset(-5000, -5000));
+      await tester.pumpAndSettle();
+      after = tester.getRect(miniPlayer());
+      expect(const Rect.fromLTRB(8, 8, 1440 - 8, 900 - 8).intersect(after), after);
+      expect(after.width, 1440 - 16, reason: 'as wide as the window lets it');
+      shown = tester.getRect(player());
+      expect(shown.width / shown.height, closeTo(16 / 9, 0.001));
+
+      // a smaller window, then a turned phone: it comes back inside, 16:9
+      for (final size in [const Size(1000, 700), const Size(892, 412)]) {
+        tester.view.physicalSize = size;
+        await tester.pumpAndSettle();
+        expect(miniPlayer(), findsOneWidget);
+        final rect = tester.getRect(miniPlayer());
+        expect(Rect.fromLTRB(8, 8, size.width - 8, size.height - 8).intersect(rect), rect, reason: '$size');
+        shown = tester.getRect(player());
+        expect(shown.width / shown.height, closeTo(16 / 9, 0.001), reason: '$size');
+      }
+      expect(video.disposed, isFalse);
+      expect(video.mounts, 2, reason: 'shown in the mini player once, from the preview');
+    });
+
+    testWidgets('where it was left, at the next visit', (tester) async {
+      final videos = FakeVideoEmbedder();
+      await pumpApp(tester, size: desk, videos: videos, prefs: {'miniPlayer': '100.0,50.0,400.0'});
+      await inMiniPlayer(tester, videos);
+      expect(tester.getRect(miniPlayer()), const Rect.fromLTRB(1440 - 100 - 400, 900 - 50 - 40 - 225, 1440 - 100, 850));
+    });
+
+    testWidgets('its buttons: reached with the Tab key, named for screen readers', (tester) async {
+      final handle = tester.ensureSemantics();
+      final videos = FakeVideoEmbedder();
+      await pumpApp(tester, size: desk, videos: videos);
+      await inMiniPlayer(tester, videos);
+      for (final name in ['Show details', 'Close']) {
+        expect(
+          tester.getSemantics(find.byTooltip(name)),
+          isSemantics(tooltip: name, isButton: true, hasTapAction: true, isFocusable: true),
+        );
+      }
+      // after the last button of the page
+      bool hasFocus(String name) =>
+          FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<Tooltip>()?.message == name;
+      var reached = false;
+      for (var i = 0; i < 80 && !reached; i++) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.pump();
+        reached = hasFocus('Show details');
+      }
+      expect(reached, isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      expect(hasFocus('Close'), isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(videos.alive, isEmpty);
+      handle.dispose();
+    });
+
+    testWidgets('over a sheet of another fiche, and over a dialog', (tester) async {
+      final videos = FakeVideoEmbedder();
+      await pumpApp(tester, videos: videos);
+      await tester.tap(detailsButtons().at(1));
+      await tester.pumpAndSettle();
+      final video = await play(tester, videos);
+      await tester.tap(find.text('Played 2 times live'));
+      await tester.pumpAndSettle();
+      expect(find.byType(BottomSheet), findsOneWidget);
+      expectInMiniPlayer(tester, video, videos);
+      // the pointer reaches it, not the scrim of the sheet; so does the Tab key, from the sheet
+      expect(find.byTooltip('Close').hitTestable(), findsOneWidget);
+      var reached = false;
+      for (var i = 0; i < 40 && !reached; i++) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.pump();
+        reached =
+            FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<Tooltip>()?.message == 'Close';
+      }
+      expect(reached, isTrue);
+      expect(find.byType(BottomSheet), findsOneWidget);
+    });
+  });
+
   group('never two sounds', () {
     testWidgets('anything opening YouTube stops it first', (tester) async {
       final videos = FakeVideoEmbedder();
@@ -503,10 +770,10 @@ void main() {
       expect(videos.videos, hasLength(1));
       videos.only.playerState = EmbeddedVideoState.playing;
       await tester.pumpAndSettle();
-      // the next row: it stops
+      // the next row: it goes on in the mini player
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await tester.pumpAndSettle();
-      expect(videos.alive, isEmpty);
+      expectInMiniPlayer(tester, videos.only, videos);
     });
 
     testWidgets('opens YouTube when the fiche is under another one, or the video was refused', (tester) async {

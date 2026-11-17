@@ -319,6 +319,13 @@ final class StreamFiche extends Fiche {
       ('stream', _streamIdentity(catalogue, stream), play == null ? null : play!.id - stream.firstPlayId);
 }
 
+/// The fiche of [highlight], which may come from another catalogue, on
+/// [catalogue]; null when it is no longer there.
+HighlightFiche? highlightFicheOn(Catalogue catalogue, Highlight highlight) {
+  final h = _sameHighlight(highlight, catalogue);
+  return h == null ? null : HighlightFiche(catalogue, h);
+}
+
 /// [highlight] in [next]: the highlight with the same key, at the same index
 /// when nothing moved.
 Highlight? _sameHighlight(Highlight highlight, Catalogue next) {

@@ -17,9 +17,16 @@ abstract interface class VideoEmbedder {
 /// One video playing in the page. It plays until [dispose].
 abstract interface class EmbeddedVideo {
   /// What the page shows of it: YouTube's player, at the size it is given.
-  /// Built in one place only, for as long as the video is shown: on the web,
-  /// an element over the app's canvas, which a second copy would load again.
+  /// Built in one place at a time (on the web, an element over the app's
+  /// canvas, drawn at one place per frame), but it may go from one place to
+  /// another, with frames between where nothing shows it: the player is the
+  /// video's, not the view's, and plays on until [dispose].
   Widget get view;
+
+  /// Lets the pointer through the player to the app, or gives it back: a
+  /// drag of the mini player passing over the player would otherwise lose
+  /// the pointer to it halfway (on the web, a frame takes the events over it).
+  void letPointerThrough(bool through);
 
   /// Where it is: [EmbeddedVideoState.loading] first, then playing, or one of
   /// the two failures. A failure is final.

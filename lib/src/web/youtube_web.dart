@@ -19,7 +19,11 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:js_interop';
 
+import 'dart:ui_web' as ui_web;
+
 import 'package:flutter/foundation.dart';
+import 'package:flutter/rendering.dart' show PlatformViewHitTestBehavior;
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:web/web.dart' as web;
 
@@ -65,6 +69,13 @@ final class YouTubeEmbedder implements VideoEmbedder {
 
 /// A video of [YouTubeEmbedder]: a `<div>` in a platform view, holding the
 /// frame of YouTube's player, transparent until the player shows the video.
+///
+/// The platform view is the video's own, made with it and removed by
+/// [dispose], not by the widgets showing it ([view]): those come and go as the
+/// video moves between the preview of its fiche and the mini player, and the
+/// engine keeps the `<div>` where it is meanwhile (a frame taken out of the
+/// page, or put elsewhere in it, would load again: the sound would stop).
+/// [HtmlElementView] would remove it with its widget.
 ///
 /// What depends on the player's messages, and what happens without them:
 /// - the frame stays hidden (the preview and its spinner seen) until the
@@ -150,14 +161,20 @@ final class YouTubeVideo implements EmbeddedVideo {
   /// Whether its listeners are on the frame and the window.
   bool _listening = false;
 
+  /// Whether its platform view was made ([view] built).
+  bool _shownOnce = false;
+
+  /// Whether the pointer goes through the player ([letPointerThrough]).
+  bool _through = false;
+
   late final JSFunction _onLoad = ((web.Event _) => _frameLoaded()).toJS;
   late final JSFunction _onMessage = ((web.MessageEvent event) => _received(event)).toJS;
 
+  /// Its platform view, made when first shown.
+  late final _VideoView _platformView = _VideoView(platformViewsRegistry.getNextPlatformViewId(), host);
+
   @override
-  late final Widget view = HtmlElementView.fromTagName(
-    tagName: 'div',
-    onElementCreated: (element) => (element as web.HTMLElement).append(host),
-  );
+  late final Widget view = _VideoSurface(this);
 
   @override
   ValueListenable<EmbeddedVideoState> get state => _state;
@@ -308,8 +325,15 @@ final class YouTubeVideo implements EmbeddedVideo {
     _reveal?.cancel();
     host.style
       ..opacity = '1'
-      ..pointerEvents = 'auto';
+      ..pointerEvents = _through ? 'none' : 'auto';
     _state.value = EmbeddedVideoState.playing;
+  }
+
+  @override
+  void letPointerThrough(bool through) {
+    _through = through;
+    // hidden while it loads, the player never takes the pointer
+    if (_state.value == EmbeddedVideoState.playing) host.style.pointerEvents = through ? 'none' : 'auto';
   }
 
   void _fail(EmbeddedVideoState state, String reason) {
@@ -340,6 +364,74 @@ final class YouTubeVideo implements EmbeddedVideo {
     _disposed = true;
     _remove();
     host.remove();
+    if (_shownOnce) _platformView.remove();
     // (the state is not disposed: its listener may be the one disposing the video, while it is being notified)
   }
+}
+
+/// What shows a [YouTubeVideo]: its platform view, made at the first build.
+class _VideoSurface extends StatelessWidget {
+  const _VideoSurface(this.video);
+
+  final YouTubeVideo video;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!video._shownOnce && !video._disposed) {
+      video._shownOnce = true;
+      video._platformView.make();
+    }
+    return PlatformViewSurface(
+      controller: video._platformView,
+      hitTestBehavior: PlatformViewHitTestBehavior.opaque,
+      gestureRecognizers: const {},
+    );
+  }
+}
+
+/// The platform view of a [YouTubeVideo]: its [host], made by [make] and
+/// removed by [remove], not by the widgets showing it (see [YouTubeVideo]).
+final class _VideoView extends PlatformViewController {
+  _VideoView(this.viewId, this.host);
+
+  @override
+  final int viewId;
+
+  final web.HTMLElement host;
+
+  /// The kind of platform view of the videos: each one is the `<div>` of its
+  /// video.
+  static const String _type = 'ong-music-video';
+
+  static final _hosts = <int, web.HTMLElement>{};
+  static bool _registered = false;
+
+  /// Makes the platform view, which the engine keeps until [remove]: the
+  /// engine has it at once (as for [HtmlElementView]), in time for the frame
+  /// being built.
+  void make() {
+    if (!_registered) {
+      _registered = true;
+      ui_web.platformViewRegistry.registerViewFactory(_type, (int id) => _hosts.remove(id)!);
+    }
+    _hosts[viewId] = host;
+    unawaited(SystemChannels.platform_views.invokeMethod<void>('create', {'id': viewId, 'viewType': _type}));
+  }
+
+  void remove() {
+    _hosts.remove(viewId);
+    unawaited(SystemChannels.platform_views.invokeMethod<void>('dispose', viewId));
+  }
+
+  @override
+  Future<void> clearFocus() async {}
+
+  // (nothing goes to the frame through Flutter: cross-origin, it takes only the visitor's own events, over it)
+  @override
+  Future<void> dispatchPointerEvent(PointerEvent event) async {}
+
+  /// Nothing when a widget showing the video goes: [remove], when the video
+  /// does.
+  @override
+  Future<void> dispose() async {}
 }

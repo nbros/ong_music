@@ -752,6 +752,12 @@ class FakeVideo implements EmbeddedVideo {
   /// What YouTube's player does.
   set playerState(EmbeddedVideoState value) => _state.value = value;
 
+  /// Whether the pointer goes through the player (a move of the mini player).
+  bool pointerThrough = false;
+
+  @override
+  void letPointerThrough(bool through) => pointerThrough = through;
+
   @override
   void dispose() {
     // synchronous: a video may stop while the test pumps (a move of the browser's history)

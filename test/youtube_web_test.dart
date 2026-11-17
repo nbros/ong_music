@@ -9,6 +9,8 @@ import 'dart:convert';
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 
+import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ong_music/src/web/embedded_video.dart';
 import 'package:ong_music/src/web/web_platform.dart';
@@ -391,5 +393,64 @@ void main() {
     say(frame, {'event': 'onError', 'info': 150}, source: window);
     expect(video.state.value, EmbeddedVideoState.loading);
     expect(messageListeners(), 0);
+  });
+
+  testWidgets('the player goes from one place to another (the mini player): one platform view, kept until dispose', (
+    tester,
+  ) async {
+    // (the test binding has the engine make no platform view: what the app asks of it is checked)
+    final calls = <String>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform_views, (call) async {
+      calls.add('${call.method} ${call.method == 'create' ? (call.arguments as Map)['id'] : call.arguments}');
+      return null;
+    });
+    final video = local().play('aaaaaaaaaaa');
+    final frame = frameOf(video)!;
+    // where the view is: the top left corner, nowhere, the bottom right corner
+    final place = ValueNotifier<int?>(0);
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: ValueListenableBuilder(
+          valueListenable: place,
+          builder: (context, place, _) => Stack(
+            children: [
+              Positioned(left: 0, top: 0, width: 320, height: 180, child: place == 0 ? video.view : const SizedBox()),
+              Positioned(
+                right: 0,
+                bottom: 0,
+                width: 320,
+                height: 180,
+                child: place == 1 ? video.view : const SizedBox(),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    expect(calls, hasLength(1));
+    expect(calls.single, startsWith('create '));
+    final id = calls.single.split(' ').last;
+    expect(tester.getRect(find.byType(PlatformViewSurface)), const Rect.fromLTWH(0, 0, 320, 180));
+    place.value = null;
+    await tester.pump();
+    place.value = 1;
+    await tester.pump();
+    expect(
+      tester.getRect(find.byType(PlatformViewSurface)).bottomRight,
+      tester.getRect(find.byType(Stack)).bottomRight,
+    );
+    expect(calls, ['create $id'], reason: 'made once, kept while nothing shows it');
+    // (the same element: under --wasm, two Dart values may wrap it)
+    expect(
+      frameOf(video)!.strictEquals(frame).toDart,
+      isTrue,
+      reason: 'the frame stays in its <div>: not loaded again',
+    );
+
+    video.dispose();
+    await tester.pumpWidget(const SizedBox());
+    expect(calls, ['create $id', 'dispose $id']);
+    expect(video.host.isConnected, isFalse);
   });
 }

@@ -19,6 +19,7 @@ import 'highlights_page.dart';
 import 'install_banner.dart';
 import 'launcher_shortcuts.dart';
 import 'layout.dart';
+import 'mini_player.dart';
 import 'nav_rail.dart';
 import 'new_highlights.dart';
 import 'ong_log_page.dart';
@@ -134,9 +135,13 @@ class _OngMusicAppState extends ConsumerState<OngMusicApp> {
         themeAnimationDuration: fallbackChanged ? Duration.zero : kThemeAnimationDuration,
         builder: (context, child) => FontWarmUpScope(
           child: AppLayout(
-            child: _browserUses24HourClock == true
-                ? MediaQuery(data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true), child: child!)
-                : child!,
+            // the video of a fiche left plays on over everything (web app)
+            child: MiniPlayerLayer(
+              navigatorKey: _router.navigatorKey,
+              child: _browserUses24HourClock == true
+                  ? MediaQuery(data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true), child: child!)
+                  : child!,
+            ),
           ),
         ),
         routerDelegate: _router,
