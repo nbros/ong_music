@@ -57,10 +57,11 @@ fail() {
 
 # download <name> <url> <file> <type>: <url> into <file>, 200 and of content type <type> only
 download() {
-  local name=$1 url=$2 file=$3 expected=$4 answer status type
+  # <max-time> and <retries>: those of the sheets unless given (the optional xlsx gets a shorter budget)
+  local name=$1 url=$2 file=$3 expected=$4 max_time=${5:-300} retries=${6:-${SNAPSHOT_RETRIES:-2}} answer status type
   # --compressed: gzip on the wire (the Songs sheet: 4 MB, 0.9 MB gzipped), the file is the text
   answer=$(curl --silent --show-error --compressed --location \
-    --retry "${SNAPSHOT_RETRIES:-2}" --retry-delay 10 --connect-timeout 30 --max-time 300 --max-filesize 100000000 \
+    --retry "$retries" --retry-delay 10 --connect-timeout 30 --max-time "$max_time" --max-filesize 100000000 \
     --user-agent 'ong-music-sheets-snapshot' \
     --output "$file" --write-out '%{http_code} %{content_type}' "$url") ||
     fail "$name: download failed ($answer)"
@@ -153,7 +154,8 @@ EOF
   # the links, in a subshell: its failures (fail exits) stop it, not the sheets
   local links_failed=''
   if ! (
-    download 'song links' "$links_url" "$work/songs.xlsx" "$xlsx_type" &&
+    # at most 2 × 120 s + 10 s: a stuck export must leave the job (15 minutes) the time to publish the sheets
+    download 'song links' "$links_url" "$work/songs.xlsx" "$xlsx_type" 120 1 &&
       python3 -I "$tool_dir/song_links.py" "$work/songs.xlsx" "$work/$links" "$work/song_links.json" "$published"
   ); then
     links_failed=1
