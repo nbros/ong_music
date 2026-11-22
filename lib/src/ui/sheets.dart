@@ -16,14 +16,17 @@ import 'package:material_ui/material_ui.dart';
 
 import '../data/catalogue.dart';
 import '../data/model.dart';
+import '../data/song_links.dart';
 import '../state/catalogue_state.dart';
 import '../state/settings_state.dart';
+import '../state/song_links_state.dart';
 import '../state/vods_state.dart';
 import 'actions.dart';
 import 'format.dart';
 import 'instant_feedback.dart';
 import 'layout.dart';
 import 'outside_link.dart';
+import 'row_menu.dart';
 import 'rows.dart';
 import 'theme.dart';
 import 'top_bar.dart';
@@ -367,7 +370,7 @@ class _Title extends StatelessWidget {
 }
 
 /// A line of facts: icon, text with an optional small line, chevron when it
-/// leads somewhere.
+/// leads somewhere in the app.
 class _Fact extends StatelessWidget {
   const _Fact({
     required this.icon,
@@ -376,7 +379,15 @@ class _Fact extends StatelessWidget {
     this.detail,
     this.onTap,
     this.chevronRoom = false,
+    this.chevron = true,
+    this.end = 20,
   });
+
+  /// Whether a tappable fact shows its chevron: not one that opens something outside the app.
+  final bool chevron;
+
+  /// The space after its content: less before a button beside it.
+  final double end;
 
   /// Whether the room of the chevron is kept when it is not tappable: a fact that is tappable in another fiche of
   /// the same item takes the same width for its text.
@@ -398,7 +409,7 @@ class _Fact extends StatelessWidget {
     final body = ConstrainedBox(
       constraints: const BoxConstraints(minHeight: 48),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+        padding: EdgeInsetsDirectional.fromSTEB(20, 4, end, 4),
         child: Row(
           children: [
             SizedBox(width: 24, child: Icon(icon, size: 20, color: on3)),
@@ -425,7 +436,7 @@ class _Fact extends StatelessWidget {
                 ],
               ),
             ),
-            if (onTap != null)
+            if (onTap != null && chevron)
               Icon(Icons.chevron_right, size: 20, color: on3)
             else if (chevronRoom)
               const SizedBox(width: 20),
@@ -544,17 +555,31 @@ class _CopyButtonState extends State<_CopyButton> {
 /// plain small icon, as the star beside it, not a tonal circle like the
 /// actions under it; its tap target follows the theme as the star's does
 /// ([_iconButtonExtent]).
-class _CopyTitleButton extends StatefulWidget {
+class _CopyTitleButton extends StatelessWidget {
   const _CopyTitleButton({required this.title});
 
   /// The title of the song, as the sheets write it: `"Artist - Track"`.
   final String title;
 
   @override
-  State<_CopyTitleButton> createState() => _CopyTitleButtonState();
+  Widget build(BuildContext context) => _CopyIconButton(text: songCopyText(title), tooltip: copyTitleText);
 }
 
-class _CopyTitleButtonState extends State<_CopyTitleButton> {
+/// A plain small copy icon that copies [text], named [tooltip], then shows a
+/// check mark for a moment in the same box, named [copiedText] (and tells
+/// screen readers): the copy button of a title, that of the line of the
+/// original of a song.
+class _CopyIconButton extends StatefulWidget {
+  const _CopyIconButton({required this.text, required this.tooltip});
+
+  final String text;
+  final String tooltip;
+
+  @override
+  State<_CopyIconButton> createState() => _CopyIconButtonState();
+}
+
+class _CopyIconButtonState extends State<_CopyIconButton> {
   Timer? _reset;
 
   bool get _copied => _reset?.isActive ?? false;
@@ -562,7 +587,7 @@ class _CopyTitleButtonState extends State<_CopyTitleButton> {
   Future<void> _copy() async {
     final view = View.of(context);
     final direction = Directionality.of(context);
-    final copied = await copyText(songCopyText(widget.title));
+    final copied = await copyText(widget.text);
     if (!mounted) return;
     if (!copied) return showMessage(context, copyFailedText);
     _reset?.cancel();
@@ -584,7 +609,7 @@ class _CopyTitleButtonState extends State<_CopyTitleButton> {
   Widget build(BuildContext context) {
     final copied = _copied;
     return IconButton(
-      tooltip: copied ? copiedText : copyTitleText,
+      tooltip: copied ? copiedText : widget.tooltip,
       onPressed: _copy,
       iconSize: _copyTitleIconSize,
       // only the icon changes, in the same box: the button keeps its place, its focus and its hover; its colour on
@@ -597,6 +622,62 @@ class _CopyTitleButtonState extends State<_CopyTitleButton> {
           color: Theme.of(context).colorScheme.onSurfaceVariant,
         ),
       ),
+    );
+  }
+}
+
+/// The line of the original of the song of key [songKey] (`SongLinks`), when it has one: [listenToTheOriginalText]
+/// over the short address, which opens it ([OriginalLink]), and beside it a copy button of its address
+/// ([copyOriginalLinkText]), [end] from the end of the fiche: in the column of the plain icons over it. Nothing
+/// without a link.
+///
+/// The link is the one known when the line came on the screen: a fiche never changes size, nor a text its width,
+/// when the file of the links comes (on a first visit, a second or so after the sheets) or changes; it shows in the
+/// fiches opened from then on.
+class _OriginalFact extends ConsumerStatefulWidget {
+  const _OriginalFact({required this.songKey, required this.end});
+
+  final String songKey;
+  final double end;
+
+  @override
+  ConsumerState<_OriginalFact> createState() => _OriginalFactState();
+}
+
+class _OriginalFactState extends ConsumerState<_OriginalFact> {
+  late SongLink? _link = _read();
+
+  SongLink? _read() => ref.read(songLinksProvider)?.of(widget.songKey);
+
+  @override
+  void didUpdateWidget(_OriginalFact oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // another song in the same place (the pane shows another fiche)
+    if (oldWidget.songKey != widget.songKey) _link = _read();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final link = _link;
+    if (link == null) return const SizedBox.shrink();
+    return Row(
+      children: [
+        Expanded(
+          child: OriginalLink(
+            link: link,
+            builder: (context, open) => _Fact(
+              icon: originalIcon,
+              text: listenToTheOriginalText,
+              detail: link.shortText,
+              onTap: open,
+              chevron: false,
+              end: 4,
+            ),
+          ),
+        ),
+        _CopyIconButton(text: link.url, tooltip: copyOriginalLinkText),
+        SizedBox(width: widget.end),
+      ],
     );
   }
 }
@@ -785,6 +866,8 @@ class HighlightSheet extends ConsumerWidget {
                     ].join(' · '),
                     onTap: () => showSongSheet(context, catalogue, song),
                   ),
+                // in the column of the star
+                _OriginalFact(songKey: h.songKey, end: 20),
                 if (h.vocals != Vocals.unknown)
                   _Fact(
                     icon: h.vocals == Vocals.yes ? Icons.mic : Icons.piano,
@@ -899,6 +982,10 @@ class SongSheet extends ConsumerWidget {
               ],
             ),
           ),
+        ),
+        // its copy button in the column of that of the title
+        SliverToBoxAdapter(
+          child: _OriginalFact(songKey: s.key, end: 20 - beyond),
         ),
         if (videos.isNotEmpty)
           SliverToBoxAdapter(

@@ -168,7 +168,7 @@ void main() {
     testWidgets('a long press: the menu, with the haptic feedback; nothing else happens', (tester) async {
       final app = await pumpApp(tester);
       await _longPress(tester, _highlightRow('I Will Survive'));
-      expect(_items(tester), ['Copy title', 'Copy link', 'Share', 'Add to favourites']);
+      expect(_items(tester), ['Copy title', 'Copy video link', 'Share', 'Add to favourites']);
       expect(_icons(tester), [Icons.copy, Icons.link, Icons.share, Icons.star_border]);
       expect(app.effects.haptics, 1);
       expect(app.effects.opened, isEmpty, reason: 'the video does not open');
@@ -186,7 +186,7 @@ void main() {
       expect(find.byType(PopupMenuItem<void>), findsNothing, reason: 'closed by the choice');
 
       await _longPress(tester, row);
-      await _choose(tester, 'Copy link');
+      await _choose(tester, 'Copy video link');
       expect(app.effects.clipboard, 'https://youtu.be/bbbbbbbbbbb');
       await waitForMessage(tester);
 
@@ -217,7 +217,7 @@ void main() {
       await tester.pumpWidget(const SizedBox());
       await pumpApp(tester, canShare: false);
       await _longPress(tester, _highlightRow('I Will Survive'));
-      expect(_items(tester), ['Copy title', 'Copy link', 'Add to favourites']);
+      expect(_items(tester), ['Copy title', 'Copy video link', 'Add to favourites']);
     });
 
     testWidgets('a mouse held down never opens it: the slow click opens the video', (tester) async {
@@ -439,7 +439,7 @@ void main() {
     testWidgets('Android 12 and lower: the message', (tester) async {
       await pumpApp(tester, androidSdk: 32);
       await _longPress(tester, _highlightRow('I Will Survive'));
-      await _choose(tester, 'Copy link');
+      await _choose(tester, 'Copy video link');
       expect(find.text('Copied'), findsOneWidget);
       await waitForMessage(tester);
     });
@@ -462,7 +462,7 @@ void main() {
       final title = tester.widget<PlayRow>(row).play.title;
       final video = tester.widget<PlayRow>(row).catalogue.highlightOf(tester.widget<PlayRow>(row).play)!.youtubeId!;
       await _longPress(tester, row);
-      expect(_items(tester), ['Copy title', 'Watch on YouTube', 'Copy link', 'Share']);
+      expect(_items(tester), ['Copy title', 'Watch on YouTube', 'Copy video link', 'Share']);
       expect(_icons(tester), [Icons.copy, Icons.play_arrow, Icons.link, Icons.share]);
       expect(find.byType(SongSheet), findsNothing, reason: 'the song does not open');
       await _choose(tester, 'Watch on YouTube');
@@ -473,7 +473,7 @@ void main() {
       expect(app.effects.clipboard, title);
       await waitForMessage(tester);
       await _longPress(tester, row);
-      await _choose(tester, 'Copy link');
+      await _choose(tester, 'Copy video link');
       expect(app.effects.clipboard, 'https://youtu.be/$video');
       await waitForMessage(tester);
       await _longPress(tester, row);

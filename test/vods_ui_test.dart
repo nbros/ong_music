@@ -148,7 +148,7 @@ void main() {
       expect(app.effects.opened.map((u) => '$u'), ['https://youtu.be/$_first?t=3900']);
 
       await _menu(tester, _playRow('2024-03-01', 'I Will Survive'));
-      expect(_items(tester), ['Copy title', 'Watch on YouTube', 'Watch in the VOD', 'Copy link', 'Share']);
+      expect(_items(tester), ['Copy title', 'Watch on YouTube', 'Watch in the VOD', 'Copy video link', 'Share']);
       await tester.tap(find.text('Watch in the VOD'));
       await tester.pumpAndSettle();
       expect(app.effects.opened.last.toString(), 'https://youtu.be/$_first?t=600');

@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../data/model.dart';
+import '../data/song_links.dart';
 import '../web/link_anchor.dart';
 import '../web/web_platform.dart';
 import 'actions.dart';
@@ -197,6 +198,24 @@ class VodLink extends ConsumerWidget {
     label: label,
     video: true,
     onOpen: () => openVod(context, ref, link),
+    builder: builder,
+  );
+}
+
+/// [OutsideLink] to [link], the original of a song, opened outside the app with [openOriginal]: the video playing in
+/// the app stops first, as for a video.
+class OriginalLink extends ConsumerWidget {
+  const OriginalLink({super.key, required this.link, required this.builder});
+
+  final SongLink link;
+  final Widget Function(BuildContext context, VoidCallback open) builder;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => OutsideLink(
+    url: link.url,
+    label: listenToTheOriginalText,
+    video: true,
+    onOpen: () => openOriginal(context, ref, link),
     builder: builder,
   );
 }
