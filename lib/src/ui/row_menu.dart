@@ -13,7 +13,9 @@ import 'package:material_ui/material_ui.dart';
 
 import '../data/catalogue.dart';
 import '../data/model.dart';
+import '../data/song_links.dart';
 import '../state/settings_state.dart';
+import '../state/song_links_state.dart';
 import '../state/vods_state.dart';
 import '../web/context_menu.dart';
 import '../web/web_platform.dart';
@@ -28,15 +30,19 @@ final contextMenusProvider = Provider<ContextMenus?>((ref) => contextMenus());
 /// An item of the menu of a row: its icon, its label, and what it does.
 typedef RowMenuItem = ({IconData icon, String label, VoidCallback onSelected});
 
-/// The items of the menu of [highlight]'s row, in their order: copy its title, copy its link (with a video), share it
-/// (where there is a share sheet), add it to the favourites or remove it. [context] is the row's.
+/// The items of the menu of [highlight]'s row, in their order: copy its title; when its song has a link to its
+/// original, listen to it; with a video, copy its link; copy the link of the original; with a video, share it (where
+/// there is a share sheet); add it to the favourites or remove it. [context] is the row's.
 List<RowMenuItem> highlightMenuItems(BuildContext context, WidgetRef ref, Highlight highlight) {
   final id = highlight.youtubeId;
   final favourite = ref.read(favouritesProvider).contains(highlight.key);
+  final original = ref.read(songLinksProvider)?.of(highlight.songKey);
   return [
     (icon: Icons.copy, label: copyTitleText, onSelected: () => copyAndConfirm(context, songCopyText(highlight.title))),
+    if (original != null) _listenItem(context, ref, original),
     if (id != null)
-      (icon: Icons.link, label: copyLinkText, onSelected: () => copyAndConfirm(context, shortVideoUrl(id))),
+      (icon: Icons.link, label: copyVideoLinkText, onSelected: () => copyAndConfirm(context, shortVideoUrl(id))),
+    if (original != null) _copyOriginalItem(context, original),
     if (id != null && ref.read(canShareProvider))
       (icon: Icons.share, label: shareText, onSelected: () => shareHighlight(context, ref, highlight)),
     favourite
@@ -55,7 +61,8 @@ List<RowMenuItem> highlightMenuItems(BuildContext context, WidgetRef ref, Highli
 
 /// The items of the menu of [play]'s row, in their order: copy its title; with a video, watch it on YouTube ([onVideo],
 /// what the row's play button does); when its stream has a VOD that reaches it, watch it there ([watchInTheVodText]);
-/// with a video, copy its link, share it (where there is a share sheet). [context] is the row's.
+/// when its song has a link to its original, listen to it ([listenToTheOriginalText]); with a video, copy its link;
+/// copy the link of the original; with a video, share it (where there is a share sheet). [context] is the row's.
 List<RowMenuItem> playMenuItems(
   BuildContext context,
   WidgetRef ref,
@@ -66,18 +73,29 @@ List<RowMenuItem> playMenuItems(
   final video = catalogue.highlightOf(play);
   final id = video?.youtubeId;
   final vod = vodLinksFor(catalogue, ref.read(vodFileProvider), ref.read(vodOffsetsProvider))?.linkOf(play);
+  final original = ref.read(songLinksProvider)?.of(play.songKey);
   return [
     (icon: Icons.copy, label: copyTitleText, onSelected: () => copyAndConfirm(context, songCopyText(play.title))),
     if (video != null && id != null)
       (icon: Icons.play_arrow, label: watchOnYouTubeText, onSelected: () => onVideo(video)),
     if (vod != null) (icon: vodIcon, label: watchInTheVodText, onSelected: () => openVod(context, ref, vod)),
-    if (video != null && id != null) ...[
-      (icon: Icons.link, label: copyLinkText, onSelected: () => copyAndConfirm(context, shortVideoUrl(id))),
-      if (ref.read(canShareProvider))
-        (icon: Icons.share, label: shareText, onSelected: () => shareHighlight(context, ref, video)),
-    ],
+    if (original != null) _listenItem(context, ref, original),
+    if (video != null && id != null)
+      (icon: Icons.link, label: copyVideoLinkText, onSelected: () => copyAndConfirm(context, shortVideoUrl(id))),
+    if (original != null) _copyOriginalItem(context, original),
+    if (video != null && id != null && ref.read(canShareProvider))
+      (icon: Icons.share, label: shareText, onSelected: () => shareHighlight(context, ref, video)),
   ];
 }
+
+/// The icon of the original of a song: the line of the fiches, the items of the menus.
+const IconData originalIcon = Icons.music_note;
+
+RowMenuItem _listenItem(BuildContext context, WidgetRef ref, SongLink original) =>
+    (icon: originalIcon, label: listenToTheOriginalText, onSelected: () => openOriginal(context, ref, original));
+
+RowMenuItem _copyOriginalItem(BuildContext context, SongLink original) =>
+    (icon: Icons.link, label: copyOriginalLinkText, onSelected: () => copyAndConfirm(context, original.url));
 
 /// Gives [child], a row, its menu of [items] (built when it opens): a long press with a finger or a stylus (never a
 /// mouse or a trackpad held down, which stays a click), with the haptic feedback of the platform; a right click; the

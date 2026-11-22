@@ -14,6 +14,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/catalogue.dart';
 import '../data/data_files.dart';
 import '../data/model.dart';
+import '../data/page_thread.dart';
 import '../data/parser.dart';
 import '../data/rankings.dart';
 import '../data/repository.dart';
@@ -23,11 +24,13 @@ import '../data/sheet_prefetch.dart';
 import '../data/sheet_snapshot.dart';
 import '../data/sheets.dart';
 import '../data/slices.dart';
+import '../data/song_links.dart';
 import '../data/vod_offsets.dart';
 import '../data/vods.dart';
 import '../logger.dart';
 import 'new_highlights_state.dart';
 import 'settings_state.dart';
+import 'song_links_state.dart';
 import 'vods_state.dart';
 
 /// A kept sheet older than this is refreshed in the background.
@@ -356,13 +359,14 @@ final class _SongsInput {
 ///   replaces it at once; on failure it stays and the error of the sheet is set. Once the Songs sheet is on the
 ///   screen it stays: new highlights show with it, parsed again against them;
 /// - a refresh that finds a sheet unchanged keeps the same [Catalogue] instance and only moves its time;
-/// - the files of the branch `data` ([DataFile]) are downloaded with each download of the Highlights sheet, and at
-///   the start when their kept copies are missing or older than [catalogueMaxAge]: never waited for, never retried
-///   but with the sheets, their failures (a 404 while the branch does not exist) logged only. Their kept copies are
-///   read at the start, the table of names (`aliases.txt`) before the first parse of the highlights. A file that
-///   reads is kept and taken: the VODs at once ([vodFileProvider]: the actions of the VODs appear), their offsets at
-///   once ([vodOffsetsProvider]: the links move), the table of names by the next parse of the highlights
-///   ([_aliases]), without a parse of its own.
+/// - the data files ([DataFile]: those of the branch `data`, and the links of the songs beside the snapshot) are
+///   downloaded with each download of the Highlights sheet, and at the start when their kept copies are missing or
+///   older than [catalogueMaxAge]: never waited for, never retried but with the sheets, their failures (a 404 while
+///   the branch does not exist) logged only. Their kept copies are read at the start, the table of names
+///   (`aliases.txt`) before the first parse of the highlights. A file that reads is kept and taken: the VODs at once
+///   ([vodFileProvider]: the actions of the VODs appear), their offsets at once ([vodOffsetsProvider]: the links
+///   move), the links of the songs once read, in the idle time of the thread ([songLinksProvider]: their actions
+///   appear), the table of names by the next parse of the highlights ([_aliases]), without a parse of its own.
 ///
 /// To retry or reload, call [refresh]; `ref.invalidate(catalogueProvider)` also
 /// works but drops the catalogue in memory, so the UI goes back to loading.
@@ -478,14 +482,14 @@ class CatalogueNotifier extends Notifier<CatalogueState> {
     Catalogue? catalogue;
     // false once the cache was read and holds nothing usable; not when it could not be read
     var kept = true;
-    // the kept data files, read with the highlights: the table of names before their first parse, the VODs and their
-    // offsets whenever they come (unless a download came first)
+    // the kept data files, read with the highlights: the table of names before their first parse, the VODs, their
+    // offsets and the links of the songs whenever they come (unless a download came first)
     final dataCache = ref.read(dataFileCacheProvider);
     final keptAliases = _readKeptData(dataCache, DataFile.aliases);
     Future<void> takeKept(DataFile file) => _readKeptData(dataCache, file).then((copy) {
       if (copy != null && generation == _generation && !_data.containsKey(file)) _takeData(file, copy);
     });
-    final keptVods = Future.wait([takeKept(DataFile.vods), takeKept(DataFile.offsets)]);
+    final keptFiles = Future.wait([takeKept(DataFile.vods), takeKept(DataFile.offsets), takeKept(DataFile.songLinks)]);
     try {
       cached = await _repo.readCache(Sheet.highlights, isAbandoned: () => generation != _generation);
       final aliases = await keptAliases;
@@ -533,7 +537,7 @@ class CatalogueNotifier extends Notifier<CatalogueState> {
       ref.read(prefetchDiscarderProvider)();
       // the data files, when missing or stale, do not wait for the sheets to be (their kept copies were read with
       // those of the sheets: done by now)
-      await keptVods;
+      await keptFiles;
       if (generation != _generation) return;
       if (DataFile.values.any((file) => _isStale(_data[file]?.fetchedAt))) unawaited(_downloadData());
     }
@@ -892,10 +896,10 @@ class CatalogueNotifier extends Notifier<CatalogueState> {
   }
 
   /// Takes [copy] as the content of [file] if it reads: the VODs and their offsets at once ([vodFileProvider],
-  /// [vodOffsetsProvider]), the table of names for the next parse of the highlights. Returns whether it was taken: a
-  /// text that is no `vods.tsv` or `offsets.tsv` (without its header, `VodFile.isFile`, `OffsetFile.isFile`: an error
-  /// answered with status 200) or a table that does not read (`RequesterAliases.tryParse`) is not, and what was taken
-  /// before stays, kept.
+  /// [vodOffsetsProvider]), the links of the songs once read ([_readSongLinks]), the table of names for the next parse
+  /// of the highlights. Returns whether it was taken: a text that is no `vods.tsv`, `offsets.tsv` or `song_links.tsv`
+  /// (without its header, `VodFile.isFile`, `OffsetFile.isFile`, `SongLinks.isFile`: an error answered with status
+  /// 200) or a table that does not read (`RequesterAliases.tryParse`) is not, and what was taken before stays, kept.
   bool _takeData(DataFile file, CachedSheet copy) {
     final previous = _data[file];
     // whatever gave it, the fetcher (the one over HTTP stops reading beyond the bound) or the copy kept by an
@@ -919,6 +923,13 @@ class CatalogueNotifier extends Notifier<CatalogueState> {
           return false;
         }
         ref.read(vodOffsetsProvider.notifier).take(OffsetFile.parse(copy.text));
+      case DataFile.songLinks:
+        if (previous?.text == copy.text) break;
+        if (!SongLinks.isFile(copy.text)) {
+          logger.w('${file.fileName} is no file of links (no header): not taken');
+          return false;
+        }
+        unawaited(_readSongLinks(copy.text));
       case DataFile.aliases:
         final aliases = previous?.text == copy.text ? _aliases : RequesterAliases.tryParse(copy.text);
         if (aliases == null) {
@@ -929,6 +940,29 @@ class CatalogueNotifier extends Notifier<CatalogueState> {
     }
     _data[file] = copy;
     return true;
+  }
+
+  /// The last reading of the links of the songs started ([_readSongLinks]): only its result is taken.
+  int _songLinksRead = 0;
+
+  /// Reads [text], a `song_links.tsv`, in the idle time of the thread (some 10,000 lines: tens of milliseconds, too
+  /// long for a frame of the page on the web), then gives it to [songLinksProvider], unless another reading started
+  /// meanwhile (a download after the kept copy) or the build is gone.
+  Future<void> _readSongLinks(String text) {
+    final read = ++_songLinksRead;
+    final generation = _generation;
+    bool abandoned() => generation != _generation || read != _songLinksRead;
+    final load = SongLinksLoad(text);
+    return _track(
+      runWhenIdle(load.step, idle: waitForIdle, pause: yieldToBrowser, isAbandoned: abandoned).then(
+        (_) {
+          if (!abandoned()) ref.read(songLinksProvider.notifier).take(load.links);
+        },
+        onError: (Object e, StackTrace st) {
+          if (e is! LoadAbandoned) logger.w('song_links.tsv not read', error: e, stackTrace: st);
+        },
+      ),
+    );
   }
 
   /// Work that [idle] waits for.

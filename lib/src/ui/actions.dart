@@ -12,6 +12,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../data/model.dart';
+import '../data/song_links.dart';
 import '../logger.dart';
 import '../web/web_platform.dart';
 import 'video_preview.dart';
@@ -81,6 +82,13 @@ Future<void> openVod(BuildContext context, WidgetRef ref, Uri link) {
   return openLink(context, ref, link.toString());
 }
 
+/// Opens [link], the original of a song (a YouTube video), outside the app as [openVideo] does (the YouTube app, or a
+/// new tab on the web): the video playing inside the app stops first, never two sounds.
+Future<void> openOriginal(BuildContext context, WidgetRef ref, SongLink link) {
+  ref.read(inPlaceVideosProvider).stop();
+  return openLink(context, ref, link.url);
+}
+
 /// What "Share" and "Copy" give for [highlight]: `"<title> — https://youtu.be/<id>"`,
 /// or the title alone without video.
 String highlightShareText(Highlight highlight) {
@@ -121,7 +129,15 @@ const copyFailedText = 'Couldn’t copy';
 const copyTitleText = 'Copy title';
 
 /// Copying the short link of a video ([shortVideoUrl]): an item of the menu of a row.
-const copyLinkText = 'Copy link';
+const copyVideoLinkText = 'Copy video link';
+
+/// Opening the original of a song ([openOriginal], `SongLinks`): the line of the fiche of the song and of a highlight,
+/// an item of the menu of a row (approved by the user).
+const listenToTheOriginalText = 'Listen to the original';
+
+/// Copying the link of the original of a song (`SongLink.url`): an item of the menu of a row, the tooltip of the copy
+/// button of the line of a fiche (approved by the user).
+const copyOriginalLinkText = 'Copy original link';
 
 /// Sharing a highlight ([shareHighlight]): the button of its fiche, an item of the menu of a row.
 const shareText = 'Share';

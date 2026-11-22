@@ -22,7 +22,8 @@ import 'sheets.dart';
 
 /// Where the snapshot is read.
 abstract final class SnapshotUrls {
-  /// The directory of the three files, ending with `/`: the branch `sheets-snapshot` of the repository, unless
+  /// The directory of the three files, ending with `/` (and of `song_links.tsv`, a data file made with them:
+  /// `DataFile.songLinks`): the branch `sheets-snapshot` of the repository, unless
   /// `--dart-define=SHEETS_SNAPSHOT_URL=<address>/` names another one (tests, a local copy). `web/index.html` holds
   /// the default address too, and starts the downloads before the app runs (see [takePrefetchedSnapshot]).
   static const base = String.fromEnvironment(

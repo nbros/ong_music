@@ -1,14 +1,17 @@
 # Once a day: a copy of the two Google Sheets CSV exports (the "snapshot") on the branch sheets-snapshot of this
 # repository, read by the app from raw.githubusercontent.com on a first load, until Google's own answer replaces it
-# a second or so later (lib/src/data/sheet_snapshot.dart). The work is in tool/sheets_snapshot.sh.
+# a second or so later (lib/src/data/sheet_snapshot.dart); with it, song_links.tsv, the links of the titles of the
+# Songs sheet that the CSV export drops, read from the xlsx export (lib/src/data/song_links.dart). The work is in
+# tool/sheets_snapshot.sh and tool/song_links.py.
 #
 # The branch keeps every snapshot, one commit over the other, pushed when a sheet changed and never forced: its
 # history is the journal of the sheets (what the moderators added, corrected or removed, day by day). A bad day
 # (Google answering an error page, an export cut short, a sheet that lost rows) fails this run, visibly, and the
 # snapshot published before stays. A stale snapshot is harmless: the app asks Google at the same time anyway, and only
-# its first paint of a first visit uses the copy.
+# its first paint of a first visit uses the copy. The links never stop the sheets: a bad day for them alone publishes
+# the sheets with the links published before, then fails the run, visibly.
 #
-# Nothing here builds or deploys the site, and nothing runs the code of the default branch beyond the script.
+# Nothing here builds or deploys the site, and nothing runs the code of the default branch beyond the scripts.
 #
 # GitHub disables the scheduled workflows of a public repository "when no repository activity has occurred in 60
 # days". Its documentation does not say what counts as activity. Two belts, neither documented as resetting those 60
@@ -25,7 +28,7 @@ on:
   workflow_dispatch:
     inputs:
       accept_smaller:
-        description: "Take a sheet that lost more than a tenth of its rows (rows really archived)"
+        description: "Take a sheet that lost more than a tenth of its rows (rows really archived), or of its links"
         type: boolean
         default: false
 
@@ -76,10 +79,26 @@ jobs:
             exit 1
           fi
 
-      - name: Download and check the sheets
+      # exit 2: the sheets are made, not the links (the published ones are kept): published all the same, the run
+      # fails after
+      - name: Download and check the sheets and the links
+        id: make
         env:
           SNAPSHOT_ACCEPT_SMALLER: ${{ inputs.accept_smaller && '1' || '' }}
-        run: bash tool/sheets_snapshot.sh make snapshot published
+        run: |
+          status=0
+          bash tool/sheets_snapshot.sh make snapshot published || status=$?
+          if [[ $status == 2 ]]; then
+            echo "links_failed=1" >> "$GITHUB_OUTPUT"
+          elif [[ $status != 0 ]]; then
+            exit "$status"
+          fi
 
       - name: Publish
         run: bash tool/sheets_snapshot.sh publish snapshot
+
+      - name: Fail for the links
+        if: steps.make.outputs.links_failed == '1'
+        run: |
+          echo "::error::The sheets are published, but not the links of the songs (see the step that made them)"
+          exit 1
