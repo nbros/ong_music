@@ -1,10 +1,11 @@
-/// The files of the branch `data` of the repository: the VODs of the streams (`vods.tsv`), their offsets
-/// (`offsets.tsv`) and the groups of names of one requester (`aliases.txt`), edited by hand and by a browser extension,
-/// read from raw.githubusercontent.com.
+/// The data files: those of the branch `data` of the repository, the VODs of the streams (`vods.tsv`), their offsets
+/// (`offsets.tsv`) and the groups of names of one requester (`aliases.txt`), edited by hand and by a browser extension;
+/// and the links of the songs to their originals (`song_links.tsv`), made each day from the Songs sheet with its
+/// snapshot, on the branch `sheets-snapshot` (`lib/src/data/song_links.dart`). Read from raw.githubusercontent.com.
 ///
 /// Downloaded when the sheets are (`CatalogueNotifier`), kept as they are and read again offline. Never needed: when
 /// the branch, the network or the cache is missing, the app is as it was before them (no VOD, the table of names it
-/// bundles), without a word.
+/// bundles, no link to an original), without a word.
 library;
 
 import 'dart:async';
@@ -18,6 +19,7 @@ import 'data_file_cache_stub.dart'
     if (dart.library.js_interop) 'data_file_cache_web.dart'
     as platform;
 import 'page_thread.dart';
+import 'sheet_snapshot.dart';
 import 'sheets.dart';
 
 /// The largest `vods.tsv` taken, in bytes: today about 100 KB, a line per video (a thousand a decade). Beyond, the
@@ -30,7 +32,11 @@ const int maxAliasesBytes = 256 * 1024;
 /// The largest `offsets.tsv` taken, in bytes: a line per stream or per play corrected, a few dozen bytes each.
 const int maxOffsetsBytes = 256 * 1024;
 
-/// A file of the branch `data`.
+/// The largest `song_links.tsv` taken, in bytes: about 470 KB in November 2026 (265 KB on the wire), a line per title
+/// of the Songs sheet with a link, which grows by some hundreds of new titles a year.
+const int maxSongLinksBytes = 2 * 1024 * 1024;
+
+/// A data file.
 enum DataFile {
   /// The VODs of the streams (`VodFile`).
   vods('vods.tsv', maxVodsBytes),
@@ -39,15 +45,22 @@ enum DataFile {
   aliases('aliases.txt', maxAliasesBytes),
 
   /// The offsets of the VODs (`OffsetFile`): where a play is in a recording that does not start with its stream.
-  offsets('offsets.tsv', maxOffsetsBytes);
+  offsets('offsets.tsv', maxOffsetsBytes),
 
-  const DataFile(this.fileName, this.maxBytes);
+  /// The links of the songs to their originals (`SongLinks`), of the branch `sheets-snapshot`.
+  songLinks('song_links.tsv', maxSongLinksBytes, inSnapshot: true);
+
+  const DataFile(this.fileName, this.maxBytes, {this.inSnapshot = false});
 
   /// Its name in the branch, and in the cache.
   final String fileName;
 
-  /// The largest download of it taken ([maxVodsBytes], [maxAliasesBytes], [maxOffsetsBytes]).
+  /// The largest download of it taken ([maxVodsBytes], [maxAliasesBytes], [maxOffsetsBytes], [maxSongLinksBytes]).
   final int maxBytes;
+
+  /// Whether it is a file of the snapshot of the sheets ([SnapshotUrls.base]), made with it each day, rather than of
+  /// the branch `data` ([DataFileUrls.base]).
+  final bool inSnapshot;
 }
 
 /// A download of a data file larger than its [DataFile.maxBytes]: its body is not read further.
@@ -70,8 +83,8 @@ abstract final class DataFileUrls {
     defaultValue: 'https://raw.githubusercontent.com/nbros/ong_music/data/',
   );
 
-  /// The address of [file].
-  static Uri of(DataFile file) => Uri.parse('$base${file.fileName}');
+  /// The address of [file]: in [base], or beside the snapshot of the sheets ([SnapshotUrls.base]).
+  static Uri of(DataFile file) => Uri.parse('${file.inSnapshot ? SnapshotUrls.base : base}${file.fileName}');
 }
 
 /// Downloads the files.
@@ -164,7 +177,7 @@ abstract interface class DataFileCache {
 }
 
 /// The name of the time of [file] in a cache: `vods_fetched_at.txt`, `aliases_fetched_at.txt`,
-/// `offsets_fetched_at.txt`.
+/// `offsets_fetched_at.txt`, `songLinks_fetched_at.txt`.
 String dataFileTimeName(DataFile file) => '${file.name}_fetched_at.txt';
 
 /// The cache of this platform (see [DataFileCache]).

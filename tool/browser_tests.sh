@@ -22,6 +22,8 @@ tests=(
   test/text_test.dart
   # (the offsets of the VODs, signed numbers of seconds read from offsets.tsv)
   test/vod_offsets_test.dart
+  # (the links of the songs, read in steps on the page's thread, their start times in seconds)
+  test/song_links_test.dart
 )
 
 flutter test --platform chrome "$@" "${tests[@]}"

@@ -1,6 +1,7 @@
-// The files of the branch `data` (vods.tsv, aliases.txt, offsets.tsv): downloaded with the sheets, kept, read again
-// offline, and never in the way of the catalogue.
+// The data files (vods.tsv, aliases.txt, offsets.tsv of the branch `data`, song_links.tsv beside the snapshot):
+// downloaded with the sheets, kept, read again offline, and never in the way of the catalogue.
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -13,7 +14,9 @@ import 'package:ong_music/src/data/requester_aliases.dart';
 import 'package:ong_music/src/data/sheet_cache.dart';
 import 'package:ong_music/src/data/sheet_snapshot.dart';
 import 'package:ong_music/src/data/sheets.dart';
+import 'package:ong_music/src/data/text.dart';
 import 'package:ong_music/src/state/catalogue_state.dart';
+import 'package:ong_music/src/state/song_links_state.dart';
 import 'package:ong_music/src/state/vods_state.dart';
 
 import 'fixtures.dart';
@@ -54,6 +57,9 @@ const _offsets = 'date\tuptime\toffset\tnote\n2024-01-02\t\t-600\tlate start\n';
 
 /// Amy and her other name, the table of the tests.
 const _aliases = 'Amy, Amyy\n';
+
+/// The links of the songs: "Song v1" to a video, under two spellings of one song (the last line wins).
+const _songLinks = 'link\ttitle\nsongvideo00\tSong v1\nsongvideo01\tsong V1!\n';
 
 final _now = DateTime.utc(2026, 11, 15, 12);
 
@@ -130,7 +136,8 @@ void main() {
         expect(state().songsError, isNull);
         expect(container.read(vodFileProvider), isNull);
         expect(container.read(vodOffsetsProvider), isNull);
-        expect(branch.calls, {DataFile.vods: 1, DataFile.aliases: 1, DataFile.offsets: 1});
+        expect(container.read(songLinksProvider), isNull);
+        expect(branch.calls, {DataFile.vods: 1, DataFile.aliases: 1, DataFile.offsets: 1, DataFile.songLinks: 1});
         expect(dataCache.writes, isEmpty);
         expect(parser.aliases, [same(RequesterAliases.bundled)]);
         expect(identical(state().catalogue!.aliases, RequesterAliases.bundled), isTrue);
@@ -144,7 +151,7 @@ void main() {
       });
       startWith(sheetsAge: const Duration(hours: 1));
       await notifier().idle;
-      expect(branch.calls.values, [1, 1, 1], reason: 'asked at the start, none being kept');
+      expect(branch.calls.values, [1, 1, 1, 1], reason: 'asked at the start, none being kept');
       // what shows the state again: the Songs sheet asked for
       notifier().songsWanted(SongsTrigger.ongLog);
       await notifier().idle;
@@ -188,6 +195,7 @@ void main() {
         DataFile.vods: 2,
         DataFile.aliases: 2,
         DataFile.offsets: 2,
+        DataFile.songLinks: 2,
       }, reason: 'asked with each download of the sheet');
     });
 
@@ -385,7 +393,7 @@ void main() {
       expect(container.read(vodFileProvider)!.lines.single.id, 'abcdefghijk');
       expect(parser.aliases.single!.keyOf('amyy'), parser.aliases.single!.keyOf('amy'));
       expect(joined(), isTrue);
-      expect(dataCache.reads.toSet(), {DataFile.vods, DataFile.aliases, DataFile.offsets});
+      expect(dataCache.reads.toSet(), {DataFile.vods, DataFile.aliases, DataFile.offsets, DataFile.songLinks});
     });
 
     test('a kept table that does not read: the bundled one', () async {
@@ -399,27 +407,40 @@ void main() {
       () async {
         startWith(
           sheetsAge: const Duration(hours: 1),
-          kept: {DataFile.vods: copy(_vods), DataFile.aliases: copy(_aliases), DataFile.offsets: copy(_offsets)},
+          kept: {
+            DataFile.vods: copy(_vods),
+            DataFile.aliases: copy(_aliases),
+            DataFile.offsets: copy(_offsets),
+            DataFile.songLinks: copy(_songLinks),
+          },
         );
         await notifier().idle;
         expect(google.total, 0);
-        expect(branch.calls.values, [0, 0, 0]);
+        expect(branch.calls.values, [0, 0, 0, 0]);
 
         startWith(
           sheetsAge: const Duration(hours: 1),
-          kept: {DataFile.vods: copy(_vods), DataFile.offsets: copy(_offsets)},
+          kept: {DataFile.vods: copy(_vods), DataFile.offsets: copy(_offsets), DataFile.songLinks: copy(_songLinks)},
         );
         await notifier().idle;
         expect(google.total, 0);
-        expect(branch.calls.values, [1, 1, 1], reason: 'the table missing');
+        expect(branch.calls.values, [1, 1, 1, 1], reason: 'the table missing');
 
         branch = FakeDataBranch();
         startWith(
           sheetsAge: const Duration(hours: 1),
-          kept: {DataFile.vods: copy(_vods), DataFile.aliases: copy(_aliases)},
+          kept: {DataFile.vods: copy(_vods), DataFile.aliases: copy(_aliases), DataFile.songLinks: copy(_songLinks)},
         );
         await notifier().idle;
-        expect(branch.calls.values, [1, 1, 1], reason: 'the offsets missing (as long as the branch has none)');
+        expect(branch.calls.values, [1, 1, 1, 1], reason: 'the offsets missing (as long as the branch has none)');
+
+        branch = FakeDataBranch();
+        startWith(
+          sheetsAge: const Duration(hours: 1),
+          kept: {DataFile.vods: copy(_vods), DataFile.aliases: copy(_aliases), DataFile.offsets: copy(_offsets)},
+        );
+        await notifier().idle;
+        expect(branch.calls.values, [1, 1, 1, 1], reason: 'the links of the songs missing');
 
         branch = FakeDataBranch();
         startWith(
@@ -428,10 +449,11 @@ void main() {
             DataFile.vods: copy(_vods, age: const Duration(hours: 7)),
             DataFile.aliases: copy(_aliases),
             DataFile.offsets: copy(_offsets),
+            DataFile.songLinks: copy(_songLinks),
           },
         );
         await notifier().idle;
-        expect(branch.calls.values, [1, 1, 1], reason: 'the VODs stale');
+        expect(branch.calls.values, [1, 1, 1, 1], reason: 'the VODs stale');
       },
     );
 
@@ -440,18 +462,24 @@ void main() {
         DataFile.vods: [_vods],
         DataFile.aliases: [_aliases],
         DataFile.offsets: [_offsets],
+        DataFile.songLinks: [_songLinks],
       });
       startWith(
         sheetsAge: const Duration(hours: 1),
-        kept: {DataFile.vods: copy(_vods), DataFile.aliases: copy(_aliases), DataFile.offsets: copy(_offsets)},
+        kept: {
+          DataFile.vods: copy(_vods),
+          DataFile.aliases: copy(_aliases),
+          DataFile.offsets: copy(_offsets),
+          DataFile.songLinks: copy(_songLinks),
+        },
       );
       await notifier().idle;
       google.add(_sheets('v1'));
       await notifier().clearDownloadedData();
       await notifier().idle;
       expect(dataCache.clears, 1);
-      expect(dataCache.values.keys.toSet(), {DataFile.vods, DataFile.aliases, DataFile.offsets});
-      expect(branch.calls.values, [1, 1, 1]);
+      expect(dataCache.values.keys.toSet(), DataFile.values.toSet());
+      expect(branch.calls.values, [1, 1, 1, 1]);
     });
   });
 
@@ -657,6 +685,99 @@ void main() {
     });
   });
 
+  group('song_links.tsv', () {
+    test('downloaded with the others: taken at once, grouped by song, and kept', () async {
+      branch = FakeDataBranch({
+        DataFile.songLinks: [_songLinks],
+      });
+      startWith();
+      google.add(_sheets('v1'));
+      await notifier().idle;
+      final links = container.read(songLinksProvider)!;
+      expect(links.length, 1, reason: 'two spellings, one song');
+      expect(links.of(songKey('SONG v1'))!.url, 'https://youtu.be/songvideo01');
+      expect(dataCache.values[DataFile.songLinks]!.text, _songLinks);
+      expect(state().lastError, isNull);
+    });
+
+    test('missing (404) or offline, nothing kept: no link, no error, nothing kept', () async {
+      startWith();
+      google.add(_sheets('v1'));
+      notifier().songsWanted(SongsTrigger.ongLog);
+      await notifier().idle;
+      expect(state().hasSongs, isTrue);
+      expect(container.read(songLinksProvider), isNull);
+      expect(state().lastError, isNull);
+      expect(state().songsError, isNull);
+      expect(dataCache.writes, isEmpty);
+    });
+
+    test('offline: the kept copy taken at the start', () async {
+      branch = FakeDataBranch({
+        for (final file in DataFile.values) file: [const SocketException('offline')],
+      });
+      startWith(sheetsAge: const Duration(days: 1), kept: {DataFile.songLinks: copy(_songLinks)});
+      google.add(const SocketException('offline'));
+      await notifier().idle;
+      expect(container.read(songLinksProvider)!.of(songKey('Song v1')), isNotNull);
+    });
+
+    test('a web page with status 200: not taken, the kept copy stays, in use and kept', () async {
+      branch = FakeDataBranch({
+        DataFile.songLinks: ['<html>Sign in</html>'],
+      });
+      startWith(sheetsAge: const Duration(days: 1), kept: {DataFile.songLinks: copy(_songLinks)});
+      google.add(_sheets('v1'));
+      await notifier().idle;
+      expect(branch.calls[DataFile.songLinks], 1);
+      expect(container.read(songLinksProvider)!.of(songKey('Song v1')), isNotNull);
+      expect(dataCache.values[DataFile.songLinks]!.text, _songLinks);
+      expect(dataCache.writes, isNot(contains(DataFile.songLinks)));
+    });
+
+    test('a download after the kept copy: its links, whichever reading ends first', () async {
+      branch = FakeDataBranch({
+        DataFile.songLinks: [_songLinks.replaceAll('songvideo01', 'songvideo02')],
+      });
+      startWith(sheetsAge: const Duration(days: 1), kept: {DataFile.songLinks: copy(_songLinks)});
+      google.add(_sheets('v1'));
+      await notifier().idle;
+      expect(container.read(songLinksProvider)!.of(songKey('Song v1'))!.youtubeId, 'songvideo02');
+      expect(dataCache.values[DataFile.songLinks]!.text, contains('songvideo02'));
+    });
+
+    test('an unchanged file is not taken again', () async {
+      branch = FakeDataBranch({
+        DataFile.songLinks: [_songLinks],
+      });
+      startWith(
+        sheetsAge: const Duration(days: 1),
+        kept: {DataFile.songLinks: copy(_songLinks, age: const Duration(days: 1))},
+      );
+      final taken = [];
+      container.listen(songLinksProvider, (_, next) => taken.add(next));
+      google.add(_sheets('v1'));
+      await notifier().idle;
+      expect(taken, hasLength(1), reason: 'the kept copy only');
+      expect(dataCache.values[DataFile.songLinks]!.fetchedAt, _now, reason: 'kept again, with its new time');
+    });
+
+    test('its bound, 2 MB in bytes: a larger download is not taken', () async {
+      expect(maxSongLinksBytes, 2 * 1024 * 1024);
+      expect(DataFile.songLinks.maxBytes, maxSongLinksBytes);
+      final wide = '$_songLinks#${'é' * (maxSongLinksBytes ~/ 2)}';
+      expect(dataFileTooLarge(DataFile.songLinks, wide), isTrue);
+      branch = FakeDataBranch({
+        DataFile.songLinks: [wide],
+      });
+      startWith();
+      google.add(_sheets('v1'));
+      await notifier().idle;
+      expect(container.read(songLinksProvider), isNull);
+      expect(dataCache.writes, isNot(contains(DataFile.songLinks)));
+    });
+  });
+
   group('over HTTP', () {
     test('the files of the branch data of the repository, unless --dart-define names another place', () {
       expect(
@@ -665,6 +786,23 @@ void main() {
       );
       expect(DataFileUrls.of(DataFile.aliases).toString(), endsWith('/data/aliases.txt'));
       expect(DataFileUrls.of(DataFile.offsets).toString(), endsWith('/data/offsets.tsv'));
+    });
+
+    test('the links of the songs beside the snapshot of the sheets, wherever it is', () async {
+      expect(
+        DataFileUrls.of(DataFile.songLinks).toString(),
+        'https://raw.githubusercontent.com/nbros/ong_music/sheets-snapshot/song_links.tsv',
+      );
+      expect(DataFileUrls.of(DataFile.songLinks).toString(), '${SnapshotUrls.base}song_links.tsv');
+      final asked = <Uri>[];
+      final fetcher = HttpDataFileFetcher(
+        client: MockClient((request) async {
+          asked.add(request.url);
+          return http.Response.bytes(utf8.encode(_songLinks), 200);
+        }),
+      );
+      expect(await fetcher.fetch(DataFile.songLinks), _songLinks);
+      expect(asked, [DataFileUrls.of(DataFile.songLinks)]);
     });
 
     test('a 200 is the file, as UTF-8; a 404 or a web page throws', () async {
